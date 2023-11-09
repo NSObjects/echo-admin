@@ -8,9 +8,9 @@ package db
 
 import (
 	"fmt"
-	"github.com/NSObjects/go-template/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
 
-	"github.com/NSObjects/go-template/internal/configs"
+	"github.com/NSObjects/echo-admin/internal/configs"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

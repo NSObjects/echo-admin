@@ -7,11 +7,12 @@
 package biz
 
 import (
-	"github.com/NSObjects/go-template/internal/api/data"
+	"github.com/NSObjects/echo-admin/internal/api/data"
+	"github.com/NSObjects/echo-admin/tools"
 
-	"github.com/NSObjects/go-template/internal/api/service/param"
+	"github.com/NSObjects/echo-admin/internal/api/service/param"
 
-	"github.com/NSObjects/go-template/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
 )
 
 type UserHandler struct {
@@ -43,6 +44,7 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 }
 
 func (h *UserHandler) CreateUser(param model.User) (err error) {
+	param.Password = tools.Sha25(param.Password)
 	if _, err = h.repository.CreateUser(param); err != nil {
 		return err
 	}

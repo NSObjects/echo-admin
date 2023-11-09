@@ -7,7 +7,7 @@
 package service
 
 import (
-	"github.com/NSObjects/go-template/internal/code"
+	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/marmotedu/errors"
 	"net/http/httptest"
 
@@ -19,6 +19,7 @@ import (
 var Model = fx.Options(
 	fx.Provide(
 		AsRoute(NewUserController),
+		AsRoute(NewLoginController),
 	),
 )
 
@@ -31,11 +32,11 @@ func AsRoute(f any) any {
 }
 
 func BindAndValidate(obj any, ctx echo.Context) error {
-	if err := ctx.Bind(&obj); err != nil {
+	if err := ctx.Bind(obj); err != nil {
 		return errors.WrapC(err, code.ErrBind, err.Error())
 	}
 
-	if err := ctx.Validate(&obj); err != nil {
+	if err := ctx.Validate(obj); err != nil {
 		return errors.WrapC(err, code.ErrValidation, err.Error())
 	}
 

@@ -7,14 +7,15 @@
 package data
 
 import (
+	"context"
 	"fmt"
-	
-	"github.com/NSObjects/go-template/internal/api/data/db"
-	"github.com/NSObjects/go-template/internal/code"
+
+	"github.com/NSObjects/echo-admin/internal/api/data/db"
+	"github.com/NSObjects/echo-admin/internal/code"
 	"gorm.io/gorm"
 
-	"github.com/NSObjects/go-template/internal/api/data/model"
-	"github.com/NSObjects/go-template/internal/api/service/param"
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/marmotedu/errors"
 )
 
@@ -24,6 +25,7 @@ type UserRepository interface {
 	DeleteUserByID(id int64) (err error)
 	UpdateUser(param model.User, id int64) (err error)
 	CreateUser(param model.User) (id int64, err error)
+	GetUserByAccount(ctx context.Context, account string) (model.User, error)
 }
 
 type UserDataSource struct {
@@ -77,4 +79,13 @@ func (u *UserDataSource) UpdateUser(param model.User, id int64) (err error) {
 	}
 
 	return
+}
+
+func (u *UserDataSource) GetUserByAccount(ctx context.Context, account string) (model.User, error) {
+	var user model.User
+	if err := u.dataSource.Mysql.WithContext(ctx).Where("account = ?", account).First(&user).Error; err != nil {
+		return user, errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("查询用户失败: %v", account))
+	}
+
+	return user, nil
 }

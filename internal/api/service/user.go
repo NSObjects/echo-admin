@@ -9,18 +9,18 @@ package service
 import (
 	"strconv"
 
-	"github.com/NSObjects/go-template/internal/api/biz"
-	"github.com/NSObjects/go-template/internal/api/data/model"
-	"github.com/NSObjects/go-template/internal/api/service/param"
-	"github.com/NSObjects/go-template/internal/resp"
+	"github.com/NSObjects/echo-admin/internal/api/biz"
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/service/param"
+	"github.com/NSObjects/echo-admin/internal/resp"
 	"github.com/labstack/echo/v4"
 )
 
-type Controller struct {
+type userController struct {
 	user *biz.UserHandler
 }
 
-func (u *Controller) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
+func (u *userController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
 	s.GET("/users", u.getUser).Name = "用户查询"
 	s.POST("/users", u.createUser).Name = "创建用户"
 	s.DELETE("/users/:id", u.deleteUser).Name = "删除用户"
@@ -29,14 +29,14 @@ func (u *Controller) RegisterRouter(s *echo.Group, middlewareFunc ...echo.Middle
 }
 
 func NewUserController(u *biz.UserHandler) RegisterRouter {
-	return &Controller{
+	return &userController{
 		user: u,
 	}
 }
 
-func (u *Controller) getUser(c echo.Context) (err error) {
+func (u *userController) getUser(c echo.Context) (err error) {
 	var user param.UserParam
-	if err = BindAndValidate(&user, c); err != nil {
+	if err = BindAndValidate(user, c); err != nil {
 		return err
 	}
 
@@ -47,7 +47,7 @@ func (u *Controller) getUser(c echo.Context) (err error) {
 	return resp.ListDataResponse(listUser, total, c)
 }
 
-func (u *Controller) getUserDetail(c echo.Context) (err error) {
+func (u *userController) getUserDetail(c echo.Context) (err error) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	detail, err := u.user.GetUserDetail(id)
 	if err != nil {
@@ -57,7 +57,7 @@ func (u *Controller) getUserDetail(c echo.Context) (err error) {
 	return resp.OneDataResponse(detail, c)
 }
 
-func (u *Controller) createUser(c echo.Context) (err error) {
+func (u *userController) createUser(c echo.Context) (err error) {
 	var user model.User
 	if err = BindAndValidate(&user, c); err != nil {
 		return err
@@ -70,7 +70,7 @@ func (u *Controller) createUser(c echo.Context) (err error) {
 	return resp.OperateSuccess(c)
 }
 
-func (u *Controller) updateUser(c echo.Context) (err error) {
+func (u *userController) updateUser(c echo.Context) (err error) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var user model.User
 	if err = BindAndValidate(&user, c); err != nil {
@@ -85,7 +85,7 @@ func (u *Controller) updateUser(c echo.Context) (err error) {
 
 }
 
-func (u *Controller) deleteUser(c echo.Context) (err error) {
+func (u *userController) deleteUser(c echo.Context) (err error) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err = u.user.DeleteUser(id); err != nil {
 		return err

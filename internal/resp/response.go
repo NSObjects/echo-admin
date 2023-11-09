@@ -7,7 +7,7 @@
 package resp
 
 import (
-	"github.com/NSObjects/go-template/internal/log"
+	"github.com/NSObjects/echo-admin/internal/log"
 	"net/http"
 	"reflect"
 

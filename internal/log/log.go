@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/NSObjects/go-template/internal/configs"
+	"github.com/NSObjects/echo-admin/internal/configs"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"

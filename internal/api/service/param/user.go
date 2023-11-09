@@ -7,7 +7,7 @@
 package param
 
 import (
-	"github.com/NSObjects/go-template/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
 )
 
 type UserParam struct {

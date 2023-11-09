@@ -7,7 +7,7 @@
 package data
 
 import (
-	"github.com/NSObjects/go-template/internal/api/data/db"
+	"github.com/NSObjects/echo-admin/internal/api/data/db"
 	"go.uber.org/fx"
 )
 

@@ -8,15 +8,14 @@ package server
 
 import (
 	"context"
-	"github.com/NSObjects/go-template/internal/log"
-	"github.com/NSObjects/go-template/internal/resp"
+	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/NSObjects/echo-admin/internal/resp"
+	"github.com/NSObjects/echo-admin/internal/server/middlewares"
+	"github.com/go-playground/validator/v10"
 	"net/http"
 
-	"github.com/NSObjects/go-template/internal/api/service"
-	"github.com/NSObjects/go-template/internal/server/middlewares"
+	"github.com/NSObjects/echo-admin/internal/api/service"
 	"github.com/labstack/echo/v4"
-	validator "gopkg.in/go-playground/validator.v9"
-
 	"os"
 	"os/signal"
 	"time"

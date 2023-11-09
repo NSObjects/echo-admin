@@ -3,7 +3,7 @@ image: golang:latest
 
 variables:
   # Please edit to your GitLab project
-  REPO_NAME: go-template
+  REPO_NAME: echo-admin
 
 before_script:
   - mkdir -p $GOPATH/src/$(dirname $REPO_NAME)

@@ -8,7 +8,7 @@ package main
 import (
 	"os"
 
-	"github.com/NSObjects/go-template/internal/log"
+	"github.com/NSObjects/echo-admin/internal/log"
 	"github.com/urfave/cli/v2"
 )
 
