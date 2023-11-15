@@ -8,21 +8,11 @@ package db
 
 import (
 	"fmt"
-	"github.com/NSObjects/echo-admin/internal/api/data/model"
-	"gorm.io/gen"
-
 	"github.com/NSObjects/echo-admin/internal/configs"
+	"github.com/NSObjects/echo-admin/query"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
-
-// Querier Dynamic SQL
-type Querier interface {
-	// SELECT * FROM @@table WHERE id = @id
-	GetById(id int) (gen.T, error)
-	// DELEL * FROM @@table WHERE id = @id
-	DeleteByID(id int64) error
-}
 
 // Basic CRUD
 //GetUserByID(id int64) (user model.User, err error)
@@ -39,20 +29,6 @@ func NewMysql(cfg configs.MysqlConfig) *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
-	g := gen.NewGenerator(gen.Config{
-		OutPath: "query",
-		Mode:    gen.WithoutContext | gen.WithDefaultQuery | gen.WithQueryInterface, // generate mode
-	})
-
-	g.UseDB(db) // reuse your gorm db
-
-	// Generate basic type-safe DAO API for struct `model.User` following conventions
-	g.ApplyBasic(model.User{})
-
-	// Generate Type Safe API with Dynamic SQL defined on Querier interface for `model.User` and `model.Company`
-	g.ApplyInterface(func(Querier) {}, model.User{}, model.Menu{})
-
-	// Generate the code
-	g.Execute()
+	query.SetDefault(db)
 	return db
 }

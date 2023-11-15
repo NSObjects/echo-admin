@@ -8,9 +8,14 @@ package data
 
 import (
 	"github.com/NSObjects/echo-admin/internal/api/data/db"
+	"github.com/NSObjects/echo-admin/query"
 	"go.uber.org/fx"
 )
 
 var Model = fx.Options(
-	fx.Provide(NewUserDataSource, db.NewDataSource),
+	fx.Provide(NewUserDataSource, db.NewDataSource, NewQuery),
 )
+
+func NewQuery() *query.Query {
+	return query.Q
+}

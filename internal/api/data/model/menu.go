@@ -10,10 +10,24 @@
 
 package model
 
+import (
+	"gorm.io/gorm"
+	"time"
+)
+
 type Menu struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
 	Name      string `json:"name"`
 	Path      string `json:"path"`
 	Component string `json:"component"`
 	Redirect  string `json:"redirect"`
-	Routes    []Menu `json:"routes"`
+	ParentID  int64  `json:"parent_id,omitempty" gorm:"default:null"`
+	Routes    []Menu `json:"routes,omitempty" gorm:"foreignKey:ParentID;references:ID"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+func (Menu) TableName() string {
+	return "menu"
 }

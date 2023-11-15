@@ -76,7 +76,7 @@ func ListDataResponse(arr interface{}, total int64, c echo.Context) error {
 		Code: StatusOK,
 	}
 
-	return c.JSON(http.StatusOK, r)
+	return c.JSONPretty(http.StatusOK, r, "  ")
 }
 
 func OneDataResponse(data interface{}, c echo.Context) error {

@@ -24,7 +24,6 @@ func NewUserHandler(repository data.UserRepository) *UserHandler {
 }
 
 func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResponse, int64, error) {
-
 	users, total, err := h.repository.FindUser(u, p)
 	if err != nil {
 		return nil, 0, err
