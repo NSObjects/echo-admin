@@ -56,7 +56,7 @@ func GenMysql(cfg configs.MysqlConfig) {
 	if err != nil {
 		panic(err)
 	}
-	err = db.AutoMigrate(&model.User{}, &model.Menu{})
+	err = db.AutoMigrate(&model.User{}, &model.Menu{}, &model.Role{}, &model.RoleMenu{})
 	if err != nil {
 		panic(err)
 	}
@@ -70,7 +70,7 @@ func GenMysql(cfg configs.MysqlConfig) {
 	// Generate basic type-safe DAO API for struct `model.User` following conventions
 	g.ApplyBasic(model.User{})
 	// Generate Type Safe API with Dynamic SQL defined on Querier interface for `model.User` and `model.Company`
-	g.ApplyInterface(func(Querier) {}, model.User{}, model.Menu{})
+	g.ApplyInterface(func(Querier) {}, model.User{}, model.Menu{}, model.Role{}, model.RoleMenu{})
 
 	// Generate the code
 	g.Execute()

@@ -16,39 +16,49 @@ import (
 )
 
 var (
-	Q    = new(Query)
-	Menu *menu
-	User *user
+	Q        = new(Query)
+	Menu     *menu
+	Role     *role
+	RoleMenu *roleMenu
+	User     *user
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
 	Menu = &Q.Menu
+	Role = &Q.Role
+	RoleMenu = &Q.RoleMenu
 	User = &Q.User
 }
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
-		db:   db,
-		Menu: newMenu(db, opts...),
-		User: newUser(db, opts...),
+		db:       db,
+		Menu:     newMenu(db, opts...),
+		Role:     newRole(db, opts...),
+		RoleMenu: newRoleMenu(db, opts...),
+		User:     newUser(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	Menu menu
-	User user
+	Menu     menu
+	Role     role
+	RoleMenu roleMenu
+	User     user
 }
 
 func (q *Query) Available() bool { return q.db != nil }
 
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
-		db:   db,
-		Menu: q.Menu.clone(db),
-		User: q.User.clone(db),
+		db:       db,
+		Menu:     q.Menu.clone(db),
+		Role:     q.Role.clone(db),
+		RoleMenu: q.RoleMenu.clone(db),
+		User:     q.User.clone(db),
 	}
 }
 
@@ -62,21 +72,27 @@ func (q *Query) WriteDB() *Query {
 
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
-		db:   db,
-		Menu: q.Menu.replaceDB(db),
-		User: q.User.replaceDB(db),
+		db:       db,
+		Menu:     q.Menu.replaceDB(db),
+		Role:     q.Role.replaceDB(db),
+		RoleMenu: q.RoleMenu.replaceDB(db),
+		User:     q.User.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	Menu IMenuDo
-	User IUserDo
+	Menu     IMenuDo
+	Role     IRoleDo
+	RoleMenu IRoleMenuDo
+	User     IUserDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		Menu: q.Menu.WithContext(ctx),
-		User: q.User.WithContext(ctx),
+		Menu:     q.Menu.WithContext(ctx),
+		Role:     q.Role.WithContext(ctx),
+		RoleMenu: q.RoleMenu.WithContext(ctx),
+		User:     q.User.WithContext(ctx),
 	}
 }
 

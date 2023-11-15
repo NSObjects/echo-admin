@@ -7,13 +7,12 @@
 package service
 
 import (
-	"github.com/NSObjects/echo-admin/internal/code"
-	"github.com/marmotedu/errors"
 	"net/http/httptest"
 
-	"go.uber.org/fx"
-
+	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/labstack/echo/v4"
+	"github.com/marmotedu/errors"
+	"go.uber.org/fx"
 )
 
 var Model = fx.Options(
@@ -21,6 +20,7 @@ var Model = fx.Options(
 		AsRoute(NewUserController),
 		AsRoute(NewLoginController),
 		AsRoute(NewMenuController),
+		AsRoute(NewRoleController),
 	),
 )
 

@@ -11,10 +11,11 @@
 package param
 
 import (
+	"time"
+
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/query"
 	"gorm.io/gen/field"
-	"time"
 )
 
 type Menu struct {
