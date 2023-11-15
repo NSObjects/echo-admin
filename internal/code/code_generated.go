@@ -30,4 +30,5 @@ func init() {
 	register(ErrInvalidYaml, 500, "Data is not valid Yaml")
 	register(ErrEncodingYaml, 500, "Yaml data could not be encoded")
 	register(ErrDecodingYaml, 500, "Yaml data could not be decoded")
+	register(ErrParentMenuExisted, 201, "父菜单id不存在，请确认后再选择")
 }

@@ -29,14 +29,15 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	tableName := _menu.menuDo.TableName()
 	_menu.ALL = field.NewAsterisk(tableName)
 	_menu.ID = field.NewUint(tableName, "id")
-	_menu.CreatedAt = field.NewTime(tableName, "created_at")
-	_menu.UpdatedAt = field.NewTime(tableName, "updated_at")
-	_menu.DeletedAt = field.NewField(tableName, "deleted_at")
 	_menu.Name = field.NewString(tableName, "name")
 	_menu.Path = field.NewString(tableName, "path")
 	_menu.Component = field.NewString(tableName, "component")
 	_menu.Redirect = field.NewString(tableName, "redirect")
+	_menu.Layout = field.NewBool(tableName, "layout")
 	_menu.ParentID = field.NewInt64(tableName, "parent_id")
+	_menu.CreatedAt = field.NewTime(tableName, "created_at")
+	_menu.UpdatedAt = field.NewTime(tableName, "updated_at")
+	_menu.DeletedAt = field.NewField(tableName, "deleted_at")
 	_menu.Routes = menuHasManyRoutes{
 		db: db.Session(&gorm.Session{}),
 
@@ -58,14 +59,15 @@ type menu struct {
 
 	ALL       field.Asterisk
 	ID        field.Uint
-	CreatedAt field.Time
-	UpdatedAt field.Time
-	DeletedAt field.Field
 	Name      field.String
 	Path      field.String
 	Component field.String
 	Redirect  field.String
+	Layout    field.Bool
 	ParentID  field.Int64
+	CreatedAt field.Time
+	UpdatedAt field.Time
+	DeletedAt field.Field
 	Routes    menuHasManyRoutes
 
 	fieldMap map[string]field.Expr
@@ -84,14 +86,15 @@ func (m menu) As(alias string) *menu {
 func (m *menu) updateTableName(table string) *menu {
 	m.ALL = field.NewAsterisk(table)
 	m.ID = field.NewUint(table, "id")
-	m.CreatedAt = field.NewTime(table, "created_at")
-	m.UpdatedAt = field.NewTime(table, "updated_at")
-	m.DeletedAt = field.NewField(table, "deleted_at")
 	m.Name = field.NewString(table, "name")
 	m.Path = field.NewString(table, "path")
 	m.Component = field.NewString(table, "component")
 	m.Redirect = field.NewString(table, "redirect")
+	m.Layout = field.NewBool(table, "layout")
 	m.ParentID = field.NewInt64(table, "parent_id")
+	m.CreatedAt = field.NewTime(table, "created_at")
+	m.UpdatedAt = field.NewTime(table, "updated_at")
+	m.DeletedAt = field.NewField(table, "deleted_at")
 
 	m.fillFieldMap()
 
@@ -108,16 +111,17 @@ func (m *menu) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *menu) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 10)
+	m.fieldMap = make(map[string]field.Expr, 11)
 	m.fieldMap["id"] = m.ID
-	m.fieldMap["created_at"] = m.CreatedAt
-	m.fieldMap["updated_at"] = m.UpdatedAt
-	m.fieldMap["deleted_at"] = m.DeletedAt
 	m.fieldMap["name"] = m.Name
 	m.fieldMap["path"] = m.Path
 	m.fieldMap["component"] = m.Component
 	m.fieldMap["redirect"] = m.Redirect
+	m.fieldMap["layout"] = m.Layout
 	m.fieldMap["parent_id"] = m.ParentID
+	m.fieldMap["created_at"] = m.CreatedAt
+	m.fieldMap["updated_at"] = m.UpdatedAt
+	m.fieldMap["deleted_at"] = m.DeletedAt
 
 }
 

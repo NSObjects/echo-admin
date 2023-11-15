@@ -11,16 +11,17 @@
 package model
 
 import (
-	"gorm.io/gorm"
+	"gorm.io/gorm" //nolint:goimports
 	"time"
 )
 
 type Menu struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
-	Name      string `json:"name"`
-	Path      string `json:"path"`
-	Component string `json:"component"`
-	Redirect  string `json:"redirect"`
+	Name      string `json:"name" gorm:"default:null"`
+	Path      string `json:"path" gorm:"default:null"`
+	Component string `json:"component" gorm:"default:null"`
+	Redirect  string `json:"redirect" gorm:"default:null"`
+	Layout    bool   `json:"layout" gorm:"default:null"`
 	ParentID  int64  `json:"parent_id,omitempty" gorm:"default:null"`
 	Routes    []Menu `json:"routes,omitempty" gorm:"foreignKey:ParentID;references:ID"`
 	CreatedAt time.Time
