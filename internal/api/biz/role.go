@@ -78,3 +78,11 @@ func (r *RoleHandler) Delete(ctx context.Context, id uint) error {
 	}
 	return nil
 }
+
+func (r *RoleHandler) Get(ctx context.Context, id uint) (*model.Role, error) {
+	role, err := r.q.Role.WithContext(ctx).Where(r.q.Role.ID.Eq(id)).First()
+	if err != nil {
+		return nil, err
+	}
+	return role, nil
+}

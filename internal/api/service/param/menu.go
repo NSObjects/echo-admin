@@ -28,6 +28,12 @@ type Menu struct {
 	Routes    []Menu  `json:"routes"`
 }
 
+type RoleMenu struct {
+	RoleID  int64   `json:"role_id" form:"role_id" query:"role_id"`
+	MenuID  []int64 `json:"menu_id" form:"menu_id" query:"menu_id"`
+	Creator string  `json:"creator" form:"creator" query:"creator"`
+}
+
 type MenuResp struct {
 	ID        uint         `json:"id"`
 	Name      string       `json:"name"`

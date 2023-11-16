@@ -15,6 +15,7 @@ type User struct {
 	Status   int64  `json:"status" form:"status" query:"status"`
 	Account  string `json:"account" form:"account" query:"account"`
 	Password string `json:"password" form:"password" query:"password"`
+	Role     []Role `gorm:"foreignKey:ID;"`
 }
 
 func (User) TableName() string {

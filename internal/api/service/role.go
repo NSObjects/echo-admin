@@ -11,6 +11,8 @@
 package service
 
 import (
+	"strconv"
+
 	"github.com/NSObjects/echo-admin/internal/api/biz"
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
@@ -19,7 +21,8 @@ import (
 )
 
 type RoleController struct {
-	h *biz.RoleHandler
+	h  *biz.RoleHandler
+	rm *biz.RoleMenuHandler
 }
 
 func (r *RoleController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
@@ -31,8 +34,8 @@ func (r *RoleController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.Mi
 
 }
 
-func NewRoleController(h *biz.RoleHandler) RegisterRouter {
-	return &RoleController{h: h}
+func NewRoleController(h *biz.RoleHandler, rm *biz.RoleMenuHandler) RegisterRouter {
+	return &RoleController{h: h, rm: rm}
 }
 
 func (r *RoleController) List(c echo.Context) error {
@@ -65,13 +68,40 @@ func (r *RoleController) Create(c echo.Context) error {
 }
 
 func (r *RoleController) Update(c echo.Context) error {
-	panic("implement me")
+	id, _ := strconv.Atoi(c.Param("id"))
+	var role model.Role
+	if err := BindAndValidate(&role, c); err != nil {
+		return err
+	}
+
+	err := r.h.Update(c.Request().Context(), uint(id), &role)
+	if err != nil {
+		return err
+	}
+
+	return resp.OperateSuccess(c)
 }
 
 func (r *RoleController) Delete(c echo.Context) error {
-	panic("implement me")
+	id, _ := strconv.Atoi(c.Param("id"))
+	err := r.h.Delete(c.Request().Context(), uint(id))
+	if err != nil {
+		return err
+	}
+	return resp.OperateSuccess(c)
 }
 
 func (r *RoleController) UpdateRoleMenus(c echo.Context) error {
-	panic("implement me")
+	id, _ := strconv.Atoi(c.Param("id"))
+	var roleMenu param.RoleMenu
+	if err := BindAndValidate(&roleMenu, c); err != nil {
+		return err
+	}
+
+	err := r.rm.BatchCreate(c.Request().Context(), int64(id), roleMenu.MenuID)
+	if err != nil {
+		return err
+	}
+
+	return resp.OperateSuccess(c)
 }
