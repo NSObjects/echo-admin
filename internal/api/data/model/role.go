@@ -19,6 +19,7 @@ type Role struct {
 	Identify string `json:"identify" form:"identify" query:"identify"`
 	State    int    `json:"state" `
 	Menus    []Menu `gorm:"many2many:role_menus;"`
+	User     []User `gorm:"many2many:user_role;"`
 }
 
 func (Role) TableName() string {

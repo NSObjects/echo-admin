@@ -29,7 +29,6 @@ type Menu struct {
 }
 
 type RoleMenu struct {
-	RoleID  int64   `json:"role_id" form:"role_id" query:"role_id"`
 	MenuID  []int64 `json:"menu_id" form:"menu_id" query:"menu_id"`
 	Creator string  `json:"creator" form:"creator" query:"creator"`
 }

@@ -21,8 +21,7 @@ import (
 )
 
 type RoleController struct {
-	h  *biz.RoleHandler
-	rm *biz.RoleMenuHandler
+	h *biz.RoleHandler
 }
 
 func (r *RoleController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
@@ -34,8 +33,8 @@ func (r *RoleController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.Mi
 
 }
 
-func NewRoleController(h *biz.RoleHandler, rm *biz.RoleMenuHandler) RegisterRouter {
-	return &RoleController{h: h, rm: rm}
+func NewRoleController(h *biz.RoleHandler) RegisterRouter {
+	return &RoleController{h: h}
 }
 
 func (r *RoleController) List(c echo.Context) error {
@@ -98,7 +97,7 @@ func (r *RoleController) UpdateRoleMenus(c echo.Context) error {
 		return err
 	}
 
-	err := r.rm.BatchCreate(c.Request().Context(), int64(id), roleMenu.MenuID)
+	err := r.h.UpdateRoleMenu(c.Request().Context(), int64(id), roleMenu.MenuID)
 	if err != nil {
 		return err
 	}

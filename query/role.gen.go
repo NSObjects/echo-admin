@@ -36,6 +36,54 @@ func newRole(db *gorm.DB, opts ...gen.DOOption) role {
 	_role.Order_ = field.NewInt(tableName, "order")
 	_role.Identify = field.NewString(tableName, "identify")
 	_role.State = field.NewInt(tableName, "state")
+	_role.Menus = roleManyToManyMenus{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("Menus", "model.Menu"),
+		Routes: struct {
+			field.RelationField
+		}{
+			RelationField: field.NewRelation("Menus.Routes", "model.Menu"),
+		},
+		RoleMenus: struct {
+			field.RelationField
+			Menus struct {
+				field.RelationField
+			}
+			User struct {
+				field.RelationField
+				Role struct {
+					field.RelationField
+				}
+			}
+		}{
+			RelationField: field.NewRelation("Menus.RoleMenus", "model.Role"),
+			Menus: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("Menus.RoleMenus.Menus", "model.Menu"),
+			},
+			User: struct {
+				field.RelationField
+				Role struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("Menus.RoleMenus.User", "model.User"),
+				Role: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("Menus.RoleMenus.User.Role", "model.Role"),
+				},
+			},
+		},
+	}
+
+	_role.User = roleManyToManyUser{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("User", "model.User"),
+	}
 
 	_role.fillFieldMap()
 
@@ -54,6 +102,9 @@ type role struct {
 	Order_    field.Int
 	Identify  field.String
 	State     field.Int
+	Menus     roleManyToManyMenus
+
+	User roleManyToManyUser
 
 	fieldMap map[string]field.Expr
 }
@@ -94,7 +145,7 @@ func (r *role) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (r *role) fillFieldMap() {
-	r.fieldMap = make(map[string]field.Expr, 8)
+	r.fieldMap = make(map[string]field.Expr, 10)
 	r.fieldMap["id"] = r.ID
 	r.fieldMap["created_at"] = r.CreatedAt
 	r.fieldMap["updated_at"] = r.UpdatedAt
@@ -103,6 +154,7 @@ func (r *role) fillFieldMap() {
 	r.fieldMap["order"] = r.Order_
 	r.fieldMap["identify"] = r.Identify
 	r.fieldMap["state"] = r.State
+
 }
 
 func (r role) clone(db *gorm.DB) role {
@@ -113,6 +165,164 @@ func (r role) clone(db *gorm.DB) role {
 func (r role) replaceDB(db *gorm.DB) role {
 	r.roleDo.ReplaceDB(db)
 	return r
+}
+
+type roleManyToManyMenus struct {
+	db *gorm.DB
+
+	field.RelationField
+
+	Routes struct {
+		field.RelationField
+	}
+	RoleMenus struct {
+		field.RelationField
+		Menus struct {
+			field.RelationField
+		}
+		User struct {
+			field.RelationField
+			Role struct {
+				field.RelationField
+			}
+		}
+	}
+}
+
+func (a roleManyToManyMenus) Where(conds ...field.Expr) *roleManyToManyMenus {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a roleManyToManyMenus) WithContext(ctx context.Context) *roleManyToManyMenus {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a roleManyToManyMenus) Session(session *gorm.Session) *roleManyToManyMenus {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a roleManyToManyMenus) Model(m *model.Role) *roleManyToManyMenusTx {
+	return &roleManyToManyMenusTx{a.db.Model(m).Association(a.Name())}
+}
+
+type roleManyToManyMenusTx struct{ tx *gorm.Association }
+
+func (a roleManyToManyMenusTx) Find() (result []*model.Menu, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a roleManyToManyMenusTx) Append(values ...*model.Menu) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a roleManyToManyMenusTx) Replace(values ...*model.Menu) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a roleManyToManyMenusTx) Delete(values ...*model.Menu) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a roleManyToManyMenusTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a roleManyToManyMenusTx) Count() int64 {
+	return a.tx.Count()
+}
+
+type roleManyToManyUser struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a roleManyToManyUser) Where(conds ...field.Expr) *roleManyToManyUser {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a roleManyToManyUser) WithContext(ctx context.Context) *roleManyToManyUser {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a roleManyToManyUser) Session(session *gorm.Session) *roleManyToManyUser {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a roleManyToManyUser) Model(m *model.Role) *roleManyToManyUserTx {
+	return &roleManyToManyUserTx{a.db.Model(m).Association(a.Name())}
+}
+
+type roleManyToManyUserTx struct{ tx *gorm.Association }
+
+func (a roleManyToManyUserTx) Find() (result []*model.User, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a roleManyToManyUserTx) Append(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a roleManyToManyUserTx) Replace(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a roleManyToManyUserTx) Delete(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a roleManyToManyUserTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a roleManyToManyUserTx) Count() int64 {
+	return a.tx.Count()
 }
 
 type roleDo struct{ gen.DO }

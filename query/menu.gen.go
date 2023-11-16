@@ -47,6 +47,44 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 		}{
 			RelationField: field.NewRelation("Routes.Routes", "model.Menu"),
 		},
+		RoleMenus: struct {
+			field.RelationField
+			Menus struct {
+				field.RelationField
+			}
+			User struct {
+				field.RelationField
+				Role struct {
+					field.RelationField
+				}
+			}
+		}{
+			RelationField: field.NewRelation("Routes.RoleMenus", "model.Role"),
+			Menus: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("Routes.RoleMenus.Menus", "model.Menu"),
+			},
+			User: struct {
+				field.RelationField
+				Role struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("Routes.RoleMenus.User", "model.User"),
+				Role: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("Routes.RoleMenus.User.Role", "model.Role"),
+				},
+			},
+		},
+	}
+
+	_menu.RoleMenus = menuManyToManyRoleMenus{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("RoleMenus", "model.Role"),
 	}
 
 	_menu.fillFieldMap()
@@ -69,6 +107,8 @@ type menu struct {
 	UpdatedAt field.Time
 	DeletedAt field.Field
 	Routes    menuHasManyRoutes
+
+	RoleMenus menuManyToManyRoleMenus
 
 	fieldMap map[string]field.Expr
 }
@@ -111,7 +151,7 @@ func (m *menu) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *menu) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 11)
+	m.fieldMap = make(map[string]field.Expr, 12)
 	m.fieldMap["id"] = m.ID
 	m.fieldMap["name"] = m.Name
 	m.fieldMap["path"] = m.Path
@@ -142,6 +182,18 @@ type menuHasManyRoutes struct {
 
 	Routes struct {
 		field.RelationField
+	}
+	RoleMenus struct {
+		field.RelationField
+		Menus struct {
+			field.RelationField
+		}
+		User struct {
+			field.RelationField
+			Role struct {
+				field.RelationField
+			}
+		}
 	}
 }
 
@@ -207,6 +259,77 @@ func (a menuHasManyRoutesTx) Clear() error {
 }
 
 func (a menuHasManyRoutesTx) Count() int64 {
+	return a.tx.Count()
+}
+
+type menuManyToManyRoleMenus struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a menuManyToManyRoleMenus) Where(conds ...field.Expr) *menuManyToManyRoleMenus {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a menuManyToManyRoleMenus) WithContext(ctx context.Context) *menuManyToManyRoleMenus {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a menuManyToManyRoleMenus) Session(session *gorm.Session) *menuManyToManyRoleMenus {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a menuManyToManyRoleMenus) Model(m *model.Menu) *menuManyToManyRoleMenusTx {
+	return &menuManyToManyRoleMenusTx{a.db.Model(m).Association(a.Name())}
+}
+
+type menuManyToManyRoleMenusTx struct{ tx *gorm.Association }
+
+func (a menuManyToManyRoleMenusTx) Find() (result []*model.Role, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a menuManyToManyRoleMenusTx) Append(values ...*model.Role) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a menuManyToManyRoleMenusTx) Replace(values ...*model.Role) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a menuManyToManyRoleMenusTx) Delete(values ...*model.Role) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a menuManyToManyRoleMenusTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a menuManyToManyRoleMenusTx) Count() int64 {
 	return a.tx.Count()
 }
 

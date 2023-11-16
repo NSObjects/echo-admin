@@ -86,3 +86,26 @@ func (r *RoleHandler) Get(ctx context.Context, id uint) (*model.Role, error) {
 	}
 	return role, nil
 }
+
+func (r *RoleHandler) UpdateRoleMenu(ctx context.Context, roleID int64, menuIDs []int64) error {
+
+	first, err := r.q.Role.WithContext(ctx).Where(r.q.Role.ID.Eq(uint(roleID))).First()
+	if err != nil {
+		return err
+	}
+	err = r.q.Role.Menus.Model(first).Clear()
+	if err != nil {
+		return err
+	}
+
+	roleMenus := make([]*model.Menu, len(menuIDs))
+	for index, v := range menuIDs {
+		roleMenus[index] = &model.Menu{ID: uint(v)}
+	}
+	err = r.q.Role.Menus.Model(first).Append(roleMenus...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
