@@ -36,7 +36,7 @@ func NewUserController(u *biz.UserHandler) RegisterRouter {
 
 func (u *userController) getUser(c echo.Context) (err error) {
 	var user param.UserParam
-	if err = BindAndValidate(user, c); err != nil {
+	if err = BindAndValidate(&user, c); err != nil {
 		return err
 	}
 

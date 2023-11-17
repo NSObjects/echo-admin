@@ -7,12 +7,11 @@
 package biz
 
 import (
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/tools"
-	"gorm.io/gen/field"
-
-	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"gorm.io/gen"
 )
 
 type UserHandler struct {
@@ -24,15 +23,19 @@ func NewUserHandler(q *query.Query) *UserHandler {
 }
 
 func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResponse, int64, error) {
+	do := h.q.User
+	var cd []gen.Condition
+	if u.Name != "" {
+		cd = append(cd, do.Name.Eq(u.Name))
+	}
+	if u.Phone != "" {
+		cd = append(cd, do.Name.Eq(u.Phone))
+	}
 
-	users, total, err := h.q.User.Where(field.Attrs(u)).FindByPage(p.Limit(), p.Offset())
+	users, err := do.Where(cd...).Limit(p.Limit()).Offset(p.Offset()).Find()
 	if err != nil {
 		return nil, 0, err
 	}
-	//users, total, err := h.repository.FindUser(u, p)
-	//if err != nil {
-	//	return nil, 0, err
-	//}
 
 	resp := make([]param.UserResponse, len(users))
 	for i, user := range users {
@@ -42,6 +45,11 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 			Status:   user.Status,
 			Password: user.Password,
 		}
+	}
+
+	total, err := do.Where(cd...).Count()
+	if err != nil {
+		return nil, 0, err
 	}
 
 	return resp, total, nil
