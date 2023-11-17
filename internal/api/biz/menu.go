@@ -14,11 +14,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
-	"github.com/NSObjects/echo-admin/query"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/marmotedu/errors"
 	"gorm.io/gen/field"

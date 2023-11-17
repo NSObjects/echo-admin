@@ -11,10 +11,11 @@
 package param
 
 import (
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
-	"github.com/NSObjects/echo-admin/query"
+
 	"gorm.io/gen/field"
 )
 

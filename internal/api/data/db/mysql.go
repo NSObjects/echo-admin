@@ -8,8 +8,9 @@ package db
 
 import (
 	"fmt"
+
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/configs"
-	"github.com/NSObjects/echo-admin/query"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

@@ -12,7 +12,7 @@ package biz
 
 import (
 	"context"
-	"github.com/NSObjects/echo-admin/internal/api/data"
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/NSObjects/echo-admin/tools"
@@ -30,15 +30,16 @@ type jwtCustomClaims struct {
 }
 
 type LoginHandler struct {
-	repository data.UserRepository
+	q *query.Query
 }
 
-func NewLoginHandler(r data.UserRepository) *LoginHandler {
-	return &LoginHandler{repository: r}
+func NewLoginHandler(q *query.Query) *LoginHandler {
+	return &LoginHandler{q: q}
 }
 
 func (h *LoginHandler) Login(ctx context.Context, account, password string) (response param.LoginResponse, err error) {
-	byAccount, err := h.repository.GetUserByAccount(ctx, account)
+
+	byAccount, err := h.q.User.WithContext(ctx).Where(h.q.User.Account.Eq(account)).First()
 	if err != nil {
 		return param.LoginResponse{}, err
 	}

@@ -10,6 +10,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gen"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 
 	"github.com/spf13/cobra"
 )
@@ -52,7 +53,11 @@ type Querier interface {
 func GenMysql(cfg configs.MysqlConfig) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		},
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -61,14 +66,16 @@ func GenMysql(cfg configs.MysqlConfig) {
 		panic(err)
 	}
 	g := gen.NewGenerator(gen.Config{
-		OutPath: "query",
-		Mode:    gen.WithoutContext | gen.WithDefaultQuery | gen.WithQueryInterface, // generate mode
+		OutPath:      "./internal/api/data/query", // output path
+		ModelPkgPath: "./internal/api/data/model", // model package path
+		WithUnitTest: true,
+		Mode:         gen.WithoutContext | gen.WithDefaultQuery | gen.WithQueryInterface, // generate mode
 
 	})
 	g.UseDB(db)
 
 	// Generate basic type-safe DAO API for struct `model.User` following conventions
-	g.ApplyBasic(model.User{})
+	g.ApplyBasic(model.User{}, model.Menu{}, model.Role{})
 	// Generate Type Safe API with Dynamic SQL defined on Querier interface for `model.User` and `model.Company`
 	g.ApplyInterface(func(Querier) {}, model.User{}, model.Menu{}, model.Role{})
 

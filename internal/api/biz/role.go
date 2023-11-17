@@ -12,11 +12,12 @@ package biz
 
 import (
 	"context"
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
-	"github.com/NSObjects/echo-admin/query"
+
 	"gorm.io/gen"
 )
 
@@ -93,6 +94,7 @@ func (r *RoleHandler) UpdateRoleMenu(ctx context.Context, roleID int64, menuIDs 
 	if err != nil {
 		return err
 	}
+
 	err = r.q.Role.Menus.Model(first).Clear()
 	if err != nil {
 		return err
