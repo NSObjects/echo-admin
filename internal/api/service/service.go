@@ -21,6 +21,7 @@ var Model = fx.Options(
 		AsRoute(NewLoginController),
 		AsRoute(NewMenuController),
 		AsRoute(NewRoleController),
+		AsRoute(NewDepartmentController),
 	),
 )
 

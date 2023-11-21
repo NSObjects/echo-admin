@@ -77,6 +77,7 @@ func Test_WithContext(t *testing.T) {
 	qCtx := query.WithContext(context.WithValue(context.Background(), key, value))
 
 	for _, ctx := range []context.Context{
+		qCtx.Department.UnderlyingDB().Statement.Context,
 		qCtx.Menu.UnderlyingDB().Statement.Context,
 		qCtx.Role.UnderlyingDB().Statement.Context,
 		qCtx.User.UnderlyingDB().Statement.Context,
