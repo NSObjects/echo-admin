@@ -17,23 +17,27 @@ import (
 )
 
 var Model = fx.Options(
-	fx.Provide(db.NewDataSource, NewQuery),
+	fx.Provide(db.NewDataSource, NewQuery, NewMysql),
 )
 
 func NewQuery(cfg configs.Config) *query.Query {
 	if cfg.Mysql.Host == "" {
 		panic("mysql config is empty")
 	}
-	query.SetDefault(NewMysql(cfg.Mysql))
+
 	return query.Q
 }
-func NewMysql(cfg configs.MysqlConfig) *gorm.DB {
+func NewMysql(cfg configs.Config) *gorm.DB {
+	if cfg.Mysql.Host == "" {
+		panic("mysql config is empty")
+	}
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+		cfg.Mysql.User, cfg.Mysql.Password, cfg.Mysql.Host, cfg.Mysql.Port, cfg.Mysql.Database)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
 
+	query.SetDefault(db)
 	return db
 }

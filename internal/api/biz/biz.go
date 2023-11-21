@@ -14,4 +14,6 @@ var Model = fx.Options(fx.Provide(NewUserHandler,
 	NewLoginHandler,
 	NewRoleHandler,
 	NewMenuHandler,
-	NewDepartmentHandler))
+	NewDepartmentHandler,
+	NewCasbin,
+))

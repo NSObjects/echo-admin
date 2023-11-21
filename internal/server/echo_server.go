@@ -8,36 +8,44 @@ package server
 
 import (
 	"context"
+	"github.com/NSObjects/echo-admin/internal/api/data"
+	"github.com/NSObjects/echo-admin/internal/api/service"
+	"github.com/NSObjects/echo-admin/internal/code"
+	"github.com/NSObjects/echo-admin/internal/configs"
 	"github.com/NSObjects/echo-admin/internal/log"
 	"github.com/NSObjects/echo-admin/internal/resp"
 	"github.com/NSObjects/echo-admin/internal/server/middlewares"
+	"github.com/casbin/casbin/v2"
 	"github.com/go-playground/validator/v10"
-	"net/http"
-
-	"github.com/NSObjects/echo-admin/internal/api/service"
+	"github.com/golang-jwt/jwt/v5"
+	casbin_mw "github.com/labstack/echo-contrib/casbin"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/marmotedu/errors"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
-
-	"github.com/labstack/echo/v4/middleware"
 )
 
 type EchoServer struct {
 	server  *echo.Echo
 	Routers []service.RegisterRouter `group:"routes"`
+	cfg     configs.Config
 }
 
 func (s *EchoServer) Server() *echo.Echo {
 	return s.server
 }
 
-func NewEchoServer(routes []service.RegisterRouter) *EchoServer {
+func NewEchoServer(routes []service.RegisterRouter, c *casbin.Enforcer, cfg configs.Config) *EchoServer {
 	s := &EchoServer{
 		server:  echo.New(),
 		Routers: routes,
+		cfg:     cfg,
 	}
-	s.loadMiddleware()
+	s.loadMiddleware(c)
 	s.registerRouter()
 	return s
 }
@@ -49,11 +57,49 @@ func errorHandler(err error, c echo.Context) {
 	}
 }
 
-func (s *EchoServer) loadMiddleware() {
+func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 	s.server.Validator = &middlewares.Validator{Validator: validator.New()}
 	s.server.Use(middleware.Gzip())
 	s.server.HTTPErrorHandler = errorHandler
+
+	config := echojwt.Config{
+		NewClaimsFunc: func(c echo.Context) jwt.Claims {
+			return new(data.JwtCustomClaims)
+		},
+		SigningKey: []byte(s.cfg.JWT.Secret),
+		Skipper: func(c echo.Context) bool {
+			return c.Request().RequestURI == "/api/login"
+		},
+	}
+
+	s.server.Use(echojwt.WithConfig(config))
 	//s.server.Use(middleware.Recover())
+	s.server.Use(casbin_mw.MiddlewareWithConfig(casbin_mw.Config{
+		Enforcer: c,
+		Skipper: func(c echo.Context) bool {
+			return c.Request().RequestURI == "/api/login"
+		},
+		ErrorHandler: func(c echo.Context, internal error, proposedStatus int) error {
+			return errors.WrapC(internal, code.ErrPermissionDenied, "权限不足")
+		},
+		UserGetter: func(c echo.Context) (string, error) {
+			token := c.Get("user").(*jwt.Token)
+			if token == nil {
+				return "", nil
+			}
+
+			user := token.Claims.(*data.JwtCustomClaims)
+			if user == nil {
+				return "", nil
+			}
+			if user.Admin {
+				return "root", nil
+			}
+
+			return user.Name, nil
+		},
+	}))
+
 	s.server.Use(middleware.Logger())
 	s.server.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		//todo 域名设置

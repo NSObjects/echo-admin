@@ -41,3 +41,7 @@ max_backups = 10
 # based on age.
 max_age = 10
 
+[jwt]
+secret = "tn)M^P<j,/6$Gr/Wrs"
+expire = 3600
+
