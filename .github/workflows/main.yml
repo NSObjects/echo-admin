@@ -53,7 +53,7 @@ jobs:
 
           # Optional: The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
           # install-mode: "goinstall"
-test:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
