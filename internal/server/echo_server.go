@@ -8,6 +8,11 @@ package server
 
 import (
 	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
+
 	"github.com/NSObjects/echo-admin/internal/api/data"
 	"github.com/NSObjects/echo-admin/internal/api/service"
 	"github.com/NSObjects/echo-admin/internal/code"
@@ -23,10 +28,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/marmotedu/errors"
-	"net/http"
-	"os"
-	"os/signal"
-	"time"
 )
 
 type EchoServer struct {
@@ -128,7 +129,7 @@ func (s *EchoServer) Run(port string) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:gomnd
 	defer cancel()
 	if err := s.server.Shutdown(ctx); err != nil {
 		s.server.Logger.Fatal(err)

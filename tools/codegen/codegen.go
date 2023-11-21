@@ -70,14 +70,14 @@ func Usage() {
 	flag.PrintDefaults()
 }
 
-func main() {
+func main() { //nolint:funlen
 	log.SetFlags(0)
 	log.SetPrefix("codegen: ")
 	flag.Usage = Usage
 	flag.Parse()
 	if len(*typeNames) == 0 {
 		flag.Usage()
-		os.Exit(2)
+		os.Exit(2) //nolint:gomnd
 	}
 	types := strings.Split(*typeNames, ",")
 	var tags []string
@@ -149,7 +149,7 @@ func main() {
 		outputName = filepath.Join(dir, strings.ToLower(baseName))
 	}
 
-	err := os.WriteFile(outputName, src, 0o600)
+	err := os.WriteFile(outputName, src, 0o600) //nolint:gomnd
 	if err != nil {
 		log.Fatalf("writing output: %s", err)
 	}
@@ -176,7 +176,10 @@ type Generator struct {
 
 // Printf like fmt.Printf, but add the string to g.buf.
 func (g *Generator) Printf(format string, args ...interface{}) {
-	fmt.Fprintf(&g.buf, format, args...)
+	_, err := fmt.Fprintf(&g.buf, format, args...)
+	if err != nil {
+		return
+	}
 }
 
 // File holds a single parsed file and associated data.
@@ -263,7 +266,7 @@ func (g *Generator) generate(typeName string) {
 
 // generateDocs produces error code markdown document for the named type.
 func (g *Generator) generateDocs(typeName string) {
-	values := make([]Value, 0, 100)
+	values := make([]Value, 0, 100) //nolint:gomnd
 	for _, file := range g.pkg.files {
 		// Set the state for this run of the walker.
 		file.typeName = typeName
@@ -336,16 +339,15 @@ func (v *Value) ParseComment() (string, string) {
 	}
 
 	groups := reg.FindStringSubmatch(v.comment)
-	if len(groups) != 3 {
+	if len(groups) != 3 { //nolint:gomnd
 		return "500", "Internal server error"
 	}
 
 	return groups[1], groups[2]
 }
 
-// nolint: gocognit
 // genDecl processes one declaration clause.
-func (f *File) genDecl(node ast.Node) bool {
+func (f *File) genDecl(node ast.Node) bool { //nolint:funlen
 	decl, ok := node.(*ast.GenDecl)
 	if !ok || decl.Tok != token.CONST {
 		// We only care about const declarations.
