@@ -121,7 +121,7 @@ func (s *EchoServer) registerRouter() {
 
 func (s *EchoServer) Run(port string) {
 	go func() {
-		if err := s.server.Start(port); err != nil && err != http.ErrServerClosed {
+		if err := s.server.Start(port); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.server.Logger.Fatal("shutting down the server")
 		}
 	}()
