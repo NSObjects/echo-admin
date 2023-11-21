@@ -22,7 +22,6 @@ require (
 	go.uber.org/fx v1.20.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/tools v0.15.0
-	gopkg.in/go-playground/validator.v9 v9.24.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/driver/sqlite v1.5.0
@@ -99,7 +98,6 @@ require (
 	golang.org/x/sys v0.14.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/datatypes v1.2.0 // indirect

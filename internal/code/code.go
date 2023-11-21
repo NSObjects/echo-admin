@@ -7,9 +7,10 @@
 package code
 
 import (
+	"net/http"
+
 	"github.com/marmotedu/errors"
 	"github.com/novalagung/gubrak"
-	"net/http"
 )
 
 var _ errors.Coder = (*ErrCode)(nil)

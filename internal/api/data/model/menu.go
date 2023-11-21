@@ -11,8 +11,9 @@
 package model
 
 import (
-	"gorm.io/gorm" //nolint:goimports
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Menu struct {
