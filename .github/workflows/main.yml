@@ -53,3 +53,34 @@ jobs:
 
           # Optional: The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
           # install-mode: "goinstall"
+test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: [ "1.20.x", "1.21.x" ]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Load cached dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: make build
+
+      - name: Test and generate coverage report
+        run: make cover
+
+      - name: Upload coverage to codecov.io
+        uses: codecov/codecov-action@v3
