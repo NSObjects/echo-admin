@@ -39,6 +39,85 @@ func newDepartment(db *gorm.DB, opts ...gen.DOOption) department {
 	_department.CreatedAt = field.NewTime(tableName, "created_at")
 	_department.UpdatedAt = field.NewTime(tableName, "updated_at")
 	_department.DeletedAt = field.NewField(tableName, "deleted_at")
+	_department.Departments = departmentHasManyDepartments{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("Departments", "model.Department"),
+		Principal: struct {
+			field.RelationField
+			Role struct {
+				field.RelationField
+				Menus struct {
+					field.RelationField
+					Routes struct {
+						field.RelationField
+					}
+					RoleMenus struct {
+						field.RelationField
+					}
+				}
+				User struct {
+					field.RelationField
+				}
+			}
+		}{
+			RelationField: field.NewRelation("Departments.Principal", "model.User"),
+			Role: struct {
+				field.RelationField
+				Menus struct {
+					field.RelationField
+					Routes struct {
+						field.RelationField
+					}
+					RoleMenus struct {
+						field.RelationField
+					}
+				}
+				User struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("Departments.Principal.Role", "model.Role"),
+				Menus: struct {
+					field.RelationField
+					Routes struct {
+						field.RelationField
+					}
+					RoleMenus struct {
+						field.RelationField
+					}
+				}{
+					RelationField: field.NewRelation("Departments.Principal.Role.Menus", "model.Menu"),
+					Routes: struct {
+						field.RelationField
+					}{
+						RelationField: field.NewRelation("Departments.Principal.Role.Menus.Routes", "model.Menu"),
+					},
+					RoleMenus: struct {
+						field.RelationField
+					}{
+						RelationField: field.NewRelation("Departments.Principal.Role.Menus.RoleMenus", "model.Role"),
+					},
+				},
+				User: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("Departments.Principal.Role.User", "model.User"),
+				},
+			},
+		},
+		Departments: struct {
+			field.RelationField
+		}{
+			RelationField: field.NewRelation("Departments.Departments", "model.Department"),
+		},
+	}
+
+	_department.Principal = departmentBelongsToPrincipal{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("Principal", "model.User"),
+	}
 
 	_department.fillFieldMap()
 
@@ -60,6 +139,9 @@ type department struct {
 	CreatedAt   field.Time
 	UpdatedAt   field.Time
 	DeletedAt   field.Field
+	Departments departmentHasManyDepartments
+
+	Principal departmentBelongsToPrincipal
 
 	fieldMap map[string]field.Expr
 }
@@ -103,7 +185,7 @@ func (d *department) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (d *department) fillFieldMap() {
-	d.fieldMap = make(map[string]field.Expr, 11)
+	d.fieldMap = make(map[string]field.Expr, 13)
 	d.fieldMap["id"] = d.ID
 	d.fieldMap["name"] = d.Name
 	d.fieldMap["status"] = d.Status
@@ -115,6 +197,7 @@ func (d *department) fillFieldMap() {
 	d.fieldMap["created_at"] = d.CreatedAt
 	d.fieldMap["updated_at"] = d.UpdatedAt
 	d.fieldMap["deleted_at"] = d.DeletedAt
+
 }
 
 func (d department) clone(db *gorm.DB) department {
@@ -125,6 +208,170 @@ func (d department) clone(db *gorm.DB) department {
 func (d department) replaceDB(db *gorm.DB) department {
 	d.departmentDo.ReplaceDB(db)
 	return d
+}
+
+type departmentHasManyDepartments struct {
+	db *gorm.DB
+
+	field.RelationField
+
+	Principal struct {
+		field.RelationField
+		Role struct {
+			field.RelationField
+			Menus struct {
+				field.RelationField
+				Routes struct {
+					field.RelationField
+				}
+				RoleMenus struct {
+					field.RelationField
+				}
+			}
+			User struct {
+				field.RelationField
+			}
+		}
+	}
+	Departments struct {
+		field.RelationField
+	}
+}
+
+func (a departmentHasManyDepartments) Where(conds ...field.Expr) *departmentHasManyDepartments {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a departmentHasManyDepartments) WithContext(ctx context.Context) *departmentHasManyDepartments {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a departmentHasManyDepartments) Session(session *gorm.Session) *departmentHasManyDepartments {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a departmentHasManyDepartments) Model(m *model.Department) *departmentHasManyDepartmentsTx {
+	return &departmentHasManyDepartmentsTx{a.db.Model(m).Association(a.Name())}
+}
+
+type departmentHasManyDepartmentsTx struct{ tx *gorm.Association }
+
+func (a departmentHasManyDepartmentsTx) Find() (result []*model.Department, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a departmentHasManyDepartmentsTx) Append(values ...*model.Department) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a departmentHasManyDepartmentsTx) Replace(values ...*model.Department) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a departmentHasManyDepartmentsTx) Delete(values ...*model.Department) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a departmentHasManyDepartmentsTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a departmentHasManyDepartmentsTx) Count() int64 {
+	return a.tx.Count()
+}
+
+type departmentBelongsToPrincipal struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a departmentBelongsToPrincipal) Where(conds ...field.Expr) *departmentBelongsToPrincipal {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a departmentBelongsToPrincipal) WithContext(ctx context.Context) *departmentBelongsToPrincipal {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a departmentBelongsToPrincipal) Session(session *gorm.Session) *departmentBelongsToPrincipal {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a departmentBelongsToPrincipal) Model(m *model.Department) *departmentBelongsToPrincipalTx {
+	return &departmentBelongsToPrincipalTx{a.db.Model(m).Association(a.Name())}
+}
+
+type departmentBelongsToPrincipalTx struct{ tx *gorm.Association }
+
+func (a departmentBelongsToPrincipalTx) Find() (result *model.User, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a departmentBelongsToPrincipalTx) Append(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a departmentBelongsToPrincipalTx) Replace(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a departmentBelongsToPrincipalTx) Delete(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a departmentBelongsToPrincipalTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a departmentBelongsToPrincipalTx) Count() int64 {
+	return a.tx.Count()
 }
 
 type departmentDo struct{ gen.DO }
