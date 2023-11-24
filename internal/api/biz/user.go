@@ -91,5 +91,6 @@ func (h *UserHandler) GetUserDetail(id int64) (param.UserResponse, error) {
 		Phone:    user.Phone,
 		Status:   user.Status,
 		Password: user.Password,
+		Avatar:   user.Avatar,
 	}, nil
 }

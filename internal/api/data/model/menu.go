@@ -23,6 +23,7 @@ type Menu struct {
 	Component string `json:"component" gorm:"default:null"`
 	Redirect  string `json:"redirect" gorm:"default:null"`
 	Layout    bool   `json:"layout" gorm:"default:null"`
+	Icon      string `json:"icon" gorm:"default:null"`
 	ParentID  int64  `json:"parent_id,omitempty" gorm:"default:null"`
 	Routes    []Menu `json:"routes,omitempty" gorm:"foreignKey:ParentID;references:ID"`
 	RoleMenus []Role `gorm:"many2many:role_menus;"`

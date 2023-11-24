@@ -34,6 +34,7 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	_menu.Component = field.NewString(tableName, "component")
 	_menu.Redirect = field.NewString(tableName, "redirect")
 	_menu.Layout = field.NewBool(tableName, "layout")
+	_menu.Icon = field.NewString(tableName, "icon")
 	_menu.ParentID = field.NewInt64(tableName, "parent_id")
 	_menu.CreatedAt = field.NewTime(tableName, "created_at")
 	_menu.UpdatedAt = field.NewTime(tableName, "updated_at")
@@ -102,6 +103,7 @@ type menu struct {
 	Component field.String
 	Redirect  field.String
 	Layout    field.Bool
+	Icon      field.String
 	ParentID  field.Int64
 	CreatedAt field.Time
 	UpdatedAt field.Time
@@ -131,6 +133,7 @@ func (m *menu) updateTableName(table string) *menu {
 	m.Component = field.NewString(table, "component")
 	m.Redirect = field.NewString(table, "redirect")
 	m.Layout = field.NewBool(table, "layout")
+	m.Icon = field.NewString(table, "icon")
 	m.ParentID = field.NewInt64(table, "parent_id")
 	m.CreatedAt = field.NewTime(table, "created_at")
 	m.UpdatedAt = field.NewTime(table, "updated_at")
@@ -151,13 +154,14 @@ func (m *menu) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *menu) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 12)
+	m.fieldMap = make(map[string]field.Expr, 13)
 	m.fieldMap["id"] = m.ID
 	m.fieldMap["name"] = m.Name
 	m.fieldMap["path"] = m.Path
 	m.fieldMap["component"] = m.Component
 	m.fieldMap["redirect"] = m.Redirect
 	m.fieldMap["layout"] = m.Layout
+	m.fieldMap["icon"] = m.Icon
 	m.fieldMap["parent_id"] = m.ParentID
 	m.fieldMap["created_at"] = m.CreatedAt
 	m.fieldMap["updated_at"] = m.UpdatedAt

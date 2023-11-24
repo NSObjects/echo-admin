@@ -19,5 +19,6 @@ type UserResponse struct {
 	Name     string `json:"name" form:"name" query:"name"`
 	Phone    string `json:"phone" form:"phone" query:"phone"`
 	Status   int64  `json:"status" form:"status" query:"status"`
+	Avatar   string `json:"avatar" form:"avatar" query:"avatar"`
 	Password string `json:"password" form:"password" query:"password"`
 }

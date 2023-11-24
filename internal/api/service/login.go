@@ -22,7 +22,7 @@ type loginController struct {
 }
 
 func (l *loginController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
-	s.POST("/login", l.login).Name = "用户登录"
+	s.POST("/login/account", l.login).Name = "用户登录"
 }
 
 func NewLoginController(l *biz.LoginHandler) RegisterRouter {
@@ -31,8 +31,7 @@ func NewLoginController(l *biz.LoginHandler) RegisterRouter {
 
 func (l *loginController) login(c echo.Context) error {
 	var loginParam param.Login
-	err := BindAndValidate(&loginParam, c)
-	if err != nil {
+	if err := BindAndValidate(&loginParam, c); err != nil {
 		return err
 	}
 

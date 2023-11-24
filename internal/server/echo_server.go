@@ -59,6 +59,9 @@ func errorHandler(err error, c echo.Context) {
 }
 
 func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
+	s.server.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "method=${method}, uri=${uri}, status=${status}\n",
+	}))
 	s.server.Validator = &middlewares.Validator{Validator: validator.New()}
 	s.server.Use(middleware.Gzip())
 	s.server.HTTPErrorHandler = errorHandler
@@ -69,7 +72,7 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 		},
 		SigningKey: []byte(s.cfg.JWT.Secret),
 		Skipper: func(c echo.Context) bool {
-			return c.Request().RequestURI == "/api/login"
+			return c.Path() == "/api/login/account"
 		},
 	}
 
@@ -78,7 +81,7 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 	s.server.Use(casbin_mw.MiddlewareWithConfig(casbin_mw.Config{
 		Enforcer: c,
 		Skipper: func(c echo.Context) bool {
-			return c.Request().RequestURI == "/api/login"
+			return c.Path() == "/api/login/account"
 		},
 		ErrorHandler: func(c echo.Context, internal error, proposedStatus int) error {
 			return errors.WrapC(internal, code.ErrPermissionDenied, "权限不足")
@@ -101,7 +104,6 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 		},
 	}))
 
-	s.server.Use(middleware.Logger())
 	s.server.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		//todo 域名设置
 		//AllowOrigins:     []string{"http://xxx:8080","https://xxxx:8080"},
@@ -117,6 +119,9 @@ func (s *EchoServer) registerRouter() {
 	for _, v := range s.Routers {
 		v.RegisterRouter(g)
 	}
+	g.GET("/api", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, s.server.Routes())
+	})
 }
 
 func (s *EchoServer) Run(port string) {

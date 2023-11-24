@@ -11,8 +11,10 @@
 package param
 
 type Login struct {
-	Account  string `json:"account" `
-	Password string `json:"password" `
+	Account   string `json:"account" `
+	Password  string `json:"password"`
+	AutoLogin bool   `json:"autoLogin"`
+	Type      string `json:"type"`
 }
 
 type LoginResponse struct {

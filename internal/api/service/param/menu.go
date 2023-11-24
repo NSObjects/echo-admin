@@ -26,6 +26,7 @@ type Menu struct {
 	Redirect  *string `json:"redirect"`
 	ParentID  *int64  `json:"parent_id,omitempty"`
 	Layout    *bool   `json:"layout,omitempty" `
+	Icon      *string `json:"icon,omitempty" `
 	Routes    []Menu  `json:"routes"`
 }
 
@@ -73,6 +74,11 @@ func (m Menu) Data() ([]field.Expr, model.Menu) {
 	if m.ParentID != nil {
 		filed = append(filed, query.Q.Menu.ParentID)
 		model.ParentID = *m.ParentID
+	}
+
+	if m.Icon != nil {
+		filed = append(filed, query.Q.Menu.Icon)
+		model.Icon = *m.Icon
 	}
 
 	return filed, model

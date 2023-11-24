@@ -7,6 +7,10 @@
 package service
 
 import (
+	"github.com/NSObjects/echo-admin/internal/api/data"
+	"github.com/NSObjects/echo-admin/internal/code"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/marmotedu/errors"
 	"strconv"
 
 	"github.com/NSObjects/echo-admin/internal/api/biz"
@@ -26,12 +30,32 @@ func (u *userController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.Mi
 	s.DELETE("/users/:id", u.deleteUser).Name = "删除用户"
 	s.PUT("/users/:id", u.updateUser).Name = "更新用户"
 	s.GET("/users/:id", u.getUserDetail).Name = "获取某个用户信息"
+	s.GET("/users/current", u.current).Name = "获取当前用户信息"
 }
 
 func NewUserController(u *biz.UserHandler) RegisterRouter {
 	return &userController{
 		user: u,
 	}
+}
+
+func (u *userController) current(c echo.Context) (err error) {
+	token := c.Get("user").(*jwt.Token)
+	if token == nil {
+		return errors.WithCode(code.ErrMissingHeader, "token is nil")
+	}
+
+	user := token.Claims.(*data.JwtCustomClaims)
+	if user == nil {
+		return errors.WithCode(code.ErrMissingHeader, "token is nil")
+	}
+
+	detail, err := u.user.GetUserDetail(user.ID)
+	if err != nil {
+		return err
+	}
+
+	return resp.OneDataResponse(detail, c)
 }
 
 func (u *userController) getUser(c echo.Context) (err error) {
