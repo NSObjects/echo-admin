@@ -83,8 +83,14 @@ const LoginMessage: React.FC<{
   );
 };
 
+const defaultData: API.Data = {
+  token: '',
+  type: '',
+};
+
 const Login: React.FC = () => {
-  const [userLoginState, setUserLoginState] = useState<API.LoginResult>({});
+  const [userLoginState, setUserLoginState] =
+    useState<API.LoginResult>({code: 0, data: defaultData, msg: ""});
   const [type, setType] = useState<string>('account');
   const { initialState, setInitialState } = useModel('@@initialState');
 

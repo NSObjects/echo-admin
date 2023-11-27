@@ -49,7 +49,7 @@ func newDepartment(db *gorm.DB, opts ...gen.DOOption) department {
 				field.RelationField
 				Menus struct {
 					field.RelationField
-					Routes struct {
+					Children struct {
 						field.RelationField
 					}
 					RoleMenus struct {
@@ -66,7 +66,7 @@ func newDepartment(db *gorm.DB, opts ...gen.DOOption) department {
 				field.RelationField
 				Menus struct {
 					field.RelationField
-					Routes struct {
+					Children struct {
 						field.RelationField
 					}
 					RoleMenus struct {
@@ -80,7 +80,7 @@ func newDepartment(db *gorm.DB, opts ...gen.DOOption) department {
 				RelationField: field.NewRelation("Departments.Principal.Role", "model.Role"),
 				Menus: struct {
 					field.RelationField
-					Routes struct {
+					Children struct {
 						field.RelationField
 					}
 					RoleMenus struct {
@@ -88,10 +88,10 @@ func newDepartment(db *gorm.DB, opts ...gen.DOOption) department {
 					}
 				}{
 					RelationField: field.NewRelation("Departments.Principal.Role.Menus", "model.Menu"),
-					Routes: struct {
+					Children: struct {
 						field.RelationField
 					}{
-						RelationField: field.NewRelation("Departments.Principal.Role.Menus.Routes", "model.Menu"),
+						RelationField: field.NewRelation("Departments.Principal.Role.Menus.Children", "model.Menu"),
 					},
 					RoleMenus: struct {
 						field.RelationField
@@ -221,7 +221,7 @@ type departmentHasManyDepartments struct {
 			field.RelationField
 			Menus struct {
 				field.RelationField
-				Routes struct {
+				Children struct {
 					field.RelationField
 				}
 				RoleMenus struct {

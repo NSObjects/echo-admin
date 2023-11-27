@@ -17,18 +17,18 @@ import (
 )
 
 type Menu struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	Name      string `json:"name" gorm:"default:null"`
-	Path      string `json:"path" gorm:"default:null"`
-	Component string `json:"component" gorm:"default:null"`
-	Redirect  string `json:"redirect" gorm:"default:null"`
-	Layout    bool   `json:"layout" gorm:"default:null"`
-	Icon      string `json:"icon" gorm:"default:null"`
-	ParentID  int64  `json:"parent_id,omitempty" gorm:"default:null"`
-	Routes    []Menu `json:"routes,omitempty" gorm:"foreignKey:ParentID;references:ID"`
-	RoleMenus []Role `gorm:"many2many:role_menus;"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	Name      string         `json:"name" gorm:"default:null"`
+	Path      string         `json:"path" gorm:"default:null"`
+	Component string         `json:"component" gorm:"default:null"`
+	Redirect  string         `json:"redirect" gorm:"default:null"`
+	Layout    bool           `json:"layout" gorm:"default:null"`
+	Icon      string         `json:"icon" gorm:"default:null"`
+	ParentID  int64          `json:"parent_id,omitempty" gorm:"default:null"`
+	Children  []Menu         `json:"children,omitempty" gorm:"foreignKey:ParentID;references:ID"`
+	RoleMenus []Role         `gorm:"many2many:role_menus;" json:"-"`
+	CreatedAt time.Time      `json:"created_at" `
+	UpdatedAt time.Time      `json:"updated_at" `
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

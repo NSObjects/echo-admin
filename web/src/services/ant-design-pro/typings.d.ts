@@ -2,6 +2,8 @@
 /* eslint-disable */
 
 declare namespace API {
+  import type { MenuDataItem } from '@ant-design/pro-layout';
+
   type CurrentUser = {
     name?: string;
     avatar?: string;
@@ -34,6 +36,15 @@ declare namespace API {
     type: string;
   }
 
+  type MenuResult = {
+    code?: number;
+    msg?: string;
+    data: MenuList;
+  };
+  type MenuList = {
+    list: MenuDataItem[];
+    total: number;
+  }
   type PageParams = {
     current?: number;
     pageSize?: number;

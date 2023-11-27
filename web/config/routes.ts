@@ -29,6 +29,33 @@ export default [
     component: './Welcome',
   },
   {
+    path: '/system',
+    name: 'system',
+    icon: 'crown',
+    routes: [
+      {
+        name: 'user',
+        path: '/system/user',
+        component: './system/user',
+      },
+      {
+        name: 'menu',
+        path: '/system/menu',
+        component: './system/menu',
+      },
+      {
+        name: 'role',
+        path: '/system/role',
+        component: './system/role',
+      },
+      {
+        name: 'department',
+        path: '/system/department',
+        component: './system/department',
+      },
+    ],
+  },
+  {
     path: '/admin',
     name: 'admin',
     icon: 'crown',
@@ -44,12 +71,6 @@ export default [
         component: './Admin',
       },
     ],
-  },
-  {
-    name: 'list.table-list',
-    icon: 'table',
-    path: '/list',
-    component: './TableList',
   },
   {
     path: '/',

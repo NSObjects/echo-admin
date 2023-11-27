@@ -44,7 +44,7 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 		RelationField: field.NewRelation("Role", "model.Role"),
 		Menus: struct {
 			field.RelationField
-			Routes struct {
+			Children struct {
 				field.RelationField
 			}
 			RoleMenus struct {
@@ -52,10 +52,10 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 			}
 		}{
 			RelationField: field.NewRelation("Role.Menus", "model.Menu"),
-			Routes: struct {
+			Children: struct {
 				field.RelationField
 			}{
-				RelationField: field.NewRelation("Role.Menus.Routes", "model.Menu"),
+				RelationField: field.NewRelation("Role.Menus.Children", "model.Menu"),
 			},
 			RoleMenus: struct {
 				field.RelationField
@@ -171,7 +171,7 @@ type userManyToManyRole struct {
 
 	Menus struct {
 		field.RelationField
-		Routes struct {
+		Children struct {
 			field.RelationField
 		}
 		RoleMenus struct {

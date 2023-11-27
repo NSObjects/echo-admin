@@ -1,4 +1,17 @@
 declare namespace API {
+
+  type Menu = {
+    id : number;
+    name : string;
+    icon : string;
+    path : string;
+    parent_id : number;
+    component : string;
+    redirect : string;
+    layout: boolean;
+    rotes: menu[];
+  };
+
   type ApiResponse = {
     code?: number;
     type?: string;

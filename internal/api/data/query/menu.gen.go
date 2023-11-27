@@ -39,14 +39,14 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	_menu.CreatedAt = field.NewTime(tableName, "created_at")
 	_menu.UpdatedAt = field.NewTime(tableName, "updated_at")
 	_menu.DeletedAt = field.NewField(tableName, "deleted_at")
-	_menu.Routes = menuHasManyRoutes{
+	_menu.Children = menuHasManyChildren{
 		db: db.Session(&gorm.Session{}),
 
-		RelationField: field.NewRelation("Routes", "model.Menu"),
-		Routes: struct {
+		RelationField: field.NewRelation("Children", "model.Menu"),
+		Children: struct {
 			field.RelationField
 		}{
-			RelationField: field.NewRelation("Routes.Routes", "model.Menu"),
+			RelationField: field.NewRelation("Children.Children", "model.Menu"),
 		},
 		RoleMenus: struct {
 			field.RelationField
@@ -60,11 +60,11 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 				}
 			}
 		}{
-			RelationField: field.NewRelation("Routes.RoleMenus", "model.Role"),
+			RelationField: field.NewRelation("Children.RoleMenus", "model.Role"),
 			Menus: struct {
 				field.RelationField
 			}{
-				RelationField: field.NewRelation("Routes.RoleMenus.Menus", "model.Menu"),
+				RelationField: field.NewRelation("Children.RoleMenus.Menus", "model.Menu"),
 			},
 			User: struct {
 				field.RelationField
@@ -72,11 +72,11 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 					field.RelationField
 				}
 			}{
-				RelationField: field.NewRelation("Routes.RoleMenus.User", "model.User"),
+				RelationField: field.NewRelation("Children.RoleMenus.User", "model.User"),
 				Role: struct {
 					field.RelationField
 				}{
-					RelationField: field.NewRelation("Routes.RoleMenus.User.Role", "model.Role"),
+					RelationField: field.NewRelation("Children.RoleMenus.User.Role", "model.Role"),
 				},
 			},
 		},
@@ -108,7 +108,7 @@ type menu struct {
 	CreatedAt field.Time
 	UpdatedAt field.Time
 	DeletedAt field.Field
-	Routes    menuHasManyRoutes
+	Children  menuHasManyChildren
 
 	RoleMenus menuManyToManyRoleMenus
 
@@ -179,12 +179,12 @@ func (m menu) replaceDB(db *gorm.DB) menu {
 	return m
 }
 
-type menuHasManyRoutes struct {
+type menuHasManyChildren struct {
 	db *gorm.DB
 
 	field.RelationField
 
-	Routes struct {
+	Children struct {
 		field.RelationField
 	}
 	RoleMenus struct {
@@ -201,7 +201,7 @@ type menuHasManyRoutes struct {
 	}
 }
 
-func (a menuHasManyRoutes) Where(conds ...field.Expr) *menuHasManyRoutes {
+func (a menuHasManyChildren) Where(conds ...field.Expr) *menuHasManyChildren {
 	if len(conds) == 0 {
 		return &a
 	}
@@ -214,27 +214,27 @@ func (a menuHasManyRoutes) Where(conds ...field.Expr) *menuHasManyRoutes {
 	return &a
 }
 
-func (a menuHasManyRoutes) WithContext(ctx context.Context) *menuHasManyRoutes {
+func (a menuHasManyChildren) WithContext(ctx context.Context) *menuHasManyChildren {
 	a.db = a.db.WithContext(ctx)
 	return &a
 }
 
-func (a menuHasManyRoutes) Session(session *gorm.Session) *menuHasManyRoutes {
+func (a menuHasManyChildren) Session(session *gorm.Session) *menuHasManyChildren {
 	a.db = a.db.Session(session)
 	return &a
 }
 
-func (a menuHasManyRoutes) Model(m *model.Menu) *menuHasManyRoutesTx {
-	return &menuHasManyRoutesTx{a.db.Model(m).Association(a.Name())}
+func (a menuHasManyChildren) Model(m *model.Menu) *menuHasManyChildrenTx {
+	return &menuHasManyChildrenTx{a.db.Model(m).Association(a.Name())}
 }
 
-type menuHasManyRoutesTx struct{ tx *gorm.Association }
+type menuHasManyChildrenTx struct{ tx *gorm.Association }
 
-func (a menuHasManyRoutesTx) Find() (result []*model.Menu, err error) {
+func (a menuHasManyChildrenTx) Find() (result []*model.Menu, err error) {
 	return result, a.tx.Find(&result)
 }
 
-func (a menuHasManyRoutesTx) Append(values ...*model.Menu) (err error) {
+func (a menuHasManyChildrenTx) Append(values ...*model.Menu) (err error) {
 	targetValues := make([]interface{}, len(values))
 	for i, v := range values {
 		targetValues[i] = v
@@ -242,7 +242,7 @@ func (a menuHasManyRoutesTx) Append(values ...*model.Menu) (err error) {
 	return a.tx.Append(targetValues...)
 }
 
-func (a menuHasManyRoutesTx) Replace(values ...*model.Menu) (err error) {
+func (a menuHasManyChildrenTx) Replace(values ...*model.Menu) (err error) {
 	targetValues := make([]interface{}, len(values))
 	for i, v := range values {
 		targetValues[i] = v
@@ -250,7 +250,7 @@ func (a menuHasManyRoutesTx) Replace(values ...*model.Menu) (err error) {
 	return a.tx.Replace(targetValues...)
 }
 
-func (a menuHasManyRoutesTx) Delete(values ...*model.Menu) (err error) {
+func (a menuHasManyChildrenTx) Delete(values ...*model.Menu) (err error) {
 	targetValues := make([]interface{}, len(values))
 	for i, v := range values {
 		targetValues[i] = v
@@ -258,11 +258,11 @@ func (a menuHasManyRoutesTx) Delete(values ...*model.Menu) (err error) {
 	return a.tx.Delete(targetValues...)
 }
 
-func (a menuHasManyRoutesTx) Clear() error {
+func (a menuHasManyChildrenTx) Clear() error {
 	return a.tx.Clear()
 }
 
-func (a menuHasManyRoutesTx) Count() int64 {
+func (a menuHasManyChildrenTx) Count() int64 {
 	return a.tx.Count()
 }
 

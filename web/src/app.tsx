@@ -1,18 +1,19 @@
 import Footer from '@/components/Footer';
-import { Question, SelectLang } from '@/components/RightContent';
-import { LinkOutlined } from '@ant-design/icons';
-import type { Settings as LayoutSettings } from '@ant-design/pro-components';
-import { SettingDrawer } from '@ant-design/pro-components';
-import type { RunTimeLayoutConfig } from '@umijs/max';
-import { history, Link } from '@umijs/max';
+import {Question, SelectLang} from '@/components/RightContent';
+import {LinkOutlined} from '@ant-design/icons';
+import type {Settings as LayoutSettings} from '@ant-design/pro-components';
+import {SettingDrawer} from '@ant-design/pro-components';
+import type {RunTimeLayoutConfig} from '@umijs/max';
+import {history, Link} from '@umijs/max';
 import defaultSettings from '../config/defaultSettings';
-import { errorConfig } from './requestErrorConfig';
-import { currentUser as queryCurrentUser } from './services/ant-design-pro/api';
+import {errorConfig} from './requestErrorConfig';
+import {currentUser as queryCurrentUser} from './services/ant-design-pro/api';
 import React from 'react';
-import { AvatarDropdown, AvatarName } from './components/RightContent/AvatarDropdown';
+import {AvatarDropdown, AvatarName} from './components/RightContent/AvatarDropdown';
+import {getMenus} from "@/services/ant-design-pro/menu";
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
-
+import fixMenuItemIcon from "@/fixMenuItemIcon";
 /**
  * @see  https://umijs.org/zh-CN/plugins/plugin-initial-state
  * */
@@ -49,20 +50,9 @@ export async function getInitialState(): Promise<{
   };
 }
 
-const fetchMenuData = async () => {
-  // const userInfo = await initialState?.fetchUserInfo?.();
-  // if (userInfo) {
-  //   flushSync(() => {
-  //     setInitialState((s) => ({
-  //       ...s,
-  //       currentUser: userInfo,
-  //     }));
-  //   });
-  // }
-};
-
 // ProLayout 支持的api https://procomponents.ant.design/components/layout
 export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) => {
+
   return {
     actionsRender: () => [<Question key="doc" />, <SelectLang key="SelectLang" />],
     avatarProps: {
@@ -75,17 +65,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
     waterMarkProps: {
       content: initialState?.currentUser?.name,
     },
-    menu: {
-      // 每当 initialState?.currentUser?.userid 发生修改时重新执行 request
-      params: {
-        userId: initialState?.currentUser?.userid,
-      },
-      request: async () => {
-        // initialState.currentUser 中包含了所有用户信息
-        const menuData = await fetchMenuData();
-        return menuData;
-      },
-    },
+
     footerRender: () => <Footer />,
     onPageChange: () => {
       const { location } = history;
@@ -123,6 +103,18 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
         ]
       : [],
     menuHeaderRender: undefined,
+    menu: {
+       // locale: false,
+      // 每当 initialState?.currentUser?.userid 发生修改时重新执行 request
+      params: {
+        userId: initialState?.currentUser?.userid,
+      },
+      request: async () => {
+        const menus = await getMenus();
+
+        return  fixMenuItemIcon(menus.data.list)
+      },
+    },
     // 自定义 403 页面
     // unAccessible: <div>unAccessible</div>,
     // 增加一个 loading 的状态

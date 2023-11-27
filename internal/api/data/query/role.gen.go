@@ -40,10 +40,10 @@ func newRole(db *gorm.DB, opts ...gen.DOOption) role {
 		db: db.Session(&gorm.Session{}),
 
 		RelationField: field.NewRelation("Menus", "model.Menu"),
-		Routes: struct {
+		Children: struct {
 			field.RelationField
 		}{
-			RelationField: field.NewRelation("Menus.Routes", "model.Menu"),
+			RelationField: field.NewRelation("Menus.Children", "model.Menu"),
 		},
 		RoleMenus: struct {
 			field.RelationField
@@ -172,7 +172,7 @@ type roleManyToManyMenus struct {
 
 	field.RelationField
 
-	Routes struct {
+	Children struct {
 		field.RelationField
 	}
 	RoleMenus struct {
