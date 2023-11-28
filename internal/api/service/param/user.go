@@ -16,9 +16,11 @@ type UserParam struct {
 }
 
 type UserResponse struct {
-	Name     string `json:"name" form:"name" query:"name"`
-	Phone    string `json:"phone" form:"phone" query:"phone"`
-	Status   int64  `json:"status" form:"status" query:"status"`
-	Avatar   string `json:"avatar" form:"avatar" query:"avatar"`
-	Password string `json:"password" form:"password" query:"password"`
+	Id        uint   `json:"id" form:"id" query:"id"`
+	Name      string `json:"name" form:"name" query:"name"`
+	Phone     string `json:"phone" form:"phone" query:"phone"`
+	Status    int64  `json:"status" form:"status" query:"status"`
+	Avatar    string `json:"avatar" form:"avatar" query:"avatar"`
+	Password  string `json:"password" form:"password" query:"password"`
+	CreatedAt string `json:"created_at" form:"created_at" query:"created_at"`
 }

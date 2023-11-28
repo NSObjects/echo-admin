@@ -7,25 +7,30 @@ import type {RunTimeLayoutConfig} from '@umijs/max';
 import {history, Link} from '@umijs/max';
 import defaultSettings from '../config/defaultSettings';
 import {errorConfig} from './requestErrorConfig';
-import {currentUser as queryCurrentUser} from './services/ant-design-pro/api';
+
 import React from 'react';
 import {AvatarDropdown, AvatarName} from './components/RightContent/AvatarDropdown';
-import {getMenus} from "@/services/ant-design-pro/menu";
+
+
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 import fixMenuItemIcon from "@/fixMenuItemIcon";
+
+import {getUsersCurrent} from "@/services/echo-admin/yonghu";
+import {getMenus} from "@/services/echo-admin/caidan";
+
 /**
  * @see  https://umijs.org/zh-CN/plugins/plugin-initial-state
  * */
 export async function getInitialState(): Promise<{
   settings?: Partial<LayoutSettings>;
-  currentUser?: API.CurrentUser;
+  currentUser?: API.user;
   loading?: boolean;
-  fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
+  fetchUserInfo?: () => Promise<API.user | undefined>;
 }> {
   const fetchUserInfo = async () => {
     try {
-      const msg = await queryCurrentUser({
+      const msg = await getUsersCurrent({
         skipErrorHandler: true,
       });
       return msg.data;
@@ -107,12 +112,12 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
        // locale: false,
       // 每当 initialState?.currentUser?.userid 发生修改时重新执行 request
       params: {
-        userId: initialState?.currentUser?.userid,
+        userId: initialState?.currentUser?.id,
       },
       request: async () => {
         const menus = await getMenus();
 
-        return  fixMenuItemIcon(menus.data.list)
+        return  fixMenuItemIcon(menus.data)
       },
     },
     // 自定义 403 页面

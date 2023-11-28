@@ -19,7 +19,7 @@ const serveUrlMap:Record<ServeEnv, string>  = {
   idc: 'https://idc.pro.ant.design/',
 };
 
-const SERVE_ENV: ServeEnv = (process.env.SERVE_ENV as ServeEnv) || 'dev';
+const SERVE_ENV: ServeEnv = (process.env.REACT_APP_ENV as ServeEnv) || 'dev';
 export default {
   // 如果需要自定义本地开发服务器  请取消注释按需调整
   dev: {

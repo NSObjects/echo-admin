@@ -13,9 +13,9 @@ enum ErrorShowType {
 }
 // 与后端约定的响应数据格式
 interface ResponseStructure {
-  data: any;
-  code?: number;
-  errorMessage?: string;
+  data?: any;
+  code: number;
+  msg: string;
   showType?: ErrorShowType;
 }
 
@@ -29,12 +29,12 @@ export const errorConfig: RequestConfig = {
   errorConfig: {
     // 错误抛出
     errorThrower: (res) => {
-      const { data, code, errorMessage, showType } =
+      const { data, code, msg, showType } =
         res as unknown as ResponseStructure;
       if (code !== 0) {
-        const error: any = new Error(errorMessage);
+        const error: any = new Error(msg);
         error.name = 'BizError';
-        error.info = { code, errorMessage, showType, data };
+        error.info = { code, msg, showType, data };
         throw error; // 抛出自制的错误
       }
     },
@@ -45,20 +45,20 @@ export const errorConfig: RequestConfig = {
       if (error.name === 'BizError') {
         const errorInfo: ResponseStructure | undefined = error.info;
         if (errorInfo) {
-          const { errorMessage, code } = errorInfo;
+          const { msg, code } = errorInfo;
           switch (errorInfo.showType) {
             case ErrorShowType.SILENT:
               // do nothing
               break;
             case ErrorShowType.WARN_MESSAGE:
-              message.warning(errorMessage);
+              message.warning(msg);
               break;
             case ErrorShowType.ERROR_MESSAGE:
-              message.error(errorMessage);
+              message.error(msg);
               break;
             case ErrorShowType.NOTIFICATION:
               notification.open({
-                description: errorMessage,
+                description: msg,
                 message: code,
               });
               break;
@@ -66,7 +66,7 @@ export const errorConfig: RequestConfig = {
               // TODO: redirect
               break;
             default:
-              message.error(errorMessage);
+              message.error(msg);
           }
         }
       } else if (error.response) {
@@ -87,12 +87,6 @@ export const errorConfig: RequestConfig = {
 
   // 请求拦截器
   requestInterceptors: [
-    (config: RequestOptions) => {
-      // 拦截请求配置，进行个性化处理。
-      const url = config?.url?.concat('?token = 123');
-      return { ...config, url };
-    },
-
     (url: string, options: RequestConfig) => {
       // 拦截请求配置，进行个性化处理。
       const authHeader = { Authorization: 'Bearer ' + localStorage.getItem('token') };
@@ -111,7 +105,7 @@ export const errorConfig: RequestConfig = {
       // 拦截响应数据，进行个性化处理
       const { data } = response as unknown as ResponseStructure;
 
-      if (data?.success === false) {
+      if (data.code !== 0) {
         message.error('请求失败！');
       }
       return response;

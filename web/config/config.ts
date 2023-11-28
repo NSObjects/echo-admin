@@ -139,15 +139,28 @@ export default defineConfig({
     {
       requestLibPath: "import { request } from '@umijs/max'",
       // 或者使用在线的版本
-      // schemaPath: "https://gw.alipayobjects.com/os/antfincdn/M%24jrzTTYJN/oneapi.json"
-      schemaPath: join(__dirname, 'oneapi.json'),
+      schemaPath: "http://127.0.0.1:4523/export/openapi?projectId=3565855&version=3.0",
+      // schemaPath: join(__dirname, 'oneapi.json'),
       mock: false,
+      apiPrefix: "basePath",
+      projectName: 'echo-admin',
     },
-    {
-      requestLibPath: "import { request } from '@umijs/max'",
-      schemaPath: 'https://gw.alipayobjects.com/os/antfincdn/CA1dOm%2631B/openapi.json',
-      projectName: 'swagger',
-    },
+    // openAPI?: ({
+    //   requestLibPath?: string
+    //   schemaPath?: string
+    //   mock?: boolean
+    //   projectName?: string
+    //   apiPrefix?: (string | (() => any))
+    //   namespace?: string
+    //   hook?: {
+    //     customFunctionName?: (() => any)
+    //     customClassName?: (() => any)
+    //   }
+    // {
+    //   requestLibPath: "import { request } from '@umijs/max'",
+    //   schemaPath: 'https://gw.alipayobjects.com/os/antfincdn/CA1dOm%2631B/openapi.json',
+    //   projectName: 'swagger',
+    // },
   ],
   mfsu: {
     strategy: 'normal',

@@ -40,10 +40,12 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 	resp := make([]param.UserResponse, len(users))
 	for i, user := range users {
 		resp[i] = param.UserResponse{
-			Name:     user.Name,
-			Phone:    user.Phone,
-			Status:   user.Status,
-			Password: user.Password,
+			Name:      user.Name,
+			Phone:     user.Phone,
+			Status:    user.Status,
+			Password:  user.Password,
+			Id:        user.ID,
+			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
 

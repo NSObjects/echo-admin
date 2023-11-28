@@ -1,6 +1,5 @@
 import Footer from '@/components/Footer';
-import { login } from '@/services/ant-design-pro/api';
-import { getFakeCaptcha } from '@/services/ant-design-pro/login';
+
 import {
   AlipayCircleOutlined,
   LockOutlined,
@@ -21,6 +20,8 @@ import { Alert, message, Tabs } from 'antd';
 import Settings from '../../../../config/defaultSettings';
 import React, { useState } from 'react';
 import { flushSync } from 'react-dom';
+import {postLoginAccount} from "@/services/echo-admin/zhanghao";
+
 
 const ActionIcons = () => {
   const langClassName = useEmotionCss(({ token }) => {
@@ -83,14 +84,16 @@ const LoginMessage: React.FC<{
   );
 };
 
-const defaultData: API.Data = {
-  token: '',
-  type: '',
+const defaultData: API.login = {
+  data: {token:'', type: '',},
+  code: 0,
+  msg: '',
+
 };
 
 const Login: React.FC = () => {
   const [userLoginState, setUserLoginState] =
-    useState<API.LoginResult>({code: 0, data: defaultData, msg: ""});
+    useState<API.login>(defaultData);
   const [type, setType] = useState<string>('account');
   const { initialState, setInitialState } = useModel('@@initialState');
 
@@ -120,10 +123,10 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (values: API.LoginParams) => {
+  const handleSubmit = async (values: API.account) => {
     try {
       // 登录
-      const msg = await login({ ...values, type });
+      const msg = await postLoginAccount({ ...values, type });
       if (msg.code === 0) {
 
         localStorage.setItem("token", msg.data.token);
@@ -189,7 +192,7 @@ const Login: React.FC = () => {
             <ActionIcons key="icons" />,
           ]}
           onFinish={async (values) => {
-            await handleSubmit(values as API.LoginParams);
+            await handleSubmit(values as API.account);
           }}
         >
           <Tabs
@@ -342,12 +345,14 @@ const Login: React.FC = () => {
                   },
                 ]}
                 onGetCaptcha={async (phone) => {
-                  const result = await getFakeCaptcha({
-                    phone,
-                  });
-                  if (!result) {
-                    return;
-                  }
+                  console.log(phone)
+
+                  // const result = await getFakeCaptcha({
+                  //   phone,
+                  // });
+                  // if (!result) {
+                  //   return;
+                  // }
                   message.success('获取验证码成功！验证码为：1234');
                 }}
               />
