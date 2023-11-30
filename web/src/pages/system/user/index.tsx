@@ -1,13 +1,15 @@
 import React from 'react'
-import { PlusOutlined } from '@ant-design/icons';
+import {  PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { Button  } from 'antd';
+import { Button } from 'antd';
 import { useRef } from 'react';
 import {getUsers} from "@/services/echo-admin/yonghu";
+import UserEditor from "@/pages/system/user/components/editor";
+import { useState } from 'react';
 
 const User: React.FC = () => {
-
+  const [showModal, setShowModal] = useState<boolean>(false);
   const columns: ProColumns<API.user>[] = [
     {
       dataIndex: 'index',
@@ -153,7 +155,7 @@ const User: React.FC = () => {
           key="button"
           icon={<PlusOutlined />}
           onClick={() => {
-            actionRef.current?.reload();
+            setShowModal(true)
           }}
           type="primary"
         >
@@ -161,6 +163,8 @@ const User: React.FC = () => {
         </Button>,
       ]}
     />
+    <UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>
+      setShowModal(modalVisit)}></UserEditor>
   </>
 }
 

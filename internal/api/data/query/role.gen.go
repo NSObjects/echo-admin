@@ -31,11 +31,11 @@ func newRole(db *gorm.DB, opts ...gen.DOOption) role {
 	_role.ID = field.NewUint(tableName, "id")
 	_role.CreatedAt = field.NewTime(tableName, "created_at")
 	_role.UpdatedAt = field.NewTime(tableName, "updated_at")
-	_role.DeletedAt = field.NewField(tableName, "deleted_at")
 	_role.Name = field.NewString(tableName, "name")
 	_role.Order_ = field.NewInt(tableName, "order")
 	_role.Identify = field.NewString(tableName, "identify")
 	_role.State = field.NewInt(tableName, "state")
+	_role.DeletedAt = field.NewField(tableName, "deleted_at")
 	_role.Menus = roleManyToManyMenus{
 		db: db.Session(&gorm.Session{}),
 
@@ -97,11 +97,11 @@ type role struct {
 	ID        field.Uint
 	CreatedAt field.Time
 	UpdatedAt field.Time
-	DeletedAt field.Field
 	Name      field.String
 	Order_    field.Int
 	Identify  field.String
 	State     field.Int
+	DeletedAt field.Field
 	Menus     roleManyToManyMenus
 
 	User roleManyToManyUser
@@ -124,11 +124,11 @@ func (r *role) updateTableName(table string) *role {
 	r.ID = field.NewUint(table, "id")
 	r.CreatedAt = field.NewTime(table, "created_at")
 	r.UpdatedAt = field.NewTime(table, "updated_at")
-	r.DeletedAt = field.NewField(table, "deleted_at")
 	r.Name = field.NewString(table, "name")
 	r.Order_ = field.NewInt(table, "order")
 	r.Identify = field.NewString(table, "identify")
 	r.State = field.NewInt(table, "state")
+	r.DeletedAt = field.NewField(table, "deleted_at")
 
 	r.fillFieldMap()
 
@@ -149,11 +149,11 @@ func (r *role) fillFieldMap() {
 	r.fieldMap["id"] = r.ID
 	r.fieldMap["created_at"] = r.CreatedAt
 	r.fieldMap["updated_at"] = r.UpdatedAt
-	r.fieldMap["deleted_at"] = r.DeletedAt
 	r.fieldMap["name"] = r.Name
 	r.fieldMap["order"] = r.Order_
 	r.fieldMap["identify"] = r.Identify
 	r.fieldMap["state"] = r.State
+	r.fieldMap["deleted_at"] = r.DeletedAt
 
 }
 

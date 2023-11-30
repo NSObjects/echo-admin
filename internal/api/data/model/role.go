@@ -10,16 +10,23 @@
 
 package model
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Role struct {
-	gorm.Model
-	Name     string `json:"name" form:"name" query:"name"`
-	Order    int    `json:"order" form:"order" query:"order"`
-	Identify string `json:"identify" form:"identify" query:"identify"`
-	State    int    `json:"state" `
-	Menus    []Menu `gorm:"many2many:role_menus;"`
-	User     []User `gorm:"many2many:user_role;"`
+	ID        uint `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Name      string         `json:"name" form:"name" query:"name"`
+	Order     int            `json:"order" form:"order" query:"order"`
+	Identify  string         `json:"identify" form:"identify" query:"identify"`
+	State     int            `json:"state" `
+	Menus     []Menu         `gorm:"many2many:role_menus;" json:"-"`
+	User      []User         `gorm:"many2many:user_role;" json:"-"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Role) TableName() string {

@@ -29,7 +29,7 @@ func NewDepartmentHandler(q *query.Query) *DepartmentHandler {
 
 func (d *DepartmentHandler) Get(ctx context.Context, id uint) (*model.Department, error) {
 	dep, err := d.q.Department.WithContext(ctx).
-		Preload(d.q.Department.Principal).
+		//Preload(d.q.Department.Principal).
 		Where(d.q.Department.ID.Eq(id)).First()
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (d *DepartmentHandler) Create(ctx context.Context, department param.Departm
 	de.Status = department.Status
 	de.Sort = department.Sort
 	if department.PrincipalID != nil {
-		de.Principal = &model.User{ID: *department.PrincipalID}
+		de.PrincipalID = *department.PrincipalID
 	}
 
 	if err := d.q.Department.WithContext(ctx).Create(&de); err != nil {

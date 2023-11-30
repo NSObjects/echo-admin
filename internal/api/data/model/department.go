@@ -22,8 +22,8 @@ type Department struct {
 	Status      int            `json:"status" gorm:"default:null"`
 	Sort        int            `json:"sort" gorm:"default:null"`
 	PrincipalID uint           `json:"principal_id" gorm:"default:null"`
-	Principal   *User          `json:"principal,omitempty" gorm:"default:null"`
 	ParentID    int64          `json:"parent_id,omitempty" gorm:"default:null"`
+	User        []User         `gorm:"foreignkey:DepartmentID;" json:"-"`
 	Departments []Department   `json:"departments,omitempty" gorm:"foreignKey:ParentID;references:ID"`
 	Phone       string         `json:"phone" gorm:"default:null"`
 	Email       string         `json:"email" gorm:"default:null"`

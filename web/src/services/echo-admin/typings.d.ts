@@ -90,7 +90,7 @@ declare namespace API {
   type listRoleResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: role[] };
+    data: { total?: number; list: role[] };
   };
 
   type listUserResp = {
@@ -165,8 +165,6 @@ declare namespace API {
     password: string;
     account: string;
     avatar: string;
-    id:   number;
-    created_at: string;
   };
 
   type userResp = {
