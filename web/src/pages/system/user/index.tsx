@@ -74,7 +74,7 @@ const User: React.FC = () => {
         <a
           key="editable"
           onClick={() => {
-            console.log(record.id)
+            console.log(record.name)
           }}
         >
           编辑
@@ -82,7 +82,7 @@ const User: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-            console.log(record.id)
+            console.log(record.name)
           }}
         >
           删除

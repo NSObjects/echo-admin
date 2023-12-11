@@ -23,12 +23,14 @@ declare namespace API {
 
   type department = {
     name: string;
-    parent_id: number;
-    email: string;
-    phone: string;
-    status: number;
-    sort: number;
-    principal_id: number;
+    parent_id?: number;
+    email?: string;
+    phone?: string;
+    status?: number;
+    sort?: number;
+    principal?: string;
+    created_at?: string;
+    updated_at?: string;
   };
 
   type departmentResp = {
@@ -72,8 +74,24 @@ declare namespace API {
   type listDepartmentsResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: department[] };
+    data: {
+      total?: number;
+      list: ListDepartment[];
+    };
   };
+
+  type ListDepartment = {
+    id: number;
+    name: string;
+    status: number;
+    sort: number;
+    principal: string;
+    phone: string;
+    email: string;
+    created_at: string;
+    updated_at: string;
+    children?: ListDepartment[];
+  }
 
   type listMenuResp = {
     code: number;
@@ -102,7 +120,7 @@ declare namespace API {
   type login = {
     code: number;
     msg: string;
-    data: { token: string; type: string };
+    data: { token: string; type?: string };
   };
 
   type menu = {
@@ -142,7 +160,7 @@ declare namespace API {
 
   type role = {
     name: string;
-    order: string;
+    order: number;
     identify: string;
     state: number;
   };
@@ -161,10 +179,12 @@ declare namespace API {
   type user = {
     name: string;
     phone: string;
-    status: number;
+    status?: number;
     password: string;
     account: string;
-    avatar: string;
+    avatar?: string;
+    role_id?: number;
+    department_id?: number;
   };
 
   type userResp = {

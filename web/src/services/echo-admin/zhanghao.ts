@@ -1,7 +1,7 @@
 // @ts-ignore
 /* eslint-disable */
 import { request } from '@umijs/max';
-const basePath = '/api';
+const basePath = "/api"
 /** api路径 GET /api */
 export async function getApi(options?: { [key: string]: any }) {
   return request<{ method?: string; path?: string; name?: string }[]>(`${basePath}/api`, {

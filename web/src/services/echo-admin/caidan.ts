@@ -1,7 +1,7 @@
 // @ts-ignore
 /* eslint-disable */
 import { request } from '@umijs/max';
-const basePath = '/api';
+const basePath = "/api"
 /** 查询菜单 GET /menus */
 export async function getMenus(options?: { [key: string]: any }) {
   return request<API.listMenuResp>(`${basePath}/menus`, {

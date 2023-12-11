@@ -1,7 +1,7 @@
 // @ts-ignore
 /* eslint-disable */
 import { request } from '@umijs/max';
-const basePath = '/api';
+const basePath = "/api"
 /** 查询用户 GET /users */
 export async function getUsers(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)

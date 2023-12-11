@@ -7,7 +7,6 @@ import * as caidan from './caidan';
 import * as jiaose from './jiaose';
 import * as yonghu from './yonghu';
 import * as zhanghao from './zhanghao';
-
 export default {
   yonghu,
   zhanghao,
