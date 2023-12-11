@@ -82,7 +82,7 @@ func (u *userController) getUserDetail(c echo.Context) (err error) {
 }
 
 func (u *userController) createUser(c echo.Context) (err error) {
-	var user model.User
+	var user param.UserCreateParam
 	if err = BindAndValidate(&user, c); err != nil {
 		return err
 	}

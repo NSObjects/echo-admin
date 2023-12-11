@@ -2,57 +2,44 @@
 import { Request, Response } from 'express';
 
 export default {
-  'POST /roles': (req: Request, res: Response) => {
-    res.status(200).send({ code: 88, msg: '已提油五府况器规调候立白色应。' });
+  'POST /api/roles': (req: Request, res: Response) => {
+    res.status(200).send({ code: 88, msg: '着院少增好他劳给在们级机量当放。' });
   },
-  'GET /roles': (req: Request, res: Response) => {
+  'GET /api/roles': (req: Request, res: Response) => {
     res.status(200).send({
-      code: 92,
-      msg: '部教观风务半别美院界何公写安里海温史。',
+      code: 88,
+      msg: '主不问单矿存构片林叫关气常约目。',
       data: {
-        total: 70,
+        total: 84,
         list: [
+          { name: '傅伟', order: 83, identify: '空观况部器八体土他打马进院。', state: 98 },
+          { name: '罗磊', order: 81, identify: '少使候示党参定层土想县比支议才。', state: 92 },
+          { name: '赖磊', order: 80, identify: '明利来即团研压史图回三特引场。', state: 71 },
+          { name: '康刚', order: 67, identify: '作精它南快包区江拉两华给近有求龙识。', state: 85 },
           {
-            name: '李明',
-            order: '展一安产易根名发今专除意克际教上难。',
-            identify: '本细器因产深花段包置之派保。',
-            state: 84,
+            name: '崔涛',
+            order: 72,
+            identify: '光求不劳社才反难小期极解统克时单土特。',
+            state: 61,
           },
-          {
-            name: '魏静',
-            order: '其到科时增今看列什达响或工组所。',
-            identify: '完更决红可究图图是决家安步线入百加。',
-            state: 74,
-          },
-          {
-            name: '蔡平',
-            order: '传建代持第米联应元没除商或信维备。',
-            identify: '个种民深需不商相众给维候给。',
-            state: 78,
-          },
-          {
-            name: '乔伟',
-            order: '得引除总都义多务数史史程。',
-            identify: '能了必机习满矿话布例类门规。',
-            state: 68,
-          },
-          {
-            name: '卢丽',
-            order: '展除组说究心社除教也正据话。',
-            identify: '素亲律高例新即群难党指容决院体。',
-            state: 62,
-          },
+          { name: '张娜', order: 90, identify: '战争小质从济对则称真公价。', state: 70 },
+          { name: '任秀英', order: 68, identify: '革它离部总需议形候土民图用山现走。', state: 61 },
+          { name: '常勇', order: 77, identify: '问行表县政系业矿革委完教照。', state: 77 },
+          { name: '雷洋', order: 64, identify: '节验工多公声百过根形身数百就高林。', state: 78 },
+          { name: '余勇', order: 67, identify: '提何京儿然通些压活重同该安都教。', state: 85 },
+          { name: '叶涛', order: 74, identify: '水战毛电原证适明与加角消线。', state: 87 },
+          { name: '蔡艳', order: 97, identify: '规族资然个走北又国气世维。', state: 88 },
         ],
       },
     });
   },
-  'DELETE /roles/:id': (req: Request, res: Response) => {
-    res.status(200).send({ code: 96, msg: '员究压共精出只称影低厂话书了样。' });
+  'DELETE /api/roles/:id': (req: Request, res: Response) => {
+    res.status(200).send({ code: 80, msg: '群间代正际想风军门海四后见而。' });
   },
-  'PUT /roles/:id': (req: Request, res: Response) => {
-    res.status(200).send({ code: 81, msg: '证地速没效志还型共再流革。' });
+  'PUT /api/roles/:id': (req: Request, res: Response) => {
+    res.status(200).send({ code: 99, msg: '行进带南专部象却知代取众满。' });
   },
-  'PUT /roles/:id/menus': (req: Request, res: Response) => {
-    res.status(200).send({ code: 97, msg: '调能传成生眼头办却又形西者过院面准。' });
+  'PUT /api/roles/:id/menus': (req: Request, res: Response) => {
+    res.status(200).send({ code: 78, msg: '离却适小节任府金技叫放且专。' });
   },
 };

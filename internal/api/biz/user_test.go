@@ -76,7 +76,7 @@ package biz
 //	defer ctl.Finish()
 //	pmock := mock_repository.NewMockUserRepository(ctl)
 //	pmock.EXPECT().CreateUser(domain.UserParam{
-//		User: domain.User{Id: 1, Name: "lin", Phone: "string", Account: "string", Password: "string", Status: 1}})
+//		User: domain.User{ID: 1, Name: "lin", Phone: "string", Account: "string", Password: "string", Status: 1}})
 //	type fields struct {
 //		repository repository.UserRepository
 //	}
@@ -183,7 +183,7 @@ package biz
 //	defer ctl.Finish()
 //	pmock := mock_repository.NewMockUserRepository(ctl)
 //	pmock.EXPECT().UpdateUser(domain.UserParam{
-//		User: domain.User{Id: 1, Name: "lin", Phone: "string", Account: "string", Password: "string", Status: 1}}, int64(1))
+//		User: domain.User{ID: 1, Name: "lin", Phone: "string", Account: "string", Password: "string", Status: 1}}, int64(1))
 //	type fields struct {
 //		repository repository.UserRepository
 //	}

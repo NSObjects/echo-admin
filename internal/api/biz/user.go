@@ -44,7 +44,7 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 			Phone:     user.Phone,
 			Status:    user.Status,
 			Password:  user.Password,
-			Id:        user.ID,
+			ID:        user.ID,
 			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
@@ -57,9 +57,17 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 	return resp, total, nil
 }
 
-func (h *UserHandler) CreateUser(param model.User) (err error) {
-	param.Password = tools.Sha25(param.Password)
-	if err = h.q.User.Create(&param); err != nil {
+func (h *UserHandler) CreateUser(param param.UserCreateParam) (err error) {
+	var user model.User
+	user.Name = param.Name
+	user.Phone = param.Phone
+	user.Status = param.Status
+	user.Password = tools.Sha25(param.Password)
+	user.Avatar = param.Avatar
+	user.Account = param.Account
+	user.DepartmentID = param.DepartmentID
+	user.RoleID = param.RoleID
+	if err = h.q.User.Create(&user); err != nil {
 		return err
 	}
 	return nil

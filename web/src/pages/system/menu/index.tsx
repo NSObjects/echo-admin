@@ -1,29 +1,42 @@
 import React, {useRef, useState} from 'react'
 import {ActionType, ProColumns, ProTable} from "@ant-design/pro-components";
-import {getUsers} from "@/services/echo-admin/yonghu";
 import {Button} from "antd";
 import {PlusOutlined} from "@ant-design/icons";
-import UserEditor from "@/pages/system/user/components/editor";
+import {getApiMenus} from "@/services/echo-admin/caidan";
+import MenuEditor from "@/pages/system/menu/components/editor";
 
-
-const User: React.FC = () => {
+const Menu: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
-  const columns: ProColumns<API.user>[] = [
+  const columns: ProColumns<API.menuData>[] = [
     {
-      dataIndex: 'index',
-      valueType: 'indexBorder',
-      width: 48,
-    },
-    {
-      title: '昵称',
+      title: '菜单名称',
       dataIndex: 'name',
       ellipsis: true,
-      tip: '标题过长会自动收缩',
+    },
+    {
+      title: '路由路径',
+      dataIndex: 'path',
+      ellipsis: true,
+    },
+    {
+      title: '组件路径',
+      dataIndex: 'component',
+      ellipsis: true,
+    },
+    {
+      title: 'API接口',
+      dataIndex: 'api',
+      ellipsis: true,
+    },
+    {
+      title: '排序',
+      dataIndex: 'sort',
+      ellipsis: true,
     },
     {
       disable: true,
-      title: '状态',
-      dataIndex: 'status',
+      title: '类型',
+      dataIndex: 'type',
       filters: true,
       onFilter: true,
       ellipsis: true,
@@ -31,38 +44,26 @@ const User: React.FC = () => {
       valueEnum: {
         all: { text: '未知' },
         1: {
-          text: '启用',
+          text: '目录',
           status: 'Error',
         },
         2: {
-          text: '停用',
-          status: 'Success',
+          text: '菜单',
+          status: 'Default',
+          disabled: true,
+        },
+        3: {
+          text: '按钮',
+          status: 'Processing',
           disabled: true,
         },
       },
     },
 
     {
-      title: '创建时间',
-      key: 'showTime',
-      dataIndex: 'created_at',
-      valueType: 'date',
-      sorter: true,
-      hideInSearch: true,
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      valueType: 'dateRange',
-      hideInTable: true,
-      search: {
-        transform: (value) => {
-          return {
-            startTime: value[0],
-            endTime: value[1],
-          };
-        },
-      },
+      title: '显示状态',
+      dataIndex: 'status',
+      ellipsis: true,
     },
     {
       title: '操作',
@@ -89,25 +90,17 @@ const User: React.FC = () => {
     },
   ];
 
-  function getStringValue(filter: { [key: string]: any }, propertyName: string): string {
-    return typeof filter[propertyName] === 'string' ? filter[propertyName] : '';
-  }
-
-  const actionRef = useRef<ActionType>();
+  // const actionRef = useRef<ActionType>();
   return<>
-    <ProTable<API.user>
+    <ProTable<API.menuData>
       columns={columns}
-      actionRef={actionRef}
+      // actionRef={actionRef}
       cardBordered
-      // request={getUsers}
       request={async (p, sort, filter) => {
-        console.log(sort, filter);
-        const msg = await getUsers({name:getStringValue(filter,"name") ,
-          phone: getStringValue(filter,"phone"),
-          page: p.current , count: p.pageSize})
+        const msg = await getApiMenus()
         return  {
-          data: msg.data.list,
-          total: msg.data.total,
+          data: msg.data.list ?? [],
+          total: msg.data.list?.length ?? 0,
           success: true,
         };
       }}
@@ -130,24 +123,20 @@ const User: React.FC = () => {
           listsHeight: 400,
         },
       }}
-      form={{
-        // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
-        syncToUrl: (values, type) => {
-          if (type === 'get') {
-            return {
-              ...values,
-              created_at: [values.startTime, values.endTime],
-            };
-          }
-          return values;
-        },
-      }}
-      pagination={{
-        pageSize: 5,
-        onChange: (page) => console.log(page),
-      }}
+      // form={{
+      //   // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
+      //   syncToUrl: (values, type) => {
+      //     if (type === 'get') {
+      //       return {
+      //         ...values,
+      //         created_at: [values.startTime, values.endTime],
+      //       };
+      //     }
+      //     return values;
+      //   },
+      // }}
       dateFormatter="string"
-      headerTitle="用户列表"
+      headerTitle="菜单列表"
       toolBarRender={() => [
         <Button
           key="button"
@@ -161,9 +150,9 @@ const User: React.FC = () => {
         </Button>,
       ]}
     />
-    <UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>
-      setShowModal(modalVisit)}></UserEditor>
+    <MenuEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>
+      setShowModal(modalVisit)}></MenuEditor>
   </>
 }
 
-export default User
+export default Menu

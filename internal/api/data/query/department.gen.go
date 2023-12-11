@@ -32,71 +32,17 @@ func newDepartment(db *gorm.DB, opts ...gen.DOOption) department {
 	_department.Name = field.NewString(tableName, "name")
 	_department.Status = field.NewInt(tableName, "status")
 	_department.Sort = field.NewInt(tableName, "sort")
-	_department.PrincipalID = field.NewUint(tableName, "principal_id")
+	_department.Principal = field.NewString(tableName, "principal")
 	_department.ParentID = field.NewInt64(tableName, "parent_id")
 	_department.Phone = field.NewString(tableName, "phone")
 	_department.Email = field.NewString(tableName, "email")
 	_department.CreatedAt = field.NewTime(tableName, "created_at")
 	_department.UpdatedAt = field.NewTime(tableName, "updated_at")
 	_department.DeletedAt = field.NewField(tableName, "deleted_at")
-	_department.User = departmentHasManyUser{
-		db: db.Session(&gorm.Session{}),
-
-		RelationField: field.NewRelation("User", "model.User"),
-		Role: struct {
-			field.RelationField
-			Menus struct {
-				field.RelationField
-				Children struct {
-					field.RelationField
-				}
-				RoleMenus struct {
-					field.RelationField
-				}
-			}
-			User struct {
-				field.RelationField
-			}
-		}{
-			RelationField: field.NewRelation("User.Role", "model.Role"),
-			Menus: struct {
-				field.RelationField
-				Children struct {
-					field.RelationField
-				}
-				RoleMenus struct {
-					field.RelationField
-				}
-			}{
-				RelationField: field.NewRelation("User.Role.Menus", "model.Menu"),
-				Children: struct {
-					field.RelationField
-				}{
-					RelationField: field.NewRelation("User.Role.Menus.Children", "model.Menu"),
-				},
-				RoleMenus: struct {
-					field.RelationField
-				}{
-					RelationField: field.NewRelation("User.Role.Menus.RoleMenus", "model.Role"),
-				},
-			},
-			User: struct {
-				field.RelationField
-			}{
-				RelationField: field.NewRelation("User.Role.User", "model.User"),
-			},
-		},
-	}
-
 	_department.Departments = departmentHasManyDepartments{
 		db: db.Session(&gorm.Session{}),
 
 		RelationField: field.NewRelation("Departments", "model.Department"),
-		User: struct {
-			field.RelationField
-		}{
-			RelationField: field.NewRelation("Departments.User", "model.User"),
-		},
 		Departments: struct {
 			field.RelationField
 		}{
@@ -117,15 +63,13 @@ type department struct {
 	Name        field.String
 	Status      field.Int
 	Sort        field.Int
-	PrincipalID field.Uint
+	Principal   field.String
 	ParentID    field.Int64
 	Phone       field.String
 	Email       field.String
 	CreatedAt   field.Time
 	UpdatedAt   field.Time
 	DeletedAt   field.Field
-	User        departmentHasManyUser
-
 	Departments departmentHasManyDepartments
 
 	fieldMap map[string]field.Expr
@@ -147,7 +91,7 @@ func (d *department) updateTableName(table string) *department {
 	d.Name = field.NewString(table, "name")
 	d.Status = field.NewInt(table, "status")
 	d.Sort = field.NewInt(table, "sort")
-	d.PrincipalID = field.NewUint(table, "principal_id")
+	d.Principal = field.NewString(table, "principal")
 	d.ParentID = field.NewInt64(table, "parent_id")
 	d.Phone = field.NewString(table, "phone")
 	d.Email = field.NewString(table, "email")
@@ -170,12 +114,12 @@ func (d *department) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (d *department) fillFieldMap() {
-	d.fieldMap = make(map[string]field.Expr, 13)
+	d.fieldMap = make(map[string]field.Expr, 12)
 	d.fieldMap["id"] = d.ID
 	d.fieldMap["name"] = d.Name
 	d.fieldMap["status"] = d.Status
 	d.fieldMap["sort"] = d.Sort
-	d.fieldMap["principal_id"] = d.PrincipalID
+	d.fieldMap["principal"] = d.Principal
 	d.fieldMap["parent_id"] = d.ParentID
 	d.fieldMap["phone"] = d.Phone
 	d.fieldMap["email"] = d.Email
@@ -195,101 +139,11 @@ func (d department) replaceDB(db *gorm.DB) department {
 	return d
 }
 
-type departmentHasManyUser struct {
-	db *gorm.DB
-
-	field.RelationField
-
-	Role struct {
-		field.RelationField
-		Menus struct {
-			field.RelationField
-			Children struct {
-				field.RelationField
-			}
-			RoleMenus struct {
-				field.RelationField
-			}
-		}
-		User struct {
-			field.RelationField
-		}
-	}
-}
-
-func (a departmentHasManyUser) Where(conds ...field.Expr) *departmentHasManyUser {
-	if len(conds) == 0 {
-		return &a
-	}
-
-	exprs := make([]clause.Expression, 0, len(conds))
-	for _, cond := range conds {
-		exprs = append(exprs, cond.BeCond().(clause.Expression))
-	}
-	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
-	return &a
-}
-
-func (a departmentHasManyUser) WithContext(ctx context.Context) *departmentHasManyUser {
-	a.db = a.db.WithContext(ctx)
-	return &a
-}
-
-func (a departmentHasManyUser) Session(session *gorm.Session) *departmentHasManyUser {
-	a.db = a.db.Session(session)
-	return &a
-}
-
-func (a departmentHasManyUser) Model(m *model.Department) *departmentHasManyUserTx {
-	return &departmentHasManyUserTx{a.db.Model(m).Association(a.Name())}
-}
-
-type departmentHasManyUserTx struct{ tx *gorm.Association }
-
-func (a departmentHasManyUserTx) Find() (result []*model.User, err error) {
-	return result, a.tx.Find(&result)
-}
-
-func (a departmentHasManyUserTx) Append(values ...*model.User) (err error) {
-	targetValues := make([]interface{}, len(values))
-	for i, v := range values {
-		targetValues[i] = v
-	}
-	return a.tx.Append(targetValues...)
-}
-
-func (a departmentHasManyUserTx) Replace(values ...*model.User) (err error) {
-	targetValues := make([]interface{}, len(values))
-	for i, v := range values {
-		targetValues[i] = v
-	}
-	return a.tx.Replace(targetValues...)
-}
-
-func (a departmentHasManyUserTx) Delete(values ...*model.User) (err error) {
-	targetValues := make([]interface{}, len(values))
-	for i, v := range values {
-		targetValues[i] = v
-	}
-	return a.tx.Delete(targetValues...)
-}
-
-func (a departmentHasManyUserTx) Clear() error {
-	return a.tx.Clear()
-}
-
-func (a departmentHasManyUserTx) Count() int64 {
-	return a.tx.Count()
-}
-
 type departmentHasManyDepartments struct {
 	db *gorm.DB
 
 	field.RelationField
 
-	User struct {
-		field.RelationField
-	}
 	Departments struct {
 		field.RelationField
 	}

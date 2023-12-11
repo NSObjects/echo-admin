@@ -10,10 +10,11 @@
  * @doc https://umijs.org/docs/guides/proxy
  */
 
-type ServeEnv = 'dev' | 'pre' | 'test' | 'idc';
+type ServeEnv = 'dev' | 'pre' | 'test' | 'idc' | 'mock';
 
 const serveUrlMap:Record<ServeEnv, string>  = {
   dev: 'http://127.0.0.1:9322/',
+  mock:'http://127.0.0.1:4523/m1/3565855-0-default',
   pre: 'https://pre.pro.ant.design/',
   test: 'https://test.pro.ant.design/',
   idc: 'https://idc.pro.ant.design/',
@@ -32,7 +33,15 @@ export default {
       changeOrigin: true,
     },
   },
-
+  mock:{
+    '/api/': {
+      // 要代理的地址
+      target:  serveUrlMap[SERVE_ENV],
+      // 配置了这个可以从 http 代理到 https
+      // 依赖 origin 的功能可能需要这个，比如 cookie
+      changeOrigin: true,
+    },
+  },
   /**
    * @name 详细的代理配置
    * @doc https://github.com/chimurai/http-proxy-middleware

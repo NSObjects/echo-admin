@@ -1,6 +1,8 @@
 module github.com/NSObjects/echo-admin
 
-go 1.20
+go 1.21
+
+toolchain go1.21.1
 
 require (
 	github.com/casbin/casbin/v2 v2.77.2
@@ -61,6 +63,7 @@ require (
 	github.com/klauspost/compress v1.17.0 // indirect
 	github.com/labstack/gommon v0.4.0 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
+	github.com/lmittmann/tint v1.0.3 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

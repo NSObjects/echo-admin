@@ -20,6 +20,7 @@ type User struct {
 	Account      string `json:"account,omitempty" form:"account" query:"account"`
 	Password     string `json:"password,omitempty" form:"password" query:"password"`
 	DepartmentID uint   `json:"department_id,omitempty" form:"department_id" query:"department_id"`
+	RoleID       uint   `json:"role_id,omitempty" form:"role_id" query:"role_id"`
 	Role         []Role `gorm:"many2many:user_role;" json:"role,omitempty"`
 	Avatar       string
 	CreatedAt    time.Time      `json:"created_at" `

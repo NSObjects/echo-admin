@@ -6,12 +6,12 @@ import {Button, message} from 'antd';
 import { useRef } from 'react';
 import DepartmentEditor from "@/pages/system/department/components/editor";
 import { useState } from 'react';
-import {deleteDepartmentsId, getDepartments} from "@/services/echo-admin/bumen";
+import {deleteApiDepartmentsId, getApiDepartments} from "@/services/echo-admin/bumen";
 
 
 const Department: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
-  const columns: ProColumns<API.ListDepartment>[] = [
+  const columns: ProColumns<API.department>[] = [
     {
       dataIndex: 'index',
       valueType: 'indexBorder',
@@ -83,7 +83,7 @@ const Department: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-             deleteDepartmentsId({id: record.id}).then((res)=>{
+            deleteApiDepartmentsId({id: record.id}).then((res)=>{
               if (res.code === 0) {
                 message.success('删除成功');
                 actionRef.current?.reload();
@@ -107,14 +107,14 @@ const Department: React.FC = () => {
 
   const actionRef = useRef<ActionType>();
   return<>
-    <ProTable<API.ListDepartment>
+    <ProTable<API.department>
       columns={columns}
       actionRef={actionRef}
       cardBordered
       // request={getUsers}
       request={async (p, sort, filter) => {
         console.log(sort, filter);
-        const msg = await getDepartments({name:getStringValue(filter,"name") ,
+        const msg = await getApiDepartments({name:getStringValue(filter,"name") ,
           page: p.current , count: p.pageSize})
         return  {
           data: msg.data.list,

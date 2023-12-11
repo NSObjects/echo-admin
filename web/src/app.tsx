@@ -16,8 +16,8 @@ const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 import fixMenuItemIcon from "@/fixMenuItemIcon";
 
-import {getUsersCurrent} from "@/services/echo-admin/yonghu";
-import {getMenus} from "@/services/echo-admin/caidan";
+import {getApiUsersCurrent} from "@/services/echo-admin/yonghu";
+import {getApiMenus} from "@/services/echo-admin/caidan";
 
 /**
  * @see  https://umijs.org/zh-CN/plugins/plugin-initial-state
@@ -30,7 +30,7 @@ export async function getInitialState(): Promise<{
 }> {
   const fetchUserInfo = async () => {
     try {
-      const msg = await getUsersCurrent({
+      const msg = await getApiUsersCurrent({
         skipErrorHandler: true,
       });
       return msg.data;
@@ -115,7 +115,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
         userId: initialState?.currentUser,
       },
       request: async () => {
-        const menus = await getMenus();
+        const menus = await getApiMenus();
 
         return  fixMenuItemIcon(menus.data)
       },

@@ -17,11 +17,11 @@ type DepartmentQuery struct {
 }
 
 type Department struct {
-	Name        string `json:"name"`
-	ParentID    *uint  `json:"parent_id"`
-	Email       string `json:"email"`
-	Phone       string `json:"phone"`
-	Status      int    `json:"status"`
-	Sort        int    `json:"sort"`
-	PrincipalID *uint  `json:"principal_id"`
+	Name      string `json:"name"`
+	ParentID  *uint  `json:"parent_id"`
+	Email     string `json:"email"`
+	Phone     string `json:"phone"`
+	Status    int    `json:"status"`
+	Sort      int    `json:"sort"`
+	Principal string `json:"principal" `
 }

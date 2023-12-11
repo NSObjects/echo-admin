@@ -5,33 +5,34 @@ declare namespace API {
     type: string;
   };
 
-  type deleteDepartmentsIdParams = {
+  type deleteApiDepartmentsIdParams = {
     id: number;
   };
 
-  type deleteMenusIdParams = {
+  type deleteApiMenusIdParams = {
     id: string;
   };
 
-  type deleteRolesIdParams = {
+  type deleteApiRolesIdParams = {
     id: string;
   };
 
-  type deleteUsersIdParams = {
+  type deleteApiUsersIdParams = {
     id: string;
   };
 
-  type department = {
-    name: string;
-    parent_id?: number;
-    email?: string;
-    phone?: string;
-    status?: number;
-    sort?: number;
-    principal?: string;
-    created_at?: string;
-    updated_at?: string;
-  };
+  // type department = {
+  //   id : number;
+  //   name: string;
+  //   parent_id?: number;
+  //   email?: string;
+  //   phone?: string;
+  //   status?: number;
+  //   sort?: number;
+  //   principal?: string;
+  //   created_at?: string;
+  //   updated_at?: string;
+  // };
 
   type departmentResp = {
     code: number;
@@ -39,18 +40,24 @@ declare namespace API {
     data: department;
   };
 
-  type getDepartmentsIdParams = {
-    id: number;
+  type getApiDepartmentsIdParams = {
+    id?: number;
+
   };
 
-  type getDepartmentsParams = {
+  type getApiDepartmentsParams = {
     page?: number;
     count?: number;
     name?: string;
-    status?: number;
+    email?: string,
+    parent_id?: number,
+    phone?:string,
+    principal?:string,
+    sort?: string,
+    status?: number,
   };
 
-  type getRolesParams = {
+  type getApiRolesParams = {
     name?: string;
     identify?: string;
     state?: number;
@@ -60,11 +67,11 @@ declare namespace API {
     count?: number;
   };
 
-  type getUsersIdParams = {
+  type getApiUsersIdParams = {
     id: number;
   };
 
-  type getUsersParams = {
+  type getApiUsersParams = {
     name: string;
     phone: string;
     page?: number;
@@ -76,28 +83,45 @@ declare namespace API {
     msg: string;
     data: {
       total?: number;
-      list: ListDepartment[];
+      list: department[];
     };
   };
 
-  type ListDepartment = {
+  type department = {
     id: number;
     name: string;
-    status: number;
-    sort: number;
-    principal: string;
-    phone: string;
-    email: string;
-    created_at: string;
-    updated_at: string;
-    children?: ListDepartment[];
+    status?: number;
+    sort?: number;
+    principal?: string;
+    phone?: string;
+    email?: string;
+    created_at?: string;
+    updated_at?: string;
+    children?: department[];
   }
 
   type listMenuResp = {
     code: number;
     msg: string;
-    data: menu[];
+    data: {
+      list:menuData[],
+      total: number
+    };
   };
+
+  type menuData = {
+    component?: string;
+    parent_id?: number;
+    layout?: boolean;
+    path?: string;
+    name?: string;
+    redirect?: string;
+    api?: string;
+    sort?: number;
+    type?: 1 | 2 | 3;
+    status?: 1 | 2;
+    children: menu[];
+  }
 
   type listResp = {
     code: number;
@@ -124,31 +148,43 @@ declare namespace API {
   };
 
   type menu = {
+    /** 组件路径 */
     component: string;
+    /** 父菜单id */
     parent_id: number;
     layout: boolean;
+    /** 路由路径 */
     path: string;
+    /** 菜单名称 */
     name: string;
     redirect: string;
+    /** api接口 */
+    api: string;
+    /** 排序 */
+    sort: number;
+    /** 类型 1=目录 2=菜单 3=按钮 */
+    type: 1 | 2 | 3;
+    /** 状态 1=启用 2=禁用 */
+    status: 1 | 2;
   };
 
-  type putDepartmentsIdParams = {
+  type putApiDepartmentsIdParams = {
     id: number;
   };
 
+  type putApiRolesIdMenusParams = {
+    id: string;
+  };
+
+  type putApiRolesIdParams = {
+    id: string;
+  };
+
+  type putApiUsersIdParams = {
+    id: string;
+  };
+
   type putMenusIdParams = {
-    id: string;
-  };
-
-  type putRolesIdMenusParams = {
-    id: string;
-  };
-
-  type putRolesIdParams = {
-    id: string;
-  };
-
-  type putUsersIdParams = {
     id: string;
   };
 

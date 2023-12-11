@@ -8,23 +8,23 @@ package server
 
 import (
 	"context"
+	"github.com/NSObjects/echo-admin/internal/api/data"
+	"github.com/NSObjects/echo-admin/internal/code"
+	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/golang-jwt/jwt/v5"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/NSObjects/echo-admin/internal/api/data"
 	"github.com/NSObjects/echo-admin/internal/api/service"
-	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/NSObjects/echo-admin/internal/configs"
-	"github.com/NSObjects/echo-admin/internal/log"
 	"github.com/NSObjects/echo-admin/internal/resp"
 	"github.com/NSObjects/echo-admin/internal/server/middlewares"
 	"github.com/casbin/casbin/v2"
 	"github.com/go-playground/validator/v10"
-	"github.com/golang-jwt/jwt/v5"
 	casbin_mw "github.com/labstack/echo-contrib/casbin"
-	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/marmotedu/errors"
@@ -74,10 +74,13 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 		Skipper: func(c echo.Context) bool {
 			return c.Path() == "/api/login/account"
 		},
+		ErrorHandler: func(c echo.Context, err error) error {
+			return errors.WrapC(err, code.ErrSignatureInvalid, "JWT签名无效")
+		},
 	}
 
 	s.server.Use(echojwt.WithConfig(config))
-	//s.server.Use(middleware.Recover())
+	s.server.Use(middleware.Recover())
 	s.server.Use(casbin_mw.MiddlewareWithConfig(casbin_mw.Config{
 		Enforcer: c,
 		Skipper: func(c echo.Context) bool {

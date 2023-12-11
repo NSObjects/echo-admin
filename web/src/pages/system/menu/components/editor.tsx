@@ -11,13 +11,13 @@ import {
 } from '@ant-design/pro-components';
 import {getApiRoles} from "@/services/echo-admin/jiaose";
 import ProFormSwitch from "@ant-design/pro-form/es/components/Switch";
-import {postApiUsers} from "@/services/echo-admin/yonghu";
 import {ProFormInstance} from "@ant-design/pro-form/lib";
+import {postApiMenus} from "@/services/echo-admin/caidan";
 type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
 }
-const UserEditor: React.FC<Props> = props => {
+const MenuEditor: React.FC<Props> = props => {
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
   return (
@@ -29,7 +29,7 @@ const UserEditor: React.FC<Props> = props => {
         open={modalVisit}
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue)
-          const res = await postApiUsers({
+          const res = await postApiMenus({
             account: fieldsValue["phone"],
             avatar: "",
             name: fieldsValue["name"],
@@ -122,4 +122,4 @@ const UserEditor: React.FC<Props> = props => {
   )
 }
 
-export default UserEditor
+export default MenuEditor

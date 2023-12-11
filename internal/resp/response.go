@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/NSObjects/echo-admin/internal/log"
 	"github.com/labstack/echo/v4"
 	"github.com/marmotedu/errors"
 )
@@ -44,7 +43,7 @@ func APIError(err error, c echo.Context) error {
 	codeError := errors.ParseCoder(err)
 	rjson.Code = codeError.Code()
 	rjson.Msg = codeError.String()
-	log.Errorf("%+v", err)
+	//log.Errorf("%+v", err)
 	return c.JSON(codeError.HTTPStatus(), rjson)
 }
 

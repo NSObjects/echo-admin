@@ -53,9 +53,7 @@ func (d *DepartmentHandler) Create(ctx context.Context, department param.Departm
 	de.Phone = department.Phone
 	de.Status = department.Status
 	de.Sort = department.Sort
-	if department.PrincipalID != nil {
-		de.PrincipalID = *department.PrincipalID
-	}
+	de.Principal = department.Principal
 
 	if err := d.q.Department.WithContext(ctx).Create(&de); err != nil {
 		return err
@@ -117,12 +115,8 @@ func (d *DepartmentHandler) Update(ctx context.Context, id uint, department para
 	if department.Sort != 0 {
 		update["sort"] = department.Sort
 	}
-	if department.PrincipalID != nil {
-		if *department.PrincipalID > 0 {
-			update["principal_id"] = department.PrincipalID
-		} else {
-			update["principal_id"] = sql.NullInt64{}
-		}
+	if department.Principal != "" {
+		update["principal"] = department.Principal
 	}
 
 	if department.ParentID != nil {

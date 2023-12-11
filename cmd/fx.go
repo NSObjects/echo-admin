@@ -12,7 +12,9 @@ import (
 	"github.com/NSObjects/echo-admin/internal/api/data"
 	"github.com/NSObjects/echo-admin/internal/api/service"
 	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/marmotedu/errors"
 	"go.uber.org/fx"
+	"log/slog"
 
 	"github.com/NSObjects/echo-admin/internal/configs"
 	"github.com/NSObjects/echo-admin/internal/server"
@@ -22,7 +24,8 @@ func Run(cfg string) {
 	fx.New(
 		fx.Provide(func() configs.Config {
 			config := configs.NewCfg(cfg)
-			log.Init(config)
+			//log.Init(config)
+			log.Error(errors.New("test"), slog.String("xxx", "xxx"))
 			return config
 		}),
 		data.Model,

@@ -11,13 +11,13 @@ import {
 
 import { Form, Modal} from 'antd';
 
-import {getDepartments, postDepartments} from "@/services/echo-admin/bumen";
+import {getApiDepartments, postApiDepartments} from "@/services/echo-admin/bumen";
 
 type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
   reload: () => void;
-  values: Partial<API.ListDepartment>;
+  // values: Partial<API.department>;
 }
 
 
@@ -52,7 +52,7 @@ const DepartmentEditor: React.FC<Props> = props => {
   // }, [form, props]);
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
-  function transformNode(node:API.ListDepartment): TransformedNode {
+  function transformNode(node:API.department): TransformedNode {
     const item: TransformedNode = {
       value: node.id,
       title: node.name,
@@ -75,7 +75,7 @@ const DepartmentEditor: React.FC<Props> = props => {
         open={modalVisit}
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue)
-          const res = await postDepartments({
+          const res = await getApiDepartments({
             email: fieldsValue["email"],
             name: fieldsValue["name"],
             parent_id: fieldsValue["parent_id"],
@@ -101,8 +101,8 @@ const DepartmentEditor: React.FC<Props> = props => {
           name="parent_id"
           label="上级部门"
           request={async () => {
-            const res = await getDepartments({page: 0, count: 1000})
-            return res.data.list.map((item: API.ListDepartment) => {
+            const res = await getApiDepartments({page: 0, count: 1000})
+            return res.data.list.map((item: API.department) => {
               return transformNode(item)
             })
           }}

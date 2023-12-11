@@ -1,14 +1,14 @@
 // @ts-ignore
 /* eslint-disable */
 import { request } from '@umijs/max';
-const basePath = "/api"
-/** 查询角色信息 GET /roles */
-export async function getRoles(
+
+/** 查询角色信息 GET /api/roles */
+export async function getApiRoles(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getRolesParams,
+  params: API.getApiRolesParams,
   options?: { [key: string]: any },
 ) {
-  return request<API.listRoleResp>(`${basePath}/roles`, {
+  return request<API.listRoleResp>('/api/roles', {
     method: 'GET',
     params: {
       ...params,
@@ -17,9 +17,9 @@ export async function getRoles(
   });
 }
 
-/** 创建角色 POST /roles */
-export async function postRoles(body: API.role, options?: { [key: string]: any }) {
-  return request<API.success>(`${basePath}/roles`, {
+/** 创建角色 POST /api/roles */
+export async function postApiRoles(body: API.role, options?: { [key: string]: any }) {
+  return request<API.success>('/api/roles', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -29,15 +29,15 @@ export async function postRoles(body: API.role, options?: { [key: string]: any }
   });
 }
 
-/** 更新角色信息 PUT /roles/${param0} */
-export async function putRolesId(
+/** 更新角色信息 PUT /api/roles/${param0} */
+export async function putApiRolesId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.putRolesIdParams,
+  params: API.putApiRolesIdParams,
   body: API.role,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
-  return request<API.success>(`${basePath}/roles/${param0}`, {
+  return request<API.success>(`/api/roles/${param0}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -48,24 +48,24 @@ export async function putRolesId(
   });
 }
 
-/** 删除角色 DELETE /roles/${param0} */
-export async function deleteRolesId(
+/** 删除角色 DELETE /api/roles/${param0} */
+export async function deleteApiRolesId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.deleteRolesIdParams,
+  params: API.deleteApiRolesIdParams,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
-  return request<API.success>(`${basePath}/roles/${param0}`, {
+  return request<API.success>(`/api/roles/${param0}`, {
     method: 'DELETE',
     params: { ...queryParams },
     ...(options || {}),
   });
 }
 
-/** 更新角色菜单 PUT /roles/${param0}/menus */
-export async function putRolesIdMenus(
+/** 更新角色菜单 PUT /api/roles/${param0}/menus */
+export async function putApiRolesIdMenus(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.putRolesIdMenusParams,
+  params: API.putApiRolesIdMenusParams,
   body: {
     menu_id?: number[];
     creator?: string;
@@ -73,7 +73,7 @@ export async function putRolesIdMenus(
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
-  return request<API.success>(`${basePath}/roles/${param0}/menus`, {
+  return request<API.success>(`/api/roles/${param0}/menus`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
