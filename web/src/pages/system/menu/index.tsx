@@ -7,7 +7,7 @@ import MenuEditor from "@/pages/system/menu/components/editor";
 
 const Menu: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
-  const columns: ProColumns<API.menuData>[] = [
+  const columns: ProColumns<API.menu>[] = [
     {
       title: '菜单名称',
       dataIndex: 'name',
@@ -92,7 +92,7 @@ const Menu: React.FC = () => {
 
   // const actionRef = useRef<ActionType>();
   return<>
-    <ProTable<API.menuData>
+    <ProTable<API.menu>
       columns={columns}
       // actionRef={actionRef}
       cardBordered

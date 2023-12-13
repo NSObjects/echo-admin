@@ -76,13 +76,7 @@ const DepartmentEditor: React.FC<Props> = props => {
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue)
           const res = await getApiDepartments({
-            email: fieldsValue["email"],
-            name: fieldsValue["name"],
-            parent_id: fieldsValue["parent_id"],
-            phone: fieldsValue["phone"],
-            principal: fieldsValue["principal"],
-            sort: fieldsValue["sort"],
-            status: fieldsValue["status"] ? 1 : 2,
+            page:1,count:1000
           })
           if (res.code === 0) {
             message.success('提交成功');

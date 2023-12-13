@@ -21,18 +21,19 @@ declare namespace API {
     id: string;
   };
 
-  // type department = {
-  //   id : number;
-  //   name: string;
-  //   parent_id?: number;
-  //   email?: string;
-  //   phone?: string;
-  //   status?: number;
-  //   sort?: number;
-  //   principal?: string;
-  //   created_at?: string;
-  //   updated_at?: string;
-  // };
+  type department = {
+    name: string;
+    parent_id?: number;
+    email?: string;
+    phone?: string;
+    status?: number;
+    sort?: number;
+    principal?: string;
+    created_at?: string;
+    updated_at?: string;
+    id: number;
+    children?: department[];
+  };
 
   type departmentResp = {
     code: number;
@@ -41,20 +42,14 @@ declare namespace API {
   };
 
   type getApiDepartmentsIdParams = {
-    id?: number;
-
+    id: number;
   };
 
   type getApiDepartmentsParams = {
     page?: number;
     count?: number;
     name?: string;
-    email?: string,
-    parent_id?: number,
-    phone?:string,
-    principal?:string,
-    sort?: string,
-    status?: number,
+    status?: number;
   };
 
   type getApiRolesParams = {
@@ -81,47 +76,14 @@ declare namespace API {
   type listDepartmentsResp = {
     code: number;
     msg: string;
-    data: {
-      total?: number;
-      list: department[];
-    };
+    data: { total?: number; list: department[] };
   };
-
-  type department = {
-    id: number;
-    name: string;
-    status?: number;
-    sort?: number;
-    principal?: string;
-    phone?: string;
-    email?: string;
-    created_at?: string;
-    updated_at?: string;
-    children?: department[];
-  }
 
   type listMenuResp = {
     code: number;
     msg: string;
-    data: {
-      list:menuData[],
-      total: number
-    };
+    data: {total:number,list:menu[]};
   };
-
-  type menuData = {
-    component?: string;
-    parent_id?: number;
-    layout?: boolean;
-    path?: string;
-    name?: string;
-    redirect?: string;
-    api?: string;
-    sort?: number;
-    type?: 1 | 2 | 3;
-    status?: 1 | 2;
-    children: menu[];
-  }
 
   type listResp = {
     code: number;
@@ -144,28 +106,53 @@ declare namespace API {
   type login = {
     code: number;
     msg: string;
-    data: { token: string; type?: string };
+    data: { token?: string; type?: string };
   };
 
   type menu = {
-    /** 组件路径 */
-    component: string;
     /** 父菜单id */
-    parent_id: number;
-    layout: boolean;
-    /** 路由路径 */
-    path: string;
-    /** 菜单名称 */
-    name: string;
-    redirect: string;
-    /** api接口 */
-    api: string;
-    /** 排序 */
-    sort: number;
+    pid: number;
     /** 类型 1=目录 2=菜单 3=按钮 */
     type: 1 | 2 | 3;
+    /** 菜单名称 */
+    name: string;
+    /** api接口 */
+    api: string;
+    /** 路由路径 */
+    path: string;
+    /** 组件路径 */
+    component: string;
+    layout?: number;
+    /** 重定向 */
+    redirect?: string;
+    /** 排序 */
+    sort?: number;
     /** 状态 1=启用 2=禁用 */
-    status: 1 | 2;
+    status?: 1 | 2;
+    /** 图标 */
+    icon?: string;
+    /** 外链地址s */
+    link?: string;
+    /** 备注 */
+    remark?: string;
+    /** 是否隐藏 1=是 2=否 */
+    hidden?: number;
+    /** 是否缓存 1=是 2=否 */
+    cache?: number;
+    /** 是否固定 1=是 2=否 */
+    fixed?: number;
+    /** 菜单标识符 */
+    identify?: string;
+    /** 角色id列表 */
+    role?: number[];
+
+    id?: number;
+
+    label?: string;
+
+    value?: number;
+
+    children?: menu[];
   };
 
   type putApiDepartmentsIdParams = {

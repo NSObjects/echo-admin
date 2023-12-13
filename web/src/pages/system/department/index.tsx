@@ -83,7 +83,7 @@ const Department: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-            deleteApiDepartmentsId({id: record.id}).then((res)=>{
+            deleteApiDepartmentsId({id: record.id ?? 0}).then((res)=>{
               if (res.code === 0) {
                 message.success('删除成功');
                 actionRef.current?.reload();

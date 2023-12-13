@@ -78,7 +78,7 @@ export default defineConfig({
    */
   title: 'Ant Design Pro',
   layout: {
-    locale: true,
+    locale: false,
     ...defaultSettings,
   },
   /**
@@ -141,7 +141,7 @@ export default defineConfig({
       // 或者使用在线的版本
       schemaPath: "http://127.0.0.1:4523/export/openapi?projectId=3565855&version=3.0",
       // schemaPath: join(__dirname, 'oneapi.json'),
-      mock: true,
+      // mock: true,
       // apiPrefix: "basePath",
       projectName: 'echo-admin',
     },

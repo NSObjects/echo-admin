@@ -117,7 +117,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
       request: async () => {
         const menus = await getApiMenus();
 
-        return  fixMenuItemIcon(menus.data)
+        return  fixMenuItemIcon(menus.data.list)
       },
     },
     // 自定义 403 页面

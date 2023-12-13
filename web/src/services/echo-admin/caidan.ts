@@ -2,22 +2,22 @@
 /* eslint-disable */
 import { request } from '@umijs/max';
 
-/** 创建菜单 POST /ap/menus */
-export async function postApiMenus(body: {}, options?: { [key: string]: any }) {
+/** 查询菜单 GET /api/menus */
+export async function getApiMenus(options?: { [key: string]: any }) {
+  return request<API.listMenuResp>('/api/menus', {
+    method: 'GET',
+    ...(options || {}),
+  });
+}
+
+/** 创建菜单 POST /api/menus */
+export async function postApiMenus(body: API.menu, options?: { [key: string]: any }) {
   return request<API.success>('/api/menus', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     data: body,
-    ...(options || {}),
-  });
-}
-
-/** 查询菜单 GET /api/menus */
-export async function getApiMenus(options?: { [key: string]: any }) {
-  return request<API.listMenuResp>('/api/menus', {
-    method: 'GET',
     ...(options || {}),
   });
 }

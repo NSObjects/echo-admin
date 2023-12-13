@@ -129,7 +129,7 @@ const Login: React.FC = () => {
       const msg = await postApiLoginAccount({ ...values, type });
       if (msg.code === 0) {
 
-        localStorage.setItem("token", msg.data.token);
+        localStorage.setItem("token", msg.data.token??"");
         const defaultLoginSuccessMessage = intl.formatMessage({
           id: 'pages.login.success',
           defaultMessage: '登录成功！',
