@@ -1,4 +1,4 @@
-import React, {useRef,useEffect} from 'react'
+import React, {useRef} from 'react'
 
 import {  message } from 'antd';
 import {
@@ -9,9 +9,8 @@ import {
   ProFormSwitch
 } from '@ant-design/pro-components';
 
-import { Form, Modal} from 'antd';
 
-import {getApiDepartments, postApiDepartments} from "@/services/echo-admin/bumen";
+import {getDepartments} from "@/services/echo-admin/bumen";
 
 type Props = {
   modalVisit: boolean;
@@ -54,7 +53,7 @@ const DepartmentEditor: React.FC<Props> = props => {
   const restFormRef = useRef<ProFormInstance>();
   function transformNode(node:API.department): TransformedNode {
     const item: TransformedNode = {
-      value: node.id,
+      value: node.id ?? 0,
       title: node.name,
     };
     if (node.children) {
@@ -75,7 +74,7 @@ const DepartmentEditor: React.FC<Props> = props => {
         open={modalVisit}
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue)
-          const res = await getApiDepartments({
+          const res = await getDepartments({
             page:1,count:1000
           })
           if (res.code === 0) {
@@ -95,8 +94,8 @@ const DepartmentEditor: React.FC<Props> = props => {
           name="parent_id"
           label="上级部门"
           request={async () => {
-            const res = await getApiDepartments({page: 0, count: 1000})
-            return res.data.list.map((item: API.department) => {
+            const res = await getDepartments({page: 0, count: 1000})
+            return (res.data.list ?? []).map((item: API.department) => {
               return transformNode(item)
             })
           }}

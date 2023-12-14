@@ -9,9 +9,9 @@ import {
   ModalForm
 
 } from '@ant-design/pro-components';
-import {getApiRoles} from "@/services/echo-admin/jiaose";
+import {getRoles} from "@/services/echo-admin/jiaose";
 import ProFormSwitch from "@ant-design/pro-form/es/components/Switch";
-import {postApiUsers} from "@/services/echo-admin/yonghu";
+import {postUsers} from "@/services/echo-admin/yonghu";
 import {ProFormInstance} from "@ant-design/pro-form/lib";
 type Props = {
   modalVisit: boolean;
@@ -29,7 +29,7 @@ const UserEditor: React.FC<Props> = props => {
         open={modalVisit}
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue)
-          const res = await postApiUsers({
+          const res = await postUsers({
             account: fieldsValue["phone"],
             avatar: "",
             name: fieldsValue["name"],
@@ -92,8 +92,8 @@ const UserEditor: React.FC<Props> = props => {
             label="角色"
             width="md"
             request={async () => {
-              const res = await getApiRoles({page: 0, count: 1000})
-              return res.data.list.map((item: any) => {
+              const res = await getRoles({page: 0, count: 1000})
+              return (res.data.list ?? []).map((item: any) => {
                 return {label: item.name, value: item.id}
               })
             }}
@@ -105,8 +105,8 @@ const UserEditor: React.FC<Props> = props => {
             label="部门"
             width="md"
             request={async () => {
-              const res = await getApiRoles({page: 0, count: 1000})
-              return res.data.list.map((item: any) => {
+              const res = await getRoles({page: 0, count: 1000})
+              return (res.data.list ?? []).map((item: any) => {
                 return {label: item.name, value: item.id}
               })
             }}

@@ -3,9 +3,9 @@
 import { request } from '@umijs/max';
 
 /** 查询用户 GET /api/users */
-export async function getApiUsers(
+export async function getUsers(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getApiUsersParams,
+  params: API.getUsersParams,
   options?: { [key: string]: any },
 ) {
   return request<API.listUserResp>('/api/users', {
@@ -18,7 +18,7 @@ export async function getApiUsers(
 }
 
 /** 创建用户 POST /api/users */
-export async function postApiUsers(body: API.user, options?: { [key: string]: any }) {
+export async function postUsers(body: API.user, options?: { [key: string]: any }) {
   return request<API.success>('/api/users', {
     method: 'POST',
     headers: {
@@ -30,9 +30,9 @@ export async function postApiUsers(body: API.user, options?: { [key: string]: an
 }
 
 /** 查询用户详情 GET /api/users/${param0} */
-export async function getApiUsersId(
+export async function getUsersId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getApiUsersIdParams,
+  params: API.getUsersIdParams,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
@@ -44,9 +44,9 @@ export async function getApiUsersId(
 }
 
 /** 更新用户信息 PUT /api/users/${param0} */
-export async function putApiUsersId(
+export async function putUsersId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.putApiUsersIdParams,
+  params: API.putUsersIdParams,
   body: API.user,
   options?: { [key: string]: any },
 ) {
@@ -63,9 +63,9 @@ export async function putApiUsersId(
 }
 
 /** 删除用户信息 DELETE /api/users/${param0} */
-export async function deleteApiUsersId(
+export async function deleteUsersId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.deleteApiUsersIdParams,
+  params: API.deleteUsersIdParams,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
@@ -77,7 +77,7 @@ export async function deleteApiUsersId(
 }
 
 /** 查询当前用户 GET /api/users/current */
-export async function getApiUsersCurrent(options?: { [key: string]: any }) {
+export async function getUsersCurrent(options?: { [key: string]: any }) {
   return request<API.userResp>('/api/users/current', {
     method: 'GET',
     ...(options || {}),

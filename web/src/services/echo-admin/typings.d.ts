@@ -5,19 +5,19 @@ declare namespace API {
     type: string;
   };
 
-  type deleteApiDepartmentsIdParams = {
+  type deleteDepartmentsIdParams = {
     id: number;
   };
 
-  type deleteApiMenusIdParams = {
+  type deleteMenusIdParams = {
     id: string;
   };
 
-  type deleteApiRolesIdParams = {
+  type deleteRolesIdParams = {
     id: string;
   };
 
-  type deleteApiUsersIdParams = {
+  type deleteUsersIdParams = {
     id: string;
   };
 
@@ -31,7 +31,7 @@ declare namespace API {
     principal?: string;
     created_at?: string;
     updated_at?: string;
-    id: number;
+    id?: number;
     children?: department[];
   };
 
@@ -41,18 +41,18 @@ declare namespace API {
     data: department;
   };
 
-  type getApiDepartmentsIdParams = {
+  type getDepartmentsIdParams = {
     id: number;
   };
 
-  type getApiDepartmentsParams = {
+  type getDepartmentsParams = {
     page?: number;
     count?: number;
     name?: string;
     status?: number;
   };
 
-  type getApiRolesParams = {
+  type getRolesParams = {
     name?: string;
     identify?: string;
     state?: number;
@@ -62,11 +62,11 @@ declare namespace API {
     count?: number;
   };
 
-  type getApiUsersIdParams = {
+  type getUsersIdParams = {
     id: number;
   };
 
-  type getApiUsersParams = {
+  type getUsersParams = {
     name: string;
     phone: string;
     page?: number;
@@ -76,13 +76,13 @@ declare namespace API {
   type listDepartmentsResp = {
     code: number;
     msg: string;
-    data: { total?: number; list: department[] };
+    data: { total?: number; list?: department[] };
   };
 
   type listMenuResp = {
     code: number;
     msg: string;
-    data: {total:number,list:menu[]};
+    data: { total?: number; list?: menu[] };
   };
 
   type listResp = {
@@ -94,7 +94,7 @@ declare namespace API {
   type listRoleResp = {
     code: number;
     msg: string;
-    data: { total?: number; list: role[] };
+    data: { total?: number; list?: role[] };
   };
 
   type listUserResp = {
@@ -112,6 +112,8 @@ declare namespace API {
   type menu = {
     /** 父菜单id */
     pid: number;
+    /** 菜单id */
+    id?: number;
     /** 类型 1=目录 2=菜单 3=按钮 */
     type: 1 | 2 | 3;
     /** 菜单名称 */
@@ -141,37 +143,70 @@ declare namespace API {
     cache?: number;
     /** 是否固定 1=是 2=否 */
     fixed?: number;
+    label?: string;
+    value?: number;
     /** 菜单标识符 */
     identify?: string;
     /** 角色id列表 */
     role?: number[];
-
-    id?: number;
-
-    label?: string;
-
-    value?: number;
-
     children?: menu[];
   };
 
-  type putApiDepartmentsIdParams = {
+  type putDepartmentsIdParams = {
     id: number;
   };
 
-  type putApiRolesIdMenusParams = {
-    id: string;
-  };
-
-  type putApiRolesIdParams = {
-    id: string;
-  };
-
-  type putApiUsersIdParams = {
-    id: string;
+  type putMenu = {
+    /** 父菜单id */
+    pid?: number;
+    /** 类型 1=目录 2=菜单 3=按钮 */
+    type?: 1 | 2 | 3;
+    /** 菜单名称 */
+    name?: string;
+    /** api接口 */
+    api?: string;
+    /** 路由路径 */
+    path?: string;
+    /** 组件路径 */
+    component?: string;
+    layout?: number;
+    /** 重定向 */
+    redirect?: string;
+    /** 排序 */
+    sort?: number;
+    /** 状态 1=启用 2=禁用 */
+    status?: 1 | 2;
+    /** 图标 */
+    icon?: string;
+    /** 外链地址s */
+    link?: string;
+    /** 备注 */
+    remark?: string;
+    /** 是否隐藏 1=是 2=否 */
+    hidden?: number;
+    /** 是否缓存 1=是 2=否 */
+    cache?: number;
+    /** 是否固定 1=是 2=否 */
+    fixed?: number;
+    /** 菜单标识符 */
+    identify?: string;
+    /** 角色id列表 */
+    role?: number[];
   };
 
   type putMenusIdParams = {
+    id: number;
+  };
+
+  type putRolesIdMenusParams = {
+    id: string;
+  };
+
+  type putRolesIdParams = {
+    id: string;
+  };
+
+  type putUsersIdParams = {
     id: string;
   };
 

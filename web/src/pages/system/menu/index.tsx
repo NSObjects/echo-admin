@@ -1,12 +1,14 @@
-import React, {useRef, useState} from 'react'
-import {ActionType, ProColumns, ProTable} from "@ant-design/pro-components";
+import React, { useState,useRef} from 'react'
+import {ProColumns, ProTable,ActionType} from "@ant-design/pro-components";
 import {Button} from "antd";
 import {PlusOutlined} from "@ant-design/icons";
-import {getApiMenus} from "@/services/echo-admin/caidan";
+import {getMenus} from "@/services/echo-admin/caidan";
 import MenuEditor from "@/pages/system/menu/components/editor";
 
 const Menu: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [currentRow, setCurrentRow] = useState<API.menu>();
+  const actionRef = useRef<ActionType>();
   const columns: ProColumns<API.menu>[] = [
     {
       title: '菜单名称',
@@ -73,7 +75,8 @@ const Menu: React.FC = () => {
         <a
           key="editable"
           onClick={() => {
-            console.log(record.name)
+           setShowModal(true)
+            setCurrentRow(record)
           }}
         >
           编辑
@@ -90,14 +93,14 @@ const Menu: React.FC = () => {
     },
   ];
 
-  // const actionRef = useRef<ActionType>();
+
   return<>
     <ProTable<API.menu>
       columns={columns}
-      // actionRef={actionRef}
+      actionRef={actionRef}
       cardBordered
-      request={async (p, sort, filter) => {
-        const msg = await getApiMenus()
+      request={async () => {
+        const msg = await getMenus()
         return  {
           data: msg.data.list ?? [],
           total: msg.data.list?.length ?? 0,
@@ -150,8 +153,14 @@ const Menu: React.FC = () => {
         </Button>,
       ]}
     />
-    <MenuEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>
-      setShowModal(modalVisit)}></MenuEditor>
+    <MenuEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>{
+      setShowModal(modalVisit)
+      if (!modalVisit) {
+        setCurrentRow(undefined)
+      }
+      actionRef.current?.reload()
+    }
+    }  values={currentRow || {}}></MenuEditor>
   </>
 }
 

@@ -1,10 +1,10 @@
 import React, {useRef, useState} from 'react'
 import {ActionType, ProColumns, ProTable} from "@ant-design/pro-components";
-import {getApiUsers} from "@/services/echo-admin/yonghu";
+
 import {Button} from "antd";
 import {PlusOutlined} from "@ant-design/icons";
 import UserEditor from "@/pages/system/user/components/editor";
-import {getApiRoles} from "@/services/echo-admin/jiaose";
+import {getRoles} from "@/services/echo-admin/jiaose";
 
 
 const Role: React.FC = () => {
@@ -109,7 +109,7 @@ const Role: React.FC = () => {
       // request={getUsers}
       request={async (p, sort, filter) => {
         console.log(sort, filter);
-        const msg = await getApiRoles({
+        const msg = await getRoles({
           name: getStringValue(filter,"name"),
           page: p.current , count: p.pageSize
         })

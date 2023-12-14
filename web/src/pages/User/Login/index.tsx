@@ -20,7 +20,7 @@ import { Alert, message, Tabs } from 'antd';
 import Settings from '../../../../config/defaultSettings';
 import React, { useState } from 'react';
 import { flushSync } from 'react-dom';
-import {postApiLoginAccount} from "@/services/echo-admin/zhanghao";
+import {postLoginAccount} from "@/services/echo-admin/zhanghao";
 
 
 const ActionIcons = () => {
@@ -126,7 +126,7 @@ const Login: React.FC = () => {
   const handleSubmit = async (values: API.account) => {
     try {
       // 登录
-      const msg = await postApiLoginAccount({ ...values, type });
+      const msg = await postLoginAccount({ ...values, type });
       if (msg.code === 0) {
 
         localStorage.setItem("token", msg.data.token??"");

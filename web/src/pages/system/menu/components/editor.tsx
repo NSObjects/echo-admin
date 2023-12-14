@@ -1,4 +1,4 @@
-import React, {useRef} from 'react'
+import React, {useRef,useEffect} from 'react'
 
 import {  message } from 'antd';
 import {
@@ -13,29 +13,59 @@ import {
 } from '@ant-design/pro-components';
 
 import {ProFormInstance} from "@ant-design/pro-form/lib";
-import {getApiMenus, postApiMenus} from "@/services/echo-admin/caidan";
-import ms from "@umijs/utils/compiled/debug/ms";
-import {getApiRoles} from "@/services/echo-admin/jiaose";
+import {getMenus, postMenus, putMenusId} from "@/services/echo-admin/caidan";
+import {getRoles} from "@/services/echo-admin/jiaose";
 
 type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
+  values: Partial<API.menu>;
 }
-
-const fixMenuItemIcon = (menus: API.menu[]): API.menu[] => {
-  menus.forEach((item) => {
-    const {name,id, children} = item
-    item.label = name
-    item.value = id
-    // eslint-disable-next-line no-param-reassign,@typescript-eslint/no-unused-expressions
-    children && children.length > 0 ? item.children = fixMenuItemIcon(children) : null
-  });
-  return menus;
+interface EnhancedMenuItem {
+    label: string;
+    value: number;
+    children?: EnhancedMenuItem[];
+}
+const fixMenuItemIcon = (menus: API.menu[]): EnhancedMenuItem[] => {
+    return menus.map((item) => {
+        const { name, id, children } = item;
+        const newItem: EnhancedMenuItem = {
+            label: name,
+            value: id ?? 0,
+        };
+        if (children && children.length > 0) {
+            newItem.children = fixMenuItemIcon(children);
+        }
+        return newItem;
+    });
 };
 
 const MenuEditor: React.FC<Props> = props => {
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
+
+  useEffect(() => {
+    restFormRef.current?.resetFields();
+    restFormRef.current?.setFieldsValue({
+      id: props.values.id,
+      api: props.values.name,
+      cache: props.values.cache,
+      component: props.values.component,
+      fixed: props.values.fixed,
+      identify: props.values.identify,
+      layout: props.values.layout,
+      link: props.values.link,
+      name: props.values.name,
+      path: props.values.path,
+      pid: props.values.pid,
+      redirect: props.values.redirect,
+      remark: props.values.remark,
+      role: props.values.role,
+      sort: props.values.sort === 0 ? undefined : props.values.sort,
+      status: props.values.status,
+      type: props.values.type,
+    });
+  }, [restFormRef, props]);
   return (
     <div>
       <ModalForm
@@ -43,27 +73,34 @@ const MenuEditor: React.FC<Props> = props => {
         formRef={restFormRef}
         open={modalVisit}
         onFinish={async (fieldsValue: any) => {
-          console.log(fieldsValue)
-          const res = await postApiMenus({
-            api: fieldsValue["api"],
-            cache: fieldsValue["cache"],
-            component: fieldsValue["component"],
-            fixed: fieldsValue["fixed"],
-            hidden: fieldsValue["hidden"],
-            icon: fieldsValue["icon"],
-            identify:  fieldsValue["identify"],
-            layout: fieldsValue["layout"],
-            link: fieldsValue["link"],
-            name: fieldsValue["name"],
-            path: fieldsValue["path"],
-            pid:  fieldsValue["pid"],
-            redirect: fieldsValue["redirect"],
-            remark: fieldsValue["remark"],
-            role: fieldsValue["role"],
-            sort: fieldsValue["sort"],
-            status: fieldsValue["status"],
-            type: fieldsValue["type"]
-          })
+          const body = {
+              api: fieldsValue["api"],
+              cache: fieldsValue["cache"],
+              component: fieldsValue["component"],
+              fixed: fieldsValue["fixed"],
+              hidden: fieldsValue["hidden"],
+              icon: fieldsValue["icon"],
+              identify:  fieldsValue["identify"],
+              layout: fieldsValue["layout"],
+              link: fieldsValue["link"],
+              name: fieldsValue["name"],
+              path: fieldsValue["path"],
+              pid:  fieldsValue["pid"],
+              redirect: fieldsValue["redirect"],
+              remark: fieldsValue["remark"],
+              role: fieldsValue["role"],
+              sort: fieldsValue["sort"],
+              status: fieldsValue["status"],
+              type: fieldsValue["type"]
+          }
+
+          let res: API.success
+          if (props.values?.id) {
+               res = await putMenusId({id: props.values.id}, body)
+          } else {
+               res = await postMenus(body)
+          }
+
           if (res.code === 0) {
             message.success('提交成功');
             return true;
@@ -76,14 +113,15 @@ const MenuEditor: React.FC<Props> = props => {
           if (!visible) {
             restFormRef.current?.resetFields();
           }
+
           setModalVisit(visible)
         }}
       >
         <ProFormCascader
           name="pid"
           request={async () => {
-            const msg =  await getApiMenus()
-            return fixMenuItemIcon(msg.data.list)
+            const msg =  await getMenus()
+            return fixMenuItemIcon(msg.data.list ?? [])
           }}
           label="上级菜单"
         />
@@ -160,11 +198,11 @@ const MenuEditor: React.FC<Props> = props => {
             label="权限标识"
             width="md"
             request={async () => {
-              const msg = await getApiRoles({
+              const msg = await getRoles({
                 page: 1,
                 count: 1000
               })
-             return msg.data.list.map((item: any) => {
+             return (msg.data.list ?? []).map((item: any) => {
                 return {
                   label: item.name,
                   value: item.id

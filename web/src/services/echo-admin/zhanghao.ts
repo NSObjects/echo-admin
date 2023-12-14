@@ -3,7 +3,7 @@
 import { request } from '@umijs/max';
 
 /** api路径 GET /api/api */
-export async function getApiApi(options?: { [key: string]: any }) {
+export async function getApi(options?: { [key: string]: any }) {
   return request<{ method?: string; path?: string; name?: string }[]>('/api/api', {
     method: 'GET',
     ...(options || {}),
@@ -11,7 +11,7 @@ export async function getApiApi(options?: { [key: string]: any }) {
 }
 
 /** 登录 POST /api/login/account */
-export async function postApiLoginAccount(body: API.account, options?: { [key: string]: any }) {
+export async function postLoginAccount(body: API.account, options?: { [key: string]: any }) {
   return request<API.login>('/api/login/account', {
     method: 'POST',
     headers: {
@@ -23,7 +23,7 @@ export async function postApiLoginAccount(body: API.account, options?: { [key: s
 }
 
 /** 登出 POST /api/login/out */
-export async function postApiLoginOut(options?: { [key: string]: any }) {
+export async function postLoginOut(options?: { [key: string]: any }) {
   return request<API.success>('/api/login/out', {
     method: 'POST',
     ...(options || {}),

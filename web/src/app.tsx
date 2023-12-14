@@ -16,8 +16,8 @@ const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 import fixMenuItemIcon from "@/fixMenuItemIcon";
 
-import {getApiUsersCurrent} from "@/services/echo-admin/yonghu";
-import {getApiMenus} from "@/services/echo-admin/caidan";
+import {getUsersCurrent} from "@/services/echo-admin/yonghu";
+import {getMenus} from "@/services/echo-admin/caidan";
 
 /**
  * @see  https://umijs.org/zh-CN/plugins/plugin-initial-state
@@ -30,7 +30,7 @@ export async function getInitialState(): Promise<{
 }> {
   const fetchUserInfo = async () => {
     try {
-      const msg = await getApiUsersCurrent({
+      const msg = await getUsersCurrent({
         skipErrorHandler: true,
       });
       return msg.data;
@@ -115,9 +115,9 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
         userId: initialState?.currentUser,
       },
       request: async () => {
-        const menus = await getApiMenus();
+        const menus = await getMenus();
 
-        return  fixMenuItemIcon(menus.data.list)
+        return  fixMenuItemIcon(menus.data.list ?? [])
       },
     },
     // 自定义 403 页面

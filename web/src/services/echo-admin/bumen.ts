@@ -3,9 +3,9 @@
 import { request } from '@umijs/max';
 
 /** 查询部门 GET /api/departments */
-export async function getApiDepartments(
+export async function getDepartments(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getApiDepartmentsParams,
+  params: API.getDepartmentsParams,
   options?: { [key: string]: any },
 ) {
   return request<API.listDepartmentsResp>('/api/departments', {
@@ -18,7 +18,7 @@ export async function getApiDepartments(
 }
 
 /** 创建部门 POST /api/departments */
-export async function postApiDepartments(body: API.department, options?: { [key: string]: any }) {
+export async function postDepartments(body: API.department, options?: { [key: string]: any }) {
   return request<{ code: number; msg: string }>('/api/departments', {
     method: 'POST',
     headers: {
@@ -30,9 +30,9 @@ export async function postApiDepartments(body: API.department, options?: { [key:
 }
 
 /** 查询部门详情 GET /api/departments/${param0} */
-export async function getApiDepartmentsId(
+export async function getDepartmentsId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getApiDepartmentsIdParams,
+  params: API.getDepartmentsIdParams,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
@@ -44,9 +44,9 @@ export async function getApiDepartmentsId(
 }
 
 /** 更新部门信息 PUT /api/departments/${param0} */
-export async function putApiDepartmentsId(
+export async function putDepartmentsId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.putApiDepartmentsIdParams,
+  params: API.putDepartmentsIdParams,
   body: API.department,
   options?: { [key: string]: any },
 ) {
@@ -63,9 +63,9 @@ export async function putApiDepartmentsId(
 }
 
 /** 删除部门 DELETE /api/departments/${param0} */
-export async function deleteApiDepartmentsId(
+export async function deleteDepartmentsId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.deleteApiDepartmentsIdParams,
+  params: API.deleteDepartmentsIdParams,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;

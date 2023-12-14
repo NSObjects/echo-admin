@@ -3,9 +3,9 @@
 import { request } from '@umijs/max';
 
 /** 查询角色信息 GET /api/roles */
-export async function getApiRoles(
+export async function getRoles(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getApiRolesParams,
+  params: API.getRolesParams,
   options?: { [key: string]: any },
 ) {
   return request<API.listRoleResp>('/api/roles', {
@@ -18,7 +18,7 @@ export async function getApiRoles(
 }
 
 /** 创建角色 POST /api/roles */
-export async function postApiRoles(body: API.role, options?: { [key: string]: any }) {
+export async function postRoles(body: API.role, options?: { [key: string]: any }) {
   return request<API.success>('/api/roles', {
     method: 'POST',
     headers: {
@@ -30,9 +30,9 @@ export async function postApiRoles(body: API.role, options?: { [key: string]: an
 }
 
 /** 更新角色信息 PUT /api/roles/${param0} */
-export async function putApiRolesId(
+export async function putRolesId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.putApiRolesIdParams,
+  params: API.putRolesIdParams,
   body: API.role,
   options?: { [key: string]: any },
 ) {
@@ -49,9 +49,9 @@ export async function putApiRolesId(
 }
 
 /** 删除角色 DELETE /api/roles/${param0} */
-export async function deleteApiRolesId(
+export async function deleteRolesId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.deleteApiRolesIdParams,
+  params: API.deleteRolesIdParams,
   options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
@@ -63,9 +63,9 @@ export async function deleteApiRolesId(
 }
 
 /** 更新角色菜单 PUT /api/roles/${param0}/menus */
-export async function putApiRolesIdMenus(
+export async function putRolesIdMenus(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.putApiRolesIdMenusParams,
+  params: API.putRolesIdMenusParams,
   body: {
     menu_id?: number[];
     creator?: string;
