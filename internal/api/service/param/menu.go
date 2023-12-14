@@ -19,15 +19,41 @@ import (
 	"gorm.io/gen/field"
 )
 
+// Menu 菜单
+// Type: 1:目录 2:菜单 3:按钮
+// API: 接口规则
+// Link: 外链地址
+// Identify: 菜单标识
+// Sort: 排序
+// Hidden: 是否隐藏 1=是 2=否
+// Cache: 是否缓存 1=是 2=否
+// Fixed: 是否固定 1=是 2=否
+// Name: 菜单名称
+// Path: 路由地址
+// Component: 组件路径
+// PID: 父菜单ID
+// Icon: 图标
+// Remark: 备注
 type Menu struct {
-	Name      *string `json:"name"`
-	Path      *string `json:"path"`
-	Component *string `json:"component"`
-	Redirect  *string `json:"redirect"`
-	ParentID  *int64  `json:"parent_id,omitempty"`
-	Layout    *bool   `json:"layout,omitempty" `
-	Icon      *string `json:"icon,omitempty" `
-	Routes    []Menu  `json:"routes"`
+	Type      model.MenuType `json:"type" copier:"type"`
+	API       *string        `json:"api,omitempty"`
+	Cache     *int           `json:"cache,omitempty"`
+	Component *string        `json:"component,omitempty"`
+	Fixed     *int           `json:"fixed,omitempty"`
+	Hidden    *int           `json:"hidden,omitempty"`
+	Icon      *string        `json:"icon,omitempty"`
+	Identify  *string        `json:"identify,omitempty"`
+	Layout    *int           `json:"layout,omitempty"`
+	Link      *string        `json:"link,omitempty"`
+	Name      *string        `json:"name,omitempty"`
+	Path      *string        `json:"path,omitempty"`
+	PID       *int64         `json:"pid,omitempty"`
+	Redirect  *string        `json:"redirect,omitempty"`
+	Remark    *string        `json:"remark,omitempty"`
+	Role      []int64        `json:"role,omitempty"`
+	Sort      *int           `json:"sort,omitempty"`
+	Status    *int64         `json:"status,omitempty"`
+	Routes    []Menu         `json:"routes"`
 }
 
 type RoleMenu struct {
@@ -41,14 +67,13 @@ type MenuResp struct {
 	Path      string       `json:"path"`
 	Component string       `json:"component"`
 	Redirect  string       `json:"redirect"`
-	ParentId  int64        `json:"parent_id,omitempty"`
+	Pid       int64        `json:"pid,omitempty"`
 	Routes    []model.Menu `json:"routes"`
 	CreatedAt time.Time    `json:"created_at" `
 	UpdatedAt time.Time    `json:"updated_at" `
 }
 
 func (m Menu) Data() ([]field.Expr, model.Menu) {
-
 	var filed []field.Expr
 	var model model.Menu
 	if m.Name != nil {
@@ -71,15 +96,49 @@ func (m Menu) Data() ([]field.Expr, model.Menu) {
 		filed = append(filed, query.Q.Menu.Layout)
 		model.Layout = *m.Layout
 	}
-	if m.ParentID != nil {
-		filed = append(filed, query.Q.Menu.ParentID)
-		model.ParentID = *m.ParentID
+	if m.PID != nil {
+		filed = append(filed, query.Q.Menu.Pid)
+		model.Pid = *m.PID
 	}
-
 	if m.Icon != nil {
 		filed = append(filed, query.Q.Menu.Icon)
 		model.Icon = *m.Icon
 	}
-
+	if m.Type != 0 {
+		filed = append(filed, query.Q.Menu.Type)
+		model.Type = m.Type
+	}
+	if m.API != nil {
+		filed = append(filed, query.Q.Menu.API)
+		model.API = *m.API
+	}
+	if m.Link != nil {
+		filed = append(filed, query.Q.Menu.Link)
+		model.Link = *m.Link
+	}
+	if m.Remark != nil {
+		filed = append(filed, query.Q.Menu.Remark)
+		model.Remark = *m.Remark
+	}
+	if m.Hidden != nil {
+		filed = append(filed, query.Q.Menu.Hidden)
+		model.Hidden = *m.Hidden
+	}
+	if m.Cache != nil {
+		filed = append(filed, query.Q.Menu.Cache)
+		model.Cache = *m.Cache
+	}
+	if m.Fixed != nil {
+		filed = append(filed, query.Q.Menu.Fixed)
+		model.Fixed = *m.Fixed
+	}
+	if m.Sort != nil {
+		filed = append(filed, query.Q.Menu.Sort)
+		model.Sort = *m.Sort
+	}
+	if m.Identify != nil {
+		filed = append(filed, query.Q.Menu.Identifier)
+		model.Identifier = *m.Identify
+	}
 	return filed, model
 }

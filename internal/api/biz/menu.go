@@ -12,7 +12,6 @@ package biz
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 
@@ -45,14 +44,14 @@ func (m *MenuHandler) CreateMenu(ctx context.Context, menu param.Menu) (err erro
 
 func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.Menu, int64, error) {
 	menus, err := m.q.Menu.Offset(q.Offset()).
-		Limit(q.Limit()).Where(m.q.Menu.ParentID.IsNull()).
+		Limit(q.Limit()).Where(m.q.Menu.Pid.IsNull(), m.q.Menu.Layout.IsNull()).
 		Preload(field.Associations).WithContext(ctx).Find()
 
 	if err != nil {
 		return nil, 0, errors.WrapC(err, code.ErrDatabase, "查询菜单列表失败")
 	}
 
-	total, err := m.q.Menu.Where(m.q.Menu.ParentID.IsNotNull()).WithContext(ctx).Count()
+	total, err := m.q.Menu.Where(m.q.Menu.Pid.IsNotNull()).WithContext(ctx).Count()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -63,34 +62,35 @@ func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.
 
 func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) error {
 
-	var update = make(map[string]interface{})
-	if menu.ParentID != nil {
-		if *menu.ParentID > 0 {
-			update["parent_id"] = menu.ParentID
-		} else {
-			update["parent_id"] = sql.NullInt64{}
-		}
-	}
+	seletction, update := menu.Data()
+	//var update = make(map[string]interface{})
+	//if menu.PID != nil {
+	//	if *menu.PID > 0 {
+	//		update["parent_id"] = menu.PID
+	//	} else {
+	//		update["parent_id"] = sql.NullInt64{}
+	//	}
+	//}
+	//
+	//if menu.Name != nil {
+	//	update["name"] = menu.Name
+	//}
+	//if menu.Path != nil {
+	//	update["path"] = menu.Path
+	//}
+	//if menu.Component != nil {
+	//	update["component"] = menu.Component
+	//}
+	//
+	//if menu.Redirect != nil {
+	//	update["redirect"] = menu.Redirect
+	//}
+	//
+	//if menu.Layout != nil {
+	//	update["layout"] = menu.Layout
+	//}
 
-	if menu.Name != nil {
-		update["name"] = menu.Name
-	}
-	if menu.Path != nil {
-		update["path"] = menu.Path
-	}
-	if menu.Component != nil {
-		update["component"] = menu.Component
-	}
-
-	if menu.Redirect != nil {
-		update["redirect"] = menu.Redirect
-	}
-
-	if menu.Layout != nil {
-		update["layout"] = menu.Layout
-	}
-
-	_, err := m.q.Menu.WithContext(ctx).Where(m.q.Menu.ID.Eq(id)).Updates(update)
+	_, err := m.q.Menu.WithContext(ctx).Select(seletction...).Where(m.q.Menu.ID.Eq(id)).Updates(update)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
 		if errors.As(err, &mysqlErr) {

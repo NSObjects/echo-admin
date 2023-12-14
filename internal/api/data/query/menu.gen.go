@@ -33,9 +33,18 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	_menu.Path = field.NewString(tableName, "path")
 	_menu.Component = field.NewString(tableName, "component")
 	_menu.Redirect = field.NewString(tableName, "redirect")
-	_menu.Layout = field.NewBool(tableName, "layout")
+	_menu.Layout = field.NewInt(tableName, "layout")
 	_menu.Icon = field.NewString(tableName, "icon")
-	_menu.ParentID = field.NewInt64(tableName, "parent_id")
+	_menu.Type = field.NewInt(tableName, "type")
+	_menu.Remark = field.NewString(tableName, "remark")
+	_menu.API = field.NewString(tableName, "api")
+	_menu.Link = field.NewString(tableName, "link")
+	_menu.Identifier = field.NewString(tableName, "identifier")
+	_menu.Sort = field.NewInt(tableName, "sort")
+	_menu.Hidden = field.NewInt(tableName, "hidden")
+	_menu.Cache = field.NewInt(tableName, "cache")
+	_menu.Fixed = field.NewInt(tableName, "fixed")
+	_menu.Pid = field.NewInt64(tableName, "pid")
 	_menu.CreatedAt = field.NewTime(tableName, "created_at")
 	_menu.UpdatedAt = field.NewTime(tableName, "updated_at")
 	_menu.DeletedAt = field.NewField(tableName, "deleted_at")
@@ -96,19 +105,28 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 type menu struct {
 	menuDo
 
-	ALL       field.Asterisk
-	ID        field.Uint
-	Name      field.String
-	Path      field.String
-	Component field.String
-	Redirect  field.String
-	Layout    field.Bool
-	Icon      field.String
-	ParentID  field.Int64
-	CreatedAt field.Time
-	UpdatedAt field.Time
-	DeletedAt field.Field
-	Children  menuHasManyChildren
+	ALL        field.Asterisk
+	ID         field.Uint
+	Name       field.String
+	Path       field.String
+	Component  field.String
+	Redirect   field.String
+	Layout     field.Int
+	Icon       field.String
+	Type       field.Int
+	Remark     field.String
+	API        field.String
+	Link       field.String
+	Identifier field.String
+	Sort       field.Int
+	Hidden     field.Int
+	Cache      field.Int
+	Fixed      field.Int
+	Pid        field.Int64
+	CreatedAt  field.Time
+	UpdatedAt  field.Time
+	DeletedAt  field.Field
+	Children   menuHasManyChildren
 
 	RoleMenus menuManyToManyRoleMenus
 
@@ -132,9 +150,18 @@ func (m *menu) updateTableName(table string) *menu {
 	m.Path = field.NewString(table, "path")
 	m.Component = field.NewString(table, "component")
 	m.Redirect = field.NewString(table, "redirect")
-	m.Layout = field.NewBool(table, "layout")
+	m.Layout = field.NewInt(table, "layout")
 	m.Icon = field.NewString(table, "icon")
-	m.ParentID = field.NewInt64(table, "parent_id")
+	m.Type = field.NewInt(table, "type")
+	m.Remark = field.NewString(table, "remark")
+	m.API = field.NewString(table, "api")
+	m.Link = field.NewString(table, "link")
+	m.Identifier = field.NewString(table, "identifier")
+	m.Sort = field.NewInt(table, "sort")
+	m.Hidden = field.NewInt(table, "hidden")
+	m.Cache = field.NewInt(table, "cache")
+	m.Fixed = field.NewInt(table, "fixed")
+	m.Pid = field.NewInt64(table, "pid")
 	m.CreatedAt = field.NewTime(table, "created_at")
 	m.UpdatedAt = field.NewTime(table, "updated_at")
 	m.DeletedAt = field.NewField(table, "deleted_at")
@@ -154,7 +181,7 @@ func (m *menu) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *menu) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 13)
+	m.fieldMap = make(map[string]field.Expr, 22)
 	m.fieldMap["id"] = m.ID
 	m.fieldMap["name"] = m.Name
 	m.fieldMap["path"] = m.Path
@@ -162,7 +189,16 @@ func (m *menu) fillFieldMap() {
 	m.fieldMap["redirect"] = m.Redirect
 	m.fieldMap["layout"] = m.Layout
 	m.fieldMap["icon"] = m.Icon
-	m.fieldMap["parent_id"] = m.ParentID
+	m.fieldMap["type"] = m.Type
+	m.fieldMap["remark"] = m.Remark
+	m.fieldMap["api"] = m.API
+	m.fieldMap["link"] = m.Link
+	m.fieldMap["identifier"] = m.Identifier
+	m.fieldMap["sort"] = m.Sort
+	m.fieldMap["hidden"] = m.Hidden
+	m.fieldMap["cache"] = m.Cache
+	m.fieldMap["fixed"] = m.Fixed
+	m.fieldMap["pid"] = m.Pid
 	m.fieldMap["created_at"] = m.CreatedAt
 	m.fieldMap["updated_at"] = m.UpdatedAt
 	m.fieldMap["deleted_at"] = m.DeletedAt
