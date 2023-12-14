@@ -10,7 +10,7 @@ declare namespace API {
   };
 
   type deleteMenusIdParams = {
-    id: string;
+    id: number;
   };
 
   type deleteRolesIdParams = {
@@ -18,7 +18,7 @@ declare namespace API {
   };
 
   type deleteUsersIdParams = {
-    id: string;
+    id: number;
   };
 
   type department = {
@@ -207,7 +207,7 @@ declare namespace API {
   };
 
   type putUsersIdParams = {
-    id: string;
+    id: number;
   };
 
   type resp = {
@@ -235,14 +235,15 @@ declare namespace API {
   };
 
   type user = {
-    name: string;
-    phone: string;
+    name?: string;
+    phone?: string;
     status?: number;
-    password: string;
-    account: string;
+    password?: string;
+    account?: string;
     avatar?: string;
     role_id?: number;
     department_id?: number;
+    id?: number;
   };
 
   type userResp = {

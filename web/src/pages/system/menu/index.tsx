@@ -1,8 +1,8 @@
 import React, { useState,useRef} from 'react'
 import {ProColumns, ProTable,ActionType} from "@ant-design/pro-components";
-import {Button} from "antd";
+import {Button, message} from "antd";
 import {PlusOutlined} from "@ant-design/icons";
-import {getMenus} from "@/services/echo-admin/caidan";
+import {deleteMenusId, getMenus} from "@/services/echo-admin/caidan";
 import MenuEditor from "@/pages/system/menu/components/editor";
 
 const Menu: React.FC = () => {
@@ -75,7 +75,7 @@ const Menu: React.FC = () => {
         <a
           key="editable"
           onClick={() => {
-           setShowModal(true)
+            setShowModal(true)
             setCurrentRow(record)
           }}
         >
@@ -84,7 +84,14 @@ const Menu: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-            console.log(record.name)
+            deleteMenusId({id: record.id ?? 0}).then((res)=>{
+              if (res.code === 0) {
+                message.success('删除成功')
+                actionRef.current?.reload()
+              } else {
+                message.error('删除失败');
+              }
+            })
           }}
         >
           删除
@@ -126,18 +133,6 @@ const Menu: React.FC = () => {
           listsHeight: 400,
         },
       }}
-      // form={{
-      //   // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
-      //   syncToUrl: (values, type) => {
-      //     if (type === 'get') {
-      //       return {
-      //         ...values,
-      //         created_at: [values.startTime, values.endTime],
-      //       };
-      //     }
-      //     return values;
-      //   },
-      // }}
       dateFormatter="string"
       headerTitle="菜单列表"
       toolBarRender={() => [

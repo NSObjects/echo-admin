@@ -1,4 +1,4 @@
-import React, {useRef} from 'react'
+import React, {useRef,useEffect} from 'react'
 
 import {  message } from 'antd';
 import {
@@ -11,15 +11,31 @@ import {
 } from '@ant-design/pro-components';
 import {getRoles} from "@/services/echo-admin/jiaose";
 import ProFormSwitch from "@ant-design/pro-form/es/components/Switch";
-import {postUsers} from "@/services/echo-admin/yonghu";
+import {postUsers, putUsersId} from "@/services/echo-admin/yonghu";
 import {ProFormInstance} from "@ant-design/pro-form/lib";
 type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
+  values: Partial<API.user>;
 }
+
 const UserEditor: React.FC<Props> = props => {
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
+  useEffect(() => {
+    restFormRef.current?.resetFields();
+    restFormRef.current?.setFieldsValue({
+      id: props.values.id,
+      name: props.values.name,
+      phone: props.values.phone,
+      status: props.values.status,
+      password: props.values.password,
+      account: props.values.account,
+      avatar: props.values.avatar,
+      role_id: props.values.role_id,
+      department_id: props.values.department_id,
+    });
+  }, [restFormRef, props]);
   return (
     <div>
       <ModalForm
@@ -29,14 +45,21 @@ const UserEditor: React.FC<Props> = props => {
         open={modalVisit}
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue)
-          const res = await postUsers({
+          let body = {
             account: fieldsValue["phone"],
-            avatar: "",
+            avatar: fieldsValue["avatar"],
             name: fieldsValue["name"],
-            password:  fieldsValue["password"],
+            // password:  fieldsValue["password"],
             phone: fieldsValue["phone"],
             status: fieldsValue["status"] ? 1 : 0,
-          })
+          }
+          let res: API.success
+          if (props.values?.id) {
+             res = await putUsersId({id: props.values.id}, body)
+          } else {
+             res = await postUsers(body)
+          }
+
           if (res.code === 200) {
             message.success('提交成功');
             return true;
@@ -57,7 +80,6 @@ const UserEditor: React.FC<Props> = props => {
             width="md"
             name="name"
             label="用户昵称"
-            tooltip="最长为 24 位"
             placeholder="请输入名称"
           />
           <ProFormText
@@ -88,7 +110,7 @@ const UserEditor: React.FC<Props> = props => {
         </ProForm.Group>
         <ProForm.Group>
           <ProFormSelect
-            name="role"
+            name="role_id"
             label="角色"
             width="md"
             request={async () => {
@@ -101,7 +123,7 @@ const UserEditor: React.FC<Props> = props => {
           />
 
           <ProFormSelect
-            name="depratment"
+            name="department_id"
             label="部门"
             width="md"
             request={async () => {
