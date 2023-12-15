@@ -456,13 +456,13 @@ func (m menuDo) GetById(id int) (result model.Menu, err error) {
 }
 
 // DeleteByID
-// DELETE * FROM @@table WHERE id = @id
+// DELETE FROM @@table WHERE id = @id
 func (m menuDo) DeleteByID(id int64) (err error) {
 	var params []interface{}
 
 	var generateSQL strings.Builder
 	params = append(params, id)
-	generateSQL.WriteString("DELETE * FROM menu WHERE id = ? ")
+	generateSQL.WriteString("DELETE FROM menu WHERE id = ? ")
 
 	var executeSQL *gorm.DB
 	executeSQL = m.UnderlyingDB().Exec(generateSQL.String(), params...) // ignore_security_alert

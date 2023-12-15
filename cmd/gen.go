@@ -46,7 +46,7 @@ type Querier interface {
 	GetById(id int) (gen.T, error)
 
 	// DeleteByID
-	// DELETE * FROM @@table WHERE id = @id
+	// DELETE FROM @@table WHERE id = @id
 	DeleteByID(id int64) error
 }
 

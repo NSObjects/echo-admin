@@ -10,7 +10,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
-	"github.com/NSObjects/echo-admin/tools"
 	"gorm.io/gen"
 )
 
@@ -40,12 +39,18 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 	resp := make([]param.UserResponse, len(users))
 	for i, user := range users {
 		resp[i] = param.UserResponse{
-			Name:      user.Name,
-			Phone:     user.Phone,
-			Status:    user.Status,
-			Password:  user.Password,
-			ID:        user.ID,
-			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
+			Name:         user.Name,
+			Phone:        user.Phone,
+			Status:       user.Status,
+			Password:     user.Password,
+			Avatar:       user.Avatar,
+			Posts:        user.Posts,
+			Email:        user.Email,
+			Account:      user.Account,
+			RoleID:       user.RoleID,
+			DepartmentID: user.DepartmentID,
+			ID:           user.ID,
+			CreatedAt:    user.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
 
@@ -57,17 +62,10 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 	return resp, total, nil
 }
 
-func (h *UserHandler) CreateUser(param param.UserCreateParam) (err error) {
-	var user model.User
-	user.Name = param.Name
-	user.Phone = param.Phone
-	user.Status = param.Status
-	user.Password = tools.Sha25(param.Password)
-	user.Avatar = param.Avatar
-	user.Account = param.Account
-	user.DepartmentID = param.DepartmentID
-	user.RoleID = param.RoleID
-	if err = h.q.User.Create(&user); err != nil {
+func (h *UserHandler) CreateUser(param param.UserBody) (err error) {
+
+	selection, model := param.Data()
+	if err = h.q.User.Select(selection...).Create(&model); err != nil {
 		return err
 	}
 	return nil
@@ -81,9 +79,11 @@ func (h *UserHandler) DeleteUser(id int64) (err error) {
 	return err
 }
 
-func (h *UserHandler) UpdateUser(user model.User, id int64) error {
-
-	if _, err := h.q.User.Where(h.q.User.ID.Eq(uint(id))).Updates(&user); err != nil {
+func (h *UserHandler) UpdateUser(user param.UserBody, id int64) error {
+	selection, model := user.Data()
+	if _, err := h.q.User.Select(selection...).
+		Where(h.q.User.ID.Eq(uint(id))).
+		Updates(&model); err != nil {
 		return err
 	}
 	return nil
@@ -97,10 +97,16 @@ func (h *UserHandler) GetUserDetail(id int64) (param.UserResponse, error) {
 	}
 
 	return param.UserResponse{
-		Name:     user.Name,
-		Phone:    user.Phone,
-		Status:   user.Status,
-		Password: user.Password,
-		Avatar:   user.Avatar,
+		Name:         user.Name,
+		Phone:        user.Phone,
+		Status:       user.Status,
+		Password:     user.Password,
+		Avatar:       user.Avatar,
+		Posts:        user.Posts,
+		Email:        user.Email,
+		Account:      user.Account,
+		RoleID:       user.RoleID,
+		DepartmentID: user.DepartmentID,
+		ID:           user.ID,
 	}, nil
 }

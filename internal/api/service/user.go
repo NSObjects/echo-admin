@@ -14,7 +14,6 @@ import (
 	"strconv"
 
 	"github.com/NSObjects/echo-admin/internal/api/biz"
-	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/resp"
 	"github.com/labstack/echo/v4"
@@ -82,7 +81,7 @@ func (u *userController) getUserDetail(c echo.Context) (err error) {
 }
 
 func (u *userController) createUser(c echo.Context) (err error) {
-	var user param.UserCreateParam
+	var user param.UserBody
 	if err = BindAndValidate(&user, c); err != nil {
 		return err
 	}
@@ -96,7 +95,7 @@ func (u *userController) createUser(c echo.Context) (err error) {
 
 func (u *userController) updateUser(c echo.Context) (err error) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var user model.User
+	var user param.UserBody
 	if err = BindAndValidate(&user, c); err != nil {
 		return err
 	}

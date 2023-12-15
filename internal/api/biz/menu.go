@@ -62,35 +62,9 @@ func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.
 
 func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) error {
 
-	seletction, update := menu.Data()
-	//var update = make(map[string]interface{})
-	//if menu.PID != nil {
-	//	if *menu.PID > 0 {
-	//		update["parent_id"] = menu.PID
-	//	} else {
-	//		update["parent_id"] = sql.NullInt64{}
-	//	}
-	//}
-	//
-	//if menu.Name != nil {
-	//	update["name"] = menu.Name
-	//}
-	//if menu.Path != nil {
-	//	update["path"] = menu.Path
-	//}
-	//if menu.Component != nil {
-	//	update["component"] = menu.Component
-	//}
-	//
-	//if menu.Redirect != nil {
-	//	update["redirect"] = menu.Redirect
-	//}
-	//
-	//if menu.Layout != nil {
-	//	update["layout"] = menu.Layout
-	//}
+	selection, update := menu.Data()
 
-	_, err := m.q.Menu.WithContext(ctx).Select(seletction...).Where(m.q.Menu.ID.Eq(id)).Updates(update)
+	_, err := m.q.Menu.WithContext(ctx).Select(selection...).Where(m.q.Menu.ID.Eq(id)).Updates(update)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
 		if errors.As(err, &mysqlErr) {

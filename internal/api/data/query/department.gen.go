@@ -297,13 +297,13 @@ func (d departmentDo) GetById(id int) (result model.Department, err error) {
 }
 
 // DeleteByID
-// DELETE * FROM @@table WHERE id = @id
+// DELETE FROM @@table WHERE id = @id
 func (d departmentDo) DeleteByID(id int64) (err error) {
 	var params []interface{}
 
 	var generateSQL strings.Builder
 	params = append(params, id)
-	generateSQL.WriteString("DELETE * FROM department WHERE id = ? ")
+	generateSQL.WriteString("DELETE FROM department WHERE id = ? ")
 
 	var executeSQL *gorm.DB
 	executeSQL = d.UnderlyingDB().Exec(generateSQL.String(), params...) // ignore_security_alert

@@ -408,13 +408,13 @@ func (r roleDo) GetById(id int) (result model.Role, err error) {
 }
 
 // DeleteByID
-// DELETE * FROM @@table WHERE id = @id
+// DELETE FROM @@table WHERE id = @id
 func (r roleDo) DeleteByID(id int64) (err error) {
 	var params []interface{}
 
 	var generateSQL strings.Builder
 	params = append(params, id)
-	generateSQL.WriteString("DELETE * FROM role WHERE id = ? ")
+	generateSQL.WriteString("DELETE FROM role WHERE id = ? ")
 
 	var executeSQL *gorm.DB
 	executeSQL = r.UnderlyingDB().Exec(generateSQL.String(), params...) // ignore_security_alert

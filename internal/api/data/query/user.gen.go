@@ -31,12 +31,15 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 	_user.ID = field.NewUint(tableName, "id")
 	_user.Name = field.NewString(tableName, "name")
 	_user.Phone = field.NewString(tableName, "phone")
-	_user.Status = field.NewInt64(tableName, "status")
+	_user.Status = field.NewInt(tableName, "status")
 	_user.Account = field.NewString(tableName, "account")
 	_user.Password = field.NewString(tableName, "password")
 	_user.DepartmentID = field.NewUint(tableName, "department_id")
 	_user.RoleID = field.NewUint(tableName, "role_id")
+	_user.Sex = field.NewInt(tableName, "sex")
+	_user.Posts = field.NewString(tableName, "posts")
 	_user.Avatar = field.NewString(tableName, "avatar")
+	_user.Email = field.NewString(tableName, "email")
 	_user.CreatedAt = field.NewTime(tableName, "created_at")
 	_user.UpdatedAt = field.NewTime(tableName, "updated_at")
 	_user.DeletedAt = field.NewField(tableName, "deleted_at")
@@ -92,12 +95,15 @@ type user struct {
 	ID           field.Uint
 	Name         field.String
 	Phone        field.String
-	Status       field.Int64
+	Status       field.Int
 	Account      field.String
 	Password     field.String
 	DepartmentID field.Uint
 	RoleID       field.Uint
+	Sex          field.Int
+	Posts        field.String
 	Avatar       field.String
+	Email        field.String
 	CreatedAt    field.Time
 	UpdatedAt    field.Time
 	DeletedAt    field.Field
@@ -121,12 +127,15 @@ func (u *user) updateTableName(table string) *user {
 	u.ID = field.NewUint(table, "id")
 	u.Name = field.NewString(table, "name")
 	u.Phone = field.NewString(table, "phone")
-	u.Status = field.NewInt64(table, "status")
+	u.Status = field.NewInt(table, "status")
 	u.Account = field.NewString(table, "account")
 	u.Password = field.NewString(table, "password")
 	u.DepartmentID = field.NewUint(table, "department_id")
 	u.RoleID = field.NewUint(table, "role_id")
+	u.Sex = field.NewInt(table, "sex")
+	u.Posts = field.NewString(table, "posts")
 	u.Avatar = field.NewString(table, "avatar")
+	u.Email = field.NewString(table, "email")
 	u.CreatedAt = field.NewTime(table, "created_at")
 	u.UpdatedAt = field.NewTime(table, "updated_at")
 	u.DeletedAt = field.NewField(table, "deleted_at")
@@ -146,7 +155,7 @@ func (u *user) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (u *user) fillFieldMap() {
-	u.fieldMap = make(map[string]field.Expr, 13)
+	u.fieldMap = make(map[string]field.Expr, 16)
 	u.fieldMap["id"] = u.ID
 	u.fieldMap["name"] = u.Name
 	u.fieldMap["phone"] = u.Phone
@@ -155,7 +164,10 @@ func (u *user) fillFieldMap() {
 	u.fieldMap["password"] = u.Password
 	u.fieldMap["department_id"] = u.DepartmentID
 	u.fieldMap["role_id"] = u.RoleID
+	u.fieldMap["sex"] = u.Sex
+	u.fieldMap["posts"] = u.Posts
 	u.fieldMap["avatar"] = u.Avatar
+	u.fieldMap["email"] = u.Email
 	u.fieldMap["created_at"] = u.CreatedAt
 	u.fieldMap["updated_at"] = u.UpdatedAt
 	u.fieldMap["deleted_at"] = u.DeletedAt
@@ -342,13 +354,13 @@ func (u userDo) GetById(id int) (result model.User, err error) {
 }
 
 // DeleteByID
-// DELETE * FROM @@table WHERE id = @id
+// DELETE FROM @@table WHERE id = @id
 func (u userDo) DeleteByID(id int64) (err error) {
 	var params []interface{}
 
 	var generateSQL strings.Builder
 	params = append(params, id)
-	generateSQL.WriteString("DELETE * FROM user WHERE id = ? ")
+	generateSQL.WriteString("DELETE FROM user WHERE id = ? ")
 
 	var executeSQL *gorm.DB
 	executeSQL = u.UnderlyingDB().Exec(generateSQL.String(), params...) // ignore_security_alert
