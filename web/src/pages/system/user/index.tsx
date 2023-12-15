@@ -7,6 +7,7 @@ import { useRef } from 'react';
 import {deleteUsersId, getUsers} from "@/services/echo-admin/yonghu";
 import UserEditor from "@/pages/system/user/components/editor";
 import { useState } from 'react';
+import MenuEditor from "@/pages/system/menu/components/editor";
 
 const User: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -87,10 +88,10 @@ const User: React.FC = () => {
           onClick={() => {
             deleteUsersId({id:record.id ?? 0}).then((res)=>{
               if (res.code === 0) {
-                message.success('删除成功')
-                actionRef.current?.reload()
+                message.success('删除成功').then(() => {
+                  actionRef.current?.reload()})
               } else {
-                message.error('删除失败');
+                message.error('删除失败').then(r => console.log(r));
               }
             })
           }}
@@ -173,8 +174,13 @@ const User: React.FC = () => {
         </Button>,
       ]}
     />
-    <UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>
-      setShowModal(modalVisit)}  values={currentRow || {}}></UserEditor>
+    <UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>{
+      setShowModal(modalVisit)
+      if (!modalVisit) {
+        setCurrentRow(undefined)
+      }
+    }
+    }  values={currentRow || {}} reload={()=>{actionRef.current?.reload()}}></UserEditor>
   </>
 }
 

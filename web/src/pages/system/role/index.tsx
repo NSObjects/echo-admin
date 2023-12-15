@@ -161,7 +161,7 @@ const Role: React.FC = () => {
           key="button"
           icon={<PlusOutlined />}
           onClick={() => {
-            setShowModal(true)
+            // setShowModal(true)
           }}
           type="primary"
         >
@@ -169,8 +169,8 @@ const Role: React.FC = () => {
         </Button>,
       ]}
     />
-    <UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>
-      setShowModal(modalVisit)}></UserEditor>
+    {/*<UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>*/}
+    {/*  setShowModal(modalVisit)}></UserEditor>*/}
   </>
 }
 

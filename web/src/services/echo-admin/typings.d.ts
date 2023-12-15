@@ -14,7 +14,7 @@ declare namespace API {
   };
 
   type deleteRolesIdParams = {
-    id: string;
+    id: number;
   };
 
   type deleteUsersIdParams = {
@@ -199,11 +199,11 @@ declare namespace API {
   };
 
   type putRolesIdMenusParams = {
-    id: string;
+    id: number;
   };
 
   type putRolesIdParams = {
-    id: string;
+    id: number;
   };
 
   type putUsersIdParams = {
@@ -235,15 +235,29 @@ declare namespace API {
   };
 
   type user = {
+    /** 昵称 */
     name?: string;
+    /** 手机号码 */
     phone?: string;
+    /** 状态 */
     status?: number;
+    /** 密码 */
     password?: string;
+    /** 账号 */
     account?: string;
+    /** 头像 */
     avatar?: string;
+    /** 角色id */
     role_id?: number;
+    /** 部门Id */
     department_id?: number;
     id?: number;
+    /** 邮箱 */
+    email?: string;
+    /** 性别 */
+    sex?: 1 | 2;
+    /** 岗位 */
+    posts?: string;
   };
 
   type userResp = {
