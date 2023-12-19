@@ -12,7 +12,7 @@ npm install
 
 or
 
-```bash
+`；P-=       ``bash
 yarn
 ```
 

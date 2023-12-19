@@ -7,10 +7,12 @@
 package biz
 
 import (
-	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"time"
+
+	"gorm.io/gen"
+
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
-	"gorm.io/gen"
 )
 
 type UserHandler struct {
@@ -21,17 +23,36 @@ func NewUserHandler(q *query.Query) *UserHandler {
 	return &UserHandler{q: q}
 }
 
-func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResponse, int64, error) {
+func (h *UserHandler) ListUser(p param.UserParam) ([]param.UserResponse, int64, error) {
 	do := h.q.User
 	var cd []gen.Condition
-	if u.Name != "" {
-		cd = append(cd, do.Name.Eq(u.Name))
-	}
-	if u.Phone != "" {
-		cd = append(cd, do.Name.Eq(u.Phone))
+
+	if p.Phone != nil && *p.Phone != "" {
+		cd = append(cd, do.Phone.Like(*p.Phone+"%"))
 	}
 
-	users, err := do.Where(cd...).Limit(p.Limit()).Offset(p.Offset()).Find()
+	if p.Status != 0 {
+		cd = append(cd, do.Status.Eq(p.Status))
+	}
+
+	if p.CreateStart != nil && p.CreateEnd != nil && *p.CreateEnd > *p.CreateStart {
+		start, err := time.Parse("2006-01-02 15:04:05", *p.CreateStart)
+		if err != nil {
+			return nil, 0, err
+		}
+		end, err := time.Parse("2006-01-02 15:04:05", *p.CreateEnd)
+		if err != nil {
+			return nil, 0, err
+		}
+		cd = append(cd, do.CreatedAt.Between(start, end))
+	}
+
+	ido := do.Where(cd...)
+	if p.Key != nil && *p.Key != "" {
+		ido = do.Or(do.Name.Like(*p.Key + "%")).Or(do.Account.Like(*p.Key + "%"))
+	}
+
+	users, err := ido.Limit(p.Limit()).Offset(p.Offset()).Find()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -42,7 +63,6 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 			Name:         user.Name,
 			Phone:        user.Phone,
 			Status:       user.Status,
-			Password:     user.Password,
 			Avatar:       user.Avatar,
 			Posts:        user.Posts,
 			Email:        user.Email,
@@ -54,7 +74,7 @@ func (h *UserHandler) ListUser(u model.User, p param.APIQuery) ([]param.UserResp
 		}
 	}
 
-	total, err := do.Where(cd...).Count()
+	total, err := ido.Count()
 	if err != nil {
 		return nil, 0, err
 	}

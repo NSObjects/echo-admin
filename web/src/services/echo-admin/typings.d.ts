@@ -67,10 +67,18 @@ declare namespace API {
   };
 
   type getUsersParams = {
-    name: string;
-    phone: string;
+    /** 手机号 */
+    phone?: string;
     page?: number;
     count?: number;
+    /** 关键词，用户名或账号 */
+    key?: string;
+    /** 1=启用 2=禁言 */
+    status?: number;
+    /** 创建开始时间 */
+    create_start?: number;
+    /** 创建结束时间 */
+    create_end?: number;
   };
 
   type listDepartmentsResp = {

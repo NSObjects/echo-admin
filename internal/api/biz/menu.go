@@ -13,9 +13,9 @@ package biz
 import (
 	"context"
 	"fmt"
-	"github.com/NSObjects/echo-admin/internal/api/data/query"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
 
@@ -80,8 +80,9 @@ func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) 
 }
 
 func (m *MenuHandler) Delete(ctx context.Context, id uint) error {
-	_, err := m.q.Menu.WithContext(ctx).Where(m.q.Menu.ID.Eq(id)).Delete()
-	if err != nil {
+	if _, err := m.q.Menu.WithContext(ctx).
+		Where(m.q.Menu.ID.Eq(id)).
+		Delete(); err != nil {
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("删除菜单失败 %v", id))
 	}
 

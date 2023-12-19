@@ -22,19 +22,28 @@ const User: React.FC = () => {
     {
       title: '昵称',
       dataIndex: 'name',
-      ellipsis: true,
-      tip: '标题过长会自动收缩',
+      hideInSearch: true,
+    },
+    {
+      title: '手机号码',
+      dataIndex: 'phone',
+    },
+    {
+      title: '关键词搜索',
+      dataIndex: 'key',
+      onFilter: true,
+      hideInTable: true,
     },
     {
       disable: true,
       title: '状态',
       dataIndex: 'status',
-      filters: true,
-      onFilter: true,
-      ellipsis: true,
+      // filters: true,
+       onFilter: true,
+      // ellipsis: true,
       valueType: 'select',
       valueEnum: {
-        all: { text: '未知' },
+        all: { text: '未知' ,  disabled: true,},
         1: {
           text: '启用',
           status: 'Error',
@@ -42,7 +51,7 @@ const User: React.FC = () => {
         2: {
           text: '停用',
           status: 'Success',
-          disabled: true,
+
         },
       },
     },
@@ -58,13 +67,13 @@ const User: React.FC = () => {
     {
       title: '创建时间',
       dataIndex: 'created_at',
-      valueType: 'dateRange',
+      valueType: 'dateTimeRange',
       hideInTable: true,
       search: {
         transform: (value) => {
           return {
-            startTime: value[0],
-            endTime: value[1],
+            create_start: value[0],
+            create_end: value[1],
           };
         },
       },
@@ -102,22 +111,22 @@ const User: React.FC = () => {
     },
   ];
 
-  function getStringValue(filter: { [key: string]: any }, propertyName: string): string {
-    return typeof filter[propertyName] === 'string' ? filter[propertyName] : '';
-  }
-
-
   return<>
-    <ProTable<API.user>
+    <ProTable<API.user,API.getUsersParams>
       columns={columns}
       actionRef={actionRef}
       cardBordered
-
       request={async (p, sort, filter) => {
-        console.log(sort, filter);
-        const msg = await getUsers({name:getStringValue(filter,"name") ,
-          phone: getStringValue(filter,"phone"),
-          page: p.current , count: p.pageSize})
+        console.log(sort, p);
+        const msg = await getUsers({
+          count: p.pageSize,
+          page: p.current,
+          create_end: p.create_end,
+          create_start: p.create_start,
+          key: p.key,
+          phone: p.phone,
+          status: p.status,
+        })
         return  {
             data: msg.data.list,
             total: msg.data.total,
@@ -143,18 +152,7 @@ const User: React.FC = () => {
           listsHeight: 400,
         },
       }}
-      form={{
-        // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
-        syncToUrl: (values, type) => {
-          if (type === 'get') {
-            return {
-              ...values,
-              created_at: [values.startTime, values.endTime],
-            };
-          }
-          return values;
-        },
-      }}
+
       pagination={{
         pageSize: 5,
         onChange: (page) => console.log(page),

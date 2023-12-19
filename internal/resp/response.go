@@ -7,6 +7,7 @@
 package resp
 
 import (
+	"github.com/NSObjects/echo-admin/internal/log"
 	"net/http"
 	"reflect"
 
@@ -43,7 +44,7 @@ func APIError(err error, c echo.Context) error {
 	codeError := errors.ParseCoder(err)
 	rjson.Code = codeError.Code()
 	rjson.Msg = codeError.String()
-	//log.Errorf("%+v", err)
+	log.Error(err)
 	return c.JSON(codeError.HTTPStatus(), rjson)
 }
 

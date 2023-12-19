@@ -80,7 +80,7 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 	}
 
 	s.server.Use(echojwt.WithConfig(config))
-	s.server.Use(middleware.Recover())
+	//s.server.Use(middleware.Recover())
 	s.server.Use(casbin_mw.MiddlewareWithConfig(casbin_mw.Config{
 		Enforcer: c,
 		Skipper: func(c echo.Context) bool {

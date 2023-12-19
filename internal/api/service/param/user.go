@@ -13,9 +13,19 @@ import (
 	"gorm.io/gen/field"
 )
 
+// UserParam 用户查询参数
+// Status 1=启用 2=禁言
+// CreateEnd 创建结束时间
+// CreateStart 创建开始时间
+// Key 关键词，用户名或账号
+// Phone 手机号
 type UserParam struct {
 	APIQuery
-	model.User
+	CreateEnd   *string `json:"create_end" form:"create_end" query:"create_end"`
+	CreateStart *string `json:"create_start" form:"create_start" query:"create_start"`
+	Key         *string `json:"key" form:"key" query:"key"`
+	Phone       *string `json:"phone" form:"phone" query:"phone"`
+	Status      int     `json:"status" form:"status" query:"status" validate:"max=2"`
 }
 
 type UserResponse struct {

@@ -63,7 +63,7 @@ func (u *userController) getUser(c echo.Context) (err error) {
 		return err
 	}
 
-	listUser, total, err := u.user.ListUser(user.User, user.APIQuery)
+	listUser, total, err := u.user.ListUser(user)
 	if err != nil {
 		return err
 	}

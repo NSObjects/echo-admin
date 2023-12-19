@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/configs"
+	"github.com/spf13/cobra"
 	"gorm.io/driver/mysql"
 	"gorm.io/gen"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-
-	"github.com/spf13/cobra"
 )
 
 // genCmd represents the gen command
@@ -51,7 +50,8 @@ type Querier interface {
 }
 
 func GenMysql(cfg configs.MysqlConfig) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true",
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -62,6 +62,7 @@ func GenMysql(cfg configs.MysqlConfig) {
 		panic(err)
 	}
 	err = db.AutoMigrate(&model.Department{}, &model.User{}, &model.Menu{}, &model.Role{})
+
 	if err != nil {
 		panic(err)
 	}
