@@ -127,6 +127,7 @@ const Menu: React.FC = () => {
       rowKey="id"
       search={{
         labelWidth: 'auto',
+        collapsed: false,
       }}
       options={{
         setting: {

@@ -114,6 +114,7 @@ const User: React.FC = () => {
   return<>
     <ProTable<API.user,API.getUsersParams>
       columns={columns}
+
       actionRef={actionRef}
       cardBordered
       request={async (p, sort, filter) => {
@@ -146,6 +147,7 @@ const User: React.FC = () => {
       rowKey="id"
       search={{
         labelWidth: 'auto',
+        collapsed: false,
       }}
       options={{
         setting: {

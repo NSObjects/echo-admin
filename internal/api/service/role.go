@@ -52,7 +52,7 @@ func (r *RoleController) List(c echo.Context) error {
 }
 
 func (r *RoleController) Create(c echo.Context) error {
-	var role model.Role
+	var role param.Role
 	err := BindAndValidate(&role, c)
 	if err != nil {
 		return err

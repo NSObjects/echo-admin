@@ -54,10 +54,7 @@ declare namespace API {
 
   type getRolesParams = {
     name?: string;
-    identify?: string;
     state?: number;
-    start_date?: number;
-    end_date?: number;
     page?: number;
     count?: number;
   };
@@ -225,10 +222,19 @@ declare namespace API {
   };
 
   type role = {
-    name: string;
-    order: number;
-    identify: string;
-    state: number;
+    /** 角色名称 */
+    name?: string;
+    /** 排序 */
+    sort?: number;
+    /** 关联菜单 */
+    menus?: number[];
+    /** 状态 1=启用 其他禁用 */
+    status?: number;
+    /** 备注 */
+    mark?: string;
+    id?: number;
+    /** 创建时间 */
+    create_at?: string;
   };
 
   type roleResp = {

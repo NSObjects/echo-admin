@@ -1,14 +1,16 @@
 import React, {useRef, useState} from 'react'
 import {ActionType, ProColumns, ProTable} from "@ant-design/pro-components";
 
-import {Button} from "antd";
+import {Button, message} from "antd";
 import {PlusOutlined} from "@ant-design/icons";
-import UserEditor from "@/pages/system/user/components/editor";
-import {getRoles} from "@/services/echo-admin/jiaose";
+import {deleteRolesId, getRoles} from "@/services/echo-admin/jiaose";
+import RoleEditor from "@/pages/system/role/components/editor";
 
 
 const Role: React.FC = () => {
+  const actionRef = useRef<ActionType>();
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [currentRow, setCurrentRow] = useState<API.role>();
   const columns: ProColumns<API.role>[] = [
     {
       dataIndex: 'index',
@@ -46,20 +48,20 @@ const Role: React.FC = () => {
     },
     {
       title: '角色描述',
-      dataIndex: 'name',
+      dataIndex: 'mark',
     },
 
     {
       title: '创建时间',
       key: 'showTime',
-      dataIndex: 'created_at',
+      dataIndex: 'create_at',
       valueType: 'date',
       sorter: true,
       hideInSearch: true,
     },
     {
       title: '创建时间',
-      dataIndex: 'created_at',
+      dataIndex: 'create_at',
       valueType: 'dateRange',
       hideInTable: true,
       search: {
@@ -79,7 +81,8 @@ const Role: React.FC = () => {
         <a
           key="editable"
           onClick={() => {
-            console.log(record.name)
+            setCurrentRow(record)
+            setShowModal(true)
           }}
         >
           编辑
@@ -87,7 +90,16 @@ const Role: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-            console.log(record.name)
+            deleteRolesId({id: record.id ?? 0}).then((res)=>{
+              if (res.code === 0) {
+                message.success('删除成功').then(() => {
+
+                })
+                actionRef.current?.reload()
+              } else {
+                message.error('删除失败');
+              }
+            })
           }}
         >
           删除
@@ -96,13 +108,9 @@ const Role: React.FC = () => {
     },
   ];
 
-  function getStringValue(filter: { [key: string]: any }, propertyName: string): string {
-    return typeof filter[propertyName] === 'string' ? filter[propertyName] : '';
-  }
 
-  const actionRef = useRef<ActionType>();
   return<>
-    <ProTable<API.role>
+    <ProTable<API.role,API.getRolesParams>
       columns={columns}
       actionRef={actionRef}
       cardBordered
@@ -110,11 +118,18 @@ const Role: React.FC = () => {
       request={async (p, sort, filter) => {
         console.log(sort, filter);
         const msg = await getRoles({
-          name: getStringValue(filter,"name"),
+          name: p.name,
+          state:p.state,
           page: p.current , count: p.pageSize
         })
+       let data= msg.data.list?.map((item) => {
+          return {
+            ...item,
+            status: item.status === 1 ? item.status : 2
+          }
+        })
         return  {
-          data: msg.data.list,
+          data: data,
           total: msg.data.total,
           success: true,
         };
@@ -132,24 +147,25 @@ const Role: React.FC = () => {
       rowKey="id"
       search={{
         labelWidth: 'auto',
+        collapsed: false,
       }}
       options={{
         setting: {
           listsHeight: 400,
         },
       }}
-      form={{
-        // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
-        syncToUrl: (values, type) => {
-          if (type === 'get') {
-            return {
-              ...values,
-              created_at: [values.startTime, values.endTime],
-            };
-          }
-          return values;
-        },
-      }}
+      // form={{
+      //   // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
+      //   syncToUrl: (values, type) => {
+      //     if (type === 'get') {
+      //       return {
+      //         ...values,
+      //         created_at: [values.startTime, values.endTime],
+      //       };
+      //     }
+      //     return values;
+      //   },
+      // }}
       pagination={{
         pageSize: 5,
         onChange: (page) => console.log(page),
@@ -161,7 +177,8 @@ const Role: React.FC = () => {
           key="button"
           icon={<PlusOutlined />}
           onClick={() => {
-            // setShowModal(true)
+             setShowModal(true)
+
           }}
           type="primary"
         >
@@ -169,8 +186,14 @@ const Role: React.FC = () => {
         </Button>,
       ]}
     />
-    {/*<UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>*/}
-    {/*  setShowModal(modalVisit)}></UserEditor>*/}
+    <RoleEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>{
+      setShowModal(modalVisit)
+      if (!modalVisit) {
+        setCurrentRow(undefined)
+      }
+      // actionRef.current?.reload()
+    }
+    }  values={currentRow || {}}></RoleEditor>
   </>
 }
 

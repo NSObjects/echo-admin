@@ -86,8 +86,9 @@ const Department: React.FC = () => {
           onClick={() => {
             deleteDepartmentsId({id: record.id ?? 0}).then((res)=>{
               if (res.code === 0) {
-                actionRef.current?.reload();
-                message.success('删除成功');
+                message.success('删除成功').then(()=>{
+                  actionRef.current?.reload();
+                })
               } else {
                 message.error('删除失败');
               }
@@ -135,6 +136,7 @@ const Department: React.FC = () => {
       rowKey="id"
       search={{
         labelWidth: 'auto',
+        collapsed: false,
       }}
       options={{
         setting: {

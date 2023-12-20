@@ -12,12 +12,10 @@ package biz
 
 import (
 	"context"
-	"github.com/NSObjects/echo-admin/internal/api/data/query"
-	"time"
-
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
-
+	"github.com/samber/lo"
 	"gorm.io/gen"
 )
 
@@ -29,25 +27,22 @@ func NewRoleHandler(q *query.Query) *RoleHandler {
 	return &RoleHandler{q: q}
 }
 
-func (r *RoleHandler) List(ctx context.Context, q param.RoleQuery) ([]*model.Role, int64, error) {
+func (r *RoleHandler) List(ctx context.Context, q param.RoleQuery) ([]param.RoleResp, int64, error) {
 	var cd []gen.Condition
+
 	if q.Name != "" {
-		cd = append(cd, r.q.Role.Name.Eq(q.Name))
-	}
-	if q.Identify != "" {
-		cd = append(cd, r.q.Role.Where(r.q.Role.Identify.Eq(q.Identify)))
+		cd = append(cd, r.q.Role.Name.Like(q.Name+"%"))
 	}
 
 	if q.State != 0 {
-		cd = append(cd, r.q.Role.Where(r.q.Role.Where(r.q.Role.State.Eq(q.State))))
+		cd = append(cd, r.q.Role.Status.Eq(q.State))
 	}
 
-	if q.StartDate > q.EndDate {
-		cd = append(cd, r.q.Role.Where(r.q.Role.CreatedAt.Between(time.Unix(q.StartDate, 0), time.Unix(q.EndDate, 0))))
-
-	}
-
-	roles, err := r.q.Role.WithContext(ctx).Where(cd...).Limit(q.Limit()).Offset(q.Offset()).Find()
+	roles, err := r.q.Role.Preload(r.q.Role.Menus).
+		WithContext(ctx).Where(cd...).
+		Limit(q.Limit()).
+		Offset(q.Offset()).
+		Find()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -56,12 +51,28 @@ func (r *RoleHandler) List(ctx context.Context, q param.RoleQuery) ([]*model.Rol
 	if err != nil {
 		return nil, 0, err
 	}
+	res := make([]param.RoleResp, len(roles))
+	for index, v := range roles {
+		res[index] = param.RoleResp{
+			Id:       v.ID,
+			Name:     v.Name,
+			Sort:     v.Order,
+			Status:   v.Status,
+			Mark:     v.Mark,
+			CreateAt: v.CreatedAt.Format("2006-01-02 15:01:05"),
+			Menus: lo.Map(v.Menus, func(item model.Menu, index int) int64 {
+				return int64(item.ID)
+			}),
+		}
+	}
 
-	return roles, total, nil
+	return res, total, nil
 }
 
-func (r *RoleHandler) Create(ctx context.Context, role *model.Role) error {
-	return r.q.Role.WithContext(ctx).Create(role)
+func (r *RoleHandler) Create(ctx context.Context, role *param.Role) error {
+	selection, m := role.Data()
+
+	return r.q.Role.WithContext(ctx).Select(selection...).Create(&m)
 }
 
 func (r *RoleHandler) Update(ctx context.Context, id uint, role *model.Role) error {
