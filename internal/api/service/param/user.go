@@ -21,11 +21,12 @@ import (
 // Phone 手机号
 type UserParam struct {
 	APIQuery
-	CreateEnd   *string `json:"create_end" form:"create_end" query:"create_end"`
-	CreateStart *string `json:"create_start" form:"create_start" query:"create_start"`
-	Key         *string `json:"key" form:"key" query:"key"`
-	Phone       *string `json:"phone" form:"phone" query:"phone"`
-	Status      int     `json:"status" form:"status" query:"status" validate:"max=2"`
+	CreateEnd    *string `json:"create_end" form:"create_end" query:"create_end"`
+	CreateStart  *string `json:"create_start" form:"create_start" query:"create_start"`
+	Key          *string `json:"key" form:"key" query:"key"`
+	Phone        *string `json:"phone" form:"phone" query:"phone"`
+	DepartmentId *uint   `json:"department_id" form:"department_id" query:"department_id"`
+	Status       int     `json:"status" form:"status" query:"status" validate:"max=2"`
 }
 
 type UserResponse struct {
@@ -72,59 +73,59 @@ type UserBody struct {
 
 func (u UserBody) Data() ([]field.Expr, model.User) {
 	var filed []field.Expr
-	var model model.User
+	var user model.User
 	if u.Name != nil {
 		filed = append(filed, query.Q.User.Name)
-		model.Name = *u.Name
+		user.Name = *u.Name
 	}
 	if u.Account != nil {
 		filed = append(filed, query.Q.User.Account)
-		model.Account = *u.Account
+		user.Account = *u.Account
 	}
 
 	if u.Avatar != nil {
 		filed = append(filed, query.Q.User.Avatar)
-		model.Avatar = *u.Avatar
+		user.Avatar = *u.Avatar
 	}
 
 	if u.Password != nil {
 		filed = append(filed, query.Q.User.Password)
-		model.Password = tools.Sha25(*u.Password)
+		user.Password = tools.Sha25(*u.Password)
 	}
 
 	if u.Phone != nil {
 		filed = append(filed, query.Q.User.Phone)
-		model.Phone = *u.Phone
+		user.Phone = *u.Phone
 	}
 
 	if u.RoleID != nil {
 		filed = append(filed, query.Q.User.RoleID)
-		model.RoleID = *u.RoleID
+		user.RoleID = *u.RoleID
 	}
 
 	if u.DepartmentID != nil {
 		filed = append(filed, query.Q.User.DepartmentID)
-		model.DepartmentID = *u.DepartmentID
+		user.DepartmentID = *u.DepartmentID
 	}
 
 	if u.Status != nil {
 		filed = append(filed, query.Q.User.Status)
-		model.Status = *u.Status
+		user.Status = *u.Status
 	}
 
 	if u.Sex != nil {
 		filed = append(filed, query.Q.User.Sex)
-		model.Sex = *u.Sex
+		user.Sex = *u.Sex
 	}
 
 	if u.Posts != nil {
 		filed = append(filed, query.Q.User.Posts)
-		model.Posts = *u.Posts
+		user.Posts = *u.Posts
 	}
 	if u.Email != nil {
 		filed = append(filed, query.Q.User.Email)
-		model.Email = *u.Email
+		user.Email = *u.Email
 	}
 
-	return filed, model
+	return filed, user
 }

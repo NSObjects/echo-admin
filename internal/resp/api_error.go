@@ -6,18 +6,21 @@
 
 package resp
 
-import "errors"
+import (
+	"errors"
+	"github.com/NSObjects/echo-admin/internal/code"
+)
 
 type Error struct {
 	Err  error
-	Code StatusCode
+	Code int
 }
 
 func (e *Error) Error() string {
 	return e.Err.Error()
 }
 
-func NewError(err error, code StatusCode) *Error {
+func NewError(err error, code int) *Error {
 	return &Error{
 		Err:  err,
 		Code: code,
@@ -27,27 +30,27 @@ func NewError(err error, code StatusCode) *Error {
 func NewParamError(err error) *Error {
 	return &Error{
 		Err:  err,
-		Code: StatusParamErr,
+		Code: code.ErrValidation,
 	}
 }
 
 func NewDBError(err error) *Error {
 	return &Error{
 		Err:  err,
-		Code: StatusDBErr,
+		Code: code.ErrDatabase,
 	}
 }
 
 func NewMsgError(str string) *Error {
 	return &Error{
 		Err:  errors.New(str),
-		Code: StatusAlterMsg,
+		Code: code.ErrParentMenuExisted,
 	}
 }
 
 func NewAuthError(err error) *Error {
 	return &Error{
 		Err:  err,
-		Code: StatusAuth,
+		Code: code.ErrInvalidAuthHeader,
 	}
 }

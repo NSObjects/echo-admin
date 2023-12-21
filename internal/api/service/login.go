@@ -21,7 +21,7 @@ type loginController struct {
 	l *biz.LoginHandler
 }
 
-func (l *loginController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
+func (l *loginController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc) {
 	s.POST("/login/account", l.login).Name = "用户登录"
 	s.POST("/login/out", l.loginOut).Name = "用户登录"
 }

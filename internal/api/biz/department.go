@@ -12,10 +12,11 @@ package biz
 
 import (
 	"context"
-	"database/sql"
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
+	"github.com/google/martian/log"
+	"github.com/samber/lo"
 	"gorm.io/gen"
 )
 
@@ -39,23 +40,9 @@ func (d *DepartmentHandler) Get(ctx context.Context, id uint) (*model.Department
 }
 
 func (d *DepartmentHandler) Create(ctx context.Context, department param.Department) error {
-	var de model.Department
-	de.Name = department.Name
-	if department.ParentID != nil {
-		de.Departments = []model.Department{
-			{
-				ID: *department.ParentID,
-			},
-		}
-	}
+	selection, m := department.Data()
 
-	de.Email = department.Email
-	de.Phone = department.Phone
-	de.Status = department.Status
-	de.Sort = department.Sort
-	de.Principal = department.Principal
-
-	if err := d.q.Department.WithContext(ctx).Create(&de); err != nil {
+	if err := d.q.Department.WithContext(ctx).Select(selection...).Create(&m); err != nil {
 		return err
 	}
 	return nil
@@ -72,12 +59,19 @@ func (d *DepartmentHandler) List(ctx context.Context, q param.DepartmentQuery) (
 	}
 
 	deps, err := d.q.Department.WithContext(ctx).
-		Preload(d.q.Department.Departments).
+		//Preload(d.q.Department.Departments).
 		Where(d.q.Department.ParentID.IsNull()).
 		Where(cd...).Offset(q.Offset()).Limit(q.Limit()).Find()
 
 	if err != nil {
 		return nil, 0, err
+	}
+
+	for _, td := range deps {
+		td.Departments, err = d.GetAllDepartments(td.ID)
+		if err != nil {
+			log.Errorf("get all departments error: %v", err)
+		}
 	}
 
 	total, err := d.q.Department.WithContext(ctx).Where(cd...).Count()
@@ -86,6 +80,28 @@ func (d *DepartmentHandler) List(ctx context.Context, q param.DepartmentQuery) (
 	}
 
 	return deps, total, nil
+}
+
+func (d *DepartmentHandler) GetAllDepartments(parentID uint) ([]model.Department, error) {
+	if parentID == 0 {
+		return nil, nil
+	}
+	departments, err := d.q.Department.Where(d.q.Department.ParentID.Eq(int64(parentID))).
+		Preload(d.q.Department.Departments).Find()
+	if err != nil {
+		return nil, err
+	}
+	for i, department := range departments {
+		children, err := d.GetAllDepartments(department.ID)
+		if err != nil {
+			return nil, err
+		}
+		departments[i].Departments = children
+	}
+
+	return lo.Map(departments, func(item *model.Department, index int) model.Department {
+		return *item
+	}), nil
 }
 
 func (d *DepartmentHandler) Delete(ctx context.Context, id uint) error {
@@ -98,37 +114,10 @@ func (d *DepartmentHandler) Delete(ctx context.Context, id uint) error {
 }
 
 func (d *DepartmentHandler) Update(ctx context.Context, id uint, department param.Department) error {
-	var update = make(map[string]interface{})
-	if department.Name != "" {
-		update["name"] = department.Name
-	}
-
-	if department.Email != "" {
-		update["email"] = department.Email
-	}
-	if department.Phone != "" {
-		update["phone"] = department.Phone
-	}
-	if department.Status != 0 {
-		update["status"] = department.Status
-	}
-	if department.Sort != 0 {
-		update["sort"] = department.Sort
-	}
-	if department.Principal != "" {
-		update["principal"] = department.Principal
-	}
-
-	if department.ParentID != nil {
-		if *department.ParentID > 0 {
-			update["parent_id"] = department.ParentID
-		} else {
-			update["parent_id"] = sql.NullInt64{}
-		}
-	}
-
-	_, err := d.q.Department.WithContext(ctx).Where(d.q.Department.ID.Eq(id)).Updates(update)
-	if err != nil {
+	selection, m := department.Data()
+	if _, err := d.q.Department.WithContext(ctx).Select(selection...).
+		Where(d.q.Department.ID.Eq(id)).
+		Updates(&m); err != nil {
 		return err
 	}
 

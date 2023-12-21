@@ -24,7 +24,7 @@ type MenuController struct {
 	h *biz.MenuHandler
 }
 
-func (m *MenuController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
+func (m *MenuController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc) {
 	s.POST("/menus", m.create).Name = "创建菜单"
 	s.GET("/menus", m.list).Name = "菜单列表"
 	s.PUT("/menus/:id", m.edit).Name = "编辑菜单"

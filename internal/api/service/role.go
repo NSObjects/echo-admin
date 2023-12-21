@@ -24,7 +24,7 @@ type RoleController struct {
 	h *biz.RoleHandler
 }
 
-func (r *RoleController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
+func (r *RoleController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc) {
 	s.GET("/roles", r.List).Name = "角色列表"
 	s.POST("/roles", r.Create).Name = "创建角色"
 	s.PUT("/roles/:id", r.Update).Name = "更新角色"

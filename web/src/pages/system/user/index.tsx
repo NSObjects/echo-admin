@@ -1,18 +1,20 @@
-import React from 'react'
-import {  PlusOutlined } from '@ant-design/icons';
+import React from 'react';
+import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import {Button, message} from 'antd';
+import { Button, message } from 'antd';
 import { useRef } from 'react';
-import {deleteUsersId, getUsers} from "@/services/echo-admin/yonghu";
-import UserEditor from "@/pages/system/user/components/editor";
+import { deleteUsersId, getUsers } from '@/services/echo-admin/yonghu';
+import UserEditor from '@/pages/system/user/components/editor';
 import { useState } from 'react';
-import MenuEditor from "@/pages/system/menu/components/editor";
+import Department from '@/pages/system/user/components/deparment';
+import { Card, Flex } from 'antd';
 
 const User: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<API.user>();
   const actionRef = useRef<ActionType>();
+  const [selectDept, setSelectDept] = useState<number>(0);
   const columns: ProColumns<API.user>[] = [
     {
       dataIndex: 'index',
@@ -39,11 +41,11 @@ const User: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       // filters: true,
-       onFilter: true,
+      onFilter: true,
       // ellipsis: true,
       valueType: 'select',
       valueEnum: {
-        all: { text: '未知' ,  disabled: true,},
+        all: { text: '未知', disabled: true },
         1: {
           text: '启用',
           status: 'Error',
@@ -51,7 +53,6 @@ const User: React.FC = () => {
         2: {
           text: '停用',
           status: 'Success',
-
         },
       },
     },
@@ -86,8 +87,8 @@ const User: React.FC = () => {
         <a
           key="editable"
           onClick={() => {
-            setShowModal(true)
-            setCurrentRow(record)
+            setShowModal(true);
+            setCurrentRow(record);
           }}
         >
           编辑
@@ -95,14 +96,15 @@ const User: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-            deleteUsersId({id:record.id ?? 0}).then((res)=>{
+            deleteUsersId({ id: record.id ?? 0 }).then((res) => {
               if (res.code === 0) {
                 message.success('删除成功').then(() => {
-                  actionRef.current?.reload()})
+                  actionRef.current?.reload();
+                });
               } else {
-                message.error('删除失败').then(r => console.log(r));
+                message.error('删除失败').then((r) => console.log(r));
               }
-            })
+            });
           }}
         >
           删除
@@ -111,77 +113,99 @@ const User: React.FC = () => {
     },
   ];
 
-  return<>
-    <ProTable<API.user,API.getUsersParams>
-      columns={columns}
-
-      actionRef={actionRef}
-      cardBordered
-      request={async (p, sort, filter) => {
-        console.log(sort, p);
-        const msg = await getUsers({
-          count: p.pageSize,
-          page: p.current,
-          create_end: p.create_end,
-          create_start: p.create_start,
-          key: p.key,
-          phone: p.phone,
-          status: p.status,
-        })
-        return  {
-            data: msg.data.list,
-            total: msg.data.total,
-            success: true,
-        };
-      }}
-      editable={{
-        type: 'multiple',
-      }}
-      columnsState={{
-        persistenceKey: 'pro-table-singe-demos',
-        persistenceType: 'localStorage',
-        onChange(value) {
-          console.log('value: ', value);
-        },
-      }}
-      rowKey="id"
-      search={{
-        labelWidth: 'auto',
-        collapsed: false,
-      }}
-      options={{
-        setting: {
-          listsHeight: 400,
-        },
-      }}
-
-      pagination={{
-        pageSize: 5,
-        onChange: (page) => console.log(page),
-      }}
-      dateFormatter="string"
-      headerTitle="用户列表"
-      toolBarRender={() => [
-        <Button
-          key="button"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setShowModal(true)
+  return (
+    <>
+      <Flex>
+        <Card>
+          <Department
+            onSelect={async (value: any) => {
+              console.log('value: ', value);
+              setSelectDept(value);
+              actionRef.current?.reload();
+            }}
+          ></Department>
+        </Card>
+        <ProTable<API.user, API.getUsersParams>
+          columns={columns}
+          actionRef={actionRef}
+          onReset={() => {
+            setSelectDept(0);
+            actionRef.current?.reload();
           }}
-          type="primary"
-        >
-          新建
-        </Button>,
-      ]}
-    />
-    <UserEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>{
-      setShowModal(modalVisit)
-      if (!modalVisit) {
-        setCurrentRow(undefined)
-      }
-    }
-    }  values={currentRow || {}} reload={()=>{actionRef.current?.reload()}}></UserEditor>
-  </>
-}
+          cardBordered
+          request={async (p, sort) => {
+            console.log(sort, p);
+            const msg = await getUsers({
+              count: p.pageSize,
+              page: p.current,
+              create_end: p.create_end,
+              create_start: p.create_start,
+              key: p.key,
+              phone: p.phone,
+              status: p.status,
+              department_id: selectDept,
+            });
+            return {
+              data: msg.data.list,
+              total: msg.data.total,
+              success: true,
+            };
+          }}
+          editable={{
+            type: 'multiple',
+          }}
+          columnsState={{
+            persistenceKey: 'pro-table-singe-demos',
+            persistenceType: 'localStorage',
+            onChange(value) {
+              console.log('value: ', value);
+            },
+          }}
+          rowKey="id"
+          search={{
+            labelWidth: 'auto',
+            collapsed: false,
+          }}
+          options={{
+            setting: {
+              listsHeight: 400,
+            },
+          }}
+          pagination={{
+            pageSize: 5,
+            onChange: (page) => console.log(page),
+          }}
+          dateFormatter="string"
+          headerTitle="用户列表"
+          toolBarRender={() => [
+            <Button
+              key="button"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setShowModal(true);
+              }}
+              type="primary"
+            >
+              新建
+            </Button>,
+          ]}
+        />
+      </Flex>
+      <UserEditor
+        modalVisit={showModal}
+        setModalVisit={(modalVisit: boolean) => {
+          setShowModal(modalVisit);
+          if (!modalVisit) {
+            setCurrentRow(undefined);
+          }
+        }}
+        values={currentRow || {}}
+        reload={() => {
+          actionRef.current?.reload();
+        }}
+      ></UserEditor>
+    </>
+  );
+};
 
-export default User
+export default User;

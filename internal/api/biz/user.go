@@ -35,6 +35,10 @@ func (h *UserHandler) ListUser(p param.UserParam) ([]param.UserResponse, int64, 
 		cd = append(cd, do.Status.Eq(p.Status))
 	}
 
+	if p.DepartmentId != nil && *p.DepartmentId != 0 {
+		cd = append(cd, do.DepartmentID.Eq(*p.DepartmentId))
+	}
+
 	if p.CreateStart != nil && p.CreateEnd != nil && *p.CreateEnd > *p.CreateStart {
 		start, err := time.Parse("2006-01-02 15:04:05", *p.CreateStart)
 		if err != nil {

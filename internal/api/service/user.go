@@ -23,7 +23,7 @@ type userController struct {
 	user *biz.UserHandler
 }
 
-func (u *userController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
+func (u *userController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc) {
 	s.GET("/users", u.getUser).Name = "用户查询"
 	s.POST("/users", u.createUser).Name = "创建用户"
 	s.DELETE("/users/:id", u.deleteUser).Name = "删除用户"

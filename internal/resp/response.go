@@ -16,9 +16,9 @@ import (
 )
 
 type ListResponse struct {
-	Code StatusCode `json:"code"`
-	Msg  string     `json:"msg"`
-	Data ListData   `json:"data"`
+	Code int      `json:"code"`
+	Msg  string   `json:"msg"`
+	Data ListData `json:"data"`
 }
 
 type ListData struct {
@@ -27,7 +27,7 @@ type ListData struct {
 }
 
 type DataResponse struct {
-	Code StatusCode  `json:"code"`
+	Code int         `json:"code"`
 	Msg  string      `json:"msg"`
 	Data interface{} `json:"data"`
 }
@@ -50,11 +50,10 @@ func APIError(err error, c echo.Context) error {
 
 func OperateSuccess(c echo.Context) error {
 	var rjson struct {
-		Code StatusCode `json:"code"`
-		Msg  string     `json:"msg"`
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
 	}
 
-	rjson.Code = StatusOK
 	rjson.Msg = "success"
 
 	return c.JSON(http.StatusOK, rjson)
@@ -72,7 +71,6 @@ func ListDataResponse(arr interface{}, total int64, c echo.Context) error {
 			List:  arr,
 			Total: total,
 		},
-		Code: StatusOK,
 	}
 
 	return c.JSONPretty(http.StatusOK, r, "  ")
@@ -81,7 +79,6 @@ func ListDataResponse(arr interface{}, total int64, c echo.Context) error {
 func OneDataResponse(data interface{}, c echo.Context) error {
 	r := DataResponse{
 		Data: data,
-		Code: StatusOK,
 	}
 
 	return c.JSON(http.StatusOK, r)

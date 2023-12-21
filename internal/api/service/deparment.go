@@ -27,7 +27,7 @@ func NewDepartmentController(h *biz.DepartmentHandler) RegisterRouter {
 	return &departmentController{h: h}
 }
 
-func (d *departmentController) RegisterRouter(s *echo.Group, middlewareFunc ...echo.MiddlewareFunc) {
+func (d *departmentController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc) {
 	s.GET("/departments/:id", d.get)
 	s.GET("/departments", d.list)
 	s.DELETE("/departments/:id", d.delete)

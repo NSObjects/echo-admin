@@ -1,11 +1,10 @@
-import React, {useRef, useState} from 'react'
-import {ActionType, ProColumns, ProTable} from "@ant-design/pro-components";
+import React, { useRef, useState } from 'react';
+import { ActionType, ProColumns, ProTable } from '@ant-design/pro-components';
 
-import {Button, message} from "antd";
-import {PlusOutlined} from "@ant-design/icons";
-import {deleteRolesId, getRoles} from "@/services/echo-admin/jiaose";
-import RoleEditor from "@/pages/system/role/components/editor";
-
+import { Button, message } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { deleteRolesId, getRoles } from '@/services/echo-admin/jiaose';
+import RoleEditor from '@/pages/system/role/components/editor';
 
 const Role: React.FC = () => {
   const actionRef = useRef<ActionType>();
@@ -81,8 +80,8 @@ const Role: React.FC = () => {
         <a
           key="editable"
           onClick={() => {
-            setCurrentRow(record)
-            setShowModal(true)
+            setCurrentRow(record);
+            setShowModal(true);
           }}
         >
           编辑
@@ -90,16 +89,14 @@ const Role: React.FC = () => {
         <a
           key="delete"
           onClick={() => {
-            deleteRolesId({id: record.id ?? 0}).then((res)=>{
+            deleteRolesId({ id: record.id ?? 0 }).then((res) => {
               if (res.code === 0) {
-                message.success('删除成功').then(() => {
-
-                })
-                actionRef.current?.reload()
+                message.success('删除成功').then(() => {});
+                actionRef.current?.reload();
               } else {
                 message.error('删除失败');
               }
-            })
+            });
           }}
         >
           删除
@@ -108,93 +105,85 @@ const Role: React.FC = () => {
     },
   ];
 
-
-  return<>
-    <ProTable<API.role,API.getRolesParams>
-      columns={columns}
-      actionRef={actionRef}
-      cardBordered
-      // request={getUsers}
-      request={async (p, sort, filter) => {
-        console.log(sort, filter);
-        const msg = await getRoles({
-          name: p.name,
-          state:p.state,
-          page: p.current , count: p.pageSize
-        })
-       let data= msg.data.list?.map((item) => {
+  return (
+    <>
+      <ProTable<API.role, API.getRolesParams>
+        columns={columns}
+        actionRef={actionRef}
+        cardBordered
+        // request={getUsers}
+        request={async (p, sort, filter) => {
+          console.log(sort, filter);
+          const msg = await getRoles({
+            name: p.name,
+            state: p.state,
+            page: p.current,
+            count: p.pageSize,
+          });
+          let data = msg.data.list?.map((item) => {
+            return {
+              ...item,
+              status: item.status === 1 ? item.status : 2,
+            };
+          });
           return {
-            ...item,
-            status: item.status === 1 ? item.status : 2
+            data: data,
+            total: msg.data.total,
+            success: true,
+          };
+        }}
+        editable={{
+          type: 'multiple',
+        }}
+        columnsState={{
+          persistenceKey: 'pro-table-singe-demos',
+          persistenceType: 'localStorage',
+          onChange(value) {
+            console.log('value: ', value);
+          },
+        }}
+        rowKey="id"
+        search={{
+          labelWidth: 'auto',
+          collapsed: false,
+        }}
+        options={{
+          setting: {
+            listsHeight: 400,
+          },
+        }}
+        pagination={{
+          pageSize: 5,
+          onChange: (page) => console.log(page),
+        }}
+        dateFormatter="string"
+        headerTitle="用户列表"
+        toolBarRender={() => [
+          <Button
+            key="button"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setShowModal(true);
+            }}
+            type="primary"
+          >
+            新建
+          </Button>,
+        ]}
+      />
+      <RoleEditor
+        modalVisit={showModal}
+        setModalVisit={(modalVisit: boolean) => {
+          setShowModal(modalVisit);
+          if (!modalVisit) {
+            setCurrentRow(undefined);
           }
-        })
-        return  {
-          data: data,
-          total: msg.data.total,
-          success: true,
-        };
-      }}
-      editable={{
-        type: 'multiple',
-      }}
-      columnsState={{
-        persistenceKey: 'pro-table-singe-demos',
-        persistenceType: 'localStorage',
-        onChange(value) {
-          console.log('value: ', value);
-        },
-      }}
-      rowKey="id"
-      search={{
-        labelWidth: 'auto',
-        collapsed: false,
-      }}
-      options={{
-        setting: {
-          listsHeight: 400,
-        },
-      }}
-      // form={{
-      //   // 由于配置了 transform，提交的参与与定义的不同这里需要转化一下
-      //   syncToUrl: (values, type) => {
-      //     if (type === 'get') {
-      //       return {
-      //         ...values,
-      //         created_at: [values.startTime, values.endTime],
-      //       };
-      //     }
-      //     return values;
-      //   },
-      // }}
-      pagination={{
-        pageSize: 5,
-        onChange: (page) => console.log(page),
-      }}
-      dateFormatter="string"
-      headerTitle="用户列表"
-      toolBarRender={() => [
-        <Button
-          key="button"
-          icon={<PlusOutlined />}
-          onClick={() => {
-             setShowModal(true)
+          // actionRef.current?.reload()
+        }}
+        values={currentRow || {}}
+      ></RoleEditor>
+    </>
+  );
+};
 
-          }}
-          type="primary"
-        >
-          新建
-        </Button>,
-      ]}
-    />
-    <RoleEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>{
-      setShowModal(modalVisit)
-      if (!modalVisit) {
-        setCurrentRow(undefined)
-      }
-      // actionRef.current?.reload()
-    }
-    }  values={currentRow || {}}></RoleEditor>
-  </>
-}
-
-export default Role
+export default Role;

@@ -75,70 +75,70 @@ type MenuResp struct {
 
 func (m Menu) Data() ([]field.Expr, model.Menu) {
 	var filed []field.Expr
-	var model model.Menu
+	var menu model.Menu
 	if m.Name != nil {
 		filed = append(filed, query.Q.Menu.Name)
-		model.Name = *m.Name
+		menu.Name = *m.Name
 	}
 	if m.Path != nil {
 		filed = append(filed, query.Q.Menu.Path)
-		model.Path = *m.Path
+		menu.Path = *m.Path
 	}
 	if m.Component != nil {
 		filed = append(filed, query.Q.Menu.Component)
-		model.Component = *m.Component
+		menu.Component = *m.Component
 	}
 	if m.Redirect != nil {
 		filed = append(filed, query.Q.Menu.Redirect)
-		model.Redirect = *m.Redirect
+		menu.Redirect = *m.Redirect
 	}
 	if m.Layout != nil {
 		filed = append(filed, query.Q.Menu.Layout)
-		model.Layout = *m.Layout
+		menu.Layout = *m.Layout
 	}
 	if m.PID != nil {
 		filed = append(filed, query.Q.Menu.Pid)
-		model.Pid = *m.PID
+		menu.Pid = *m.PID
 	}
 	if m.Icon != nil {
 		filed = append(filed, query.Q.Menu.Icon)
-		model.Icon = *m.Icon
+		menu.Icon = *m.Icon
 	}
 	if m.Type != 0 {
 		filed = append(filed, query.Q.Menu.Type)
-		model.Type = m.Type
+		menu.Type = m.Type
 	}
 	if m.API != nil {
 		filed = append(filed, query.Q.Menu.API)
-		model.API = *m.API
+		menu.API = *m.API
 	}
 	if m.Link != nil {
 		filed = append(filed, query.Q.Menu.Link)
-		model.Link = *m.Link
+		menu.Link = *m.Link
 	}
 	if m.Remark != nil {
 		filed = append(filed, query.Q.Menu.Remark)
-		model.Remark = *m.Remark
+		menu.Remark = *m.Remark
 	}
 	if m.Hidden != nil {
 		filed = append(filed, query.Q.Menu.Hidden)
-		model.Hidden = *m.Hidden
+		menu.Hidden = *m.Hidden
 	}
 	if m.Cache != nil {
 		filed = append(filed, query.Q.Menu.Cache)
-		model.Cache = *m.Cache
+		menu.Cache = *m.Cache
 	}
 	if m.Fixed != nil {
 		filed = append(filed, query.Q.Menu.Fixed)
-		model.Fixed = *m.Fixed
+		menu.Fixed = *m.Fixed
 	}
 	if m.Sort != nil {
 		filed = append(filed, query.Q.Menu.Sort)
-		model.Sort = *m.Sort
+		menu.Sort = *m.Sort
 	}
 	if m.Identify != nil {
 		filed = append(filed, query.Q.Menu.Identifier)
-		model.Identifier = *m.Identify
+		menu.Identifier = *m.Identify
 	}
-	return filed, model
+	return filed, menu
 }

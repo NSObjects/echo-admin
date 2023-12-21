@@ -76,6 +76,7 @@ declare namespace API {
     create_start?: number;
     /** 创建结束时间 */
     create_end?: number;
+    department_id?: number;
   };
 
   type listDepartmentsResp = {
