@@ -1,17 +1,17 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Input, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
-import { getDepartments } from '@/services/echo-admin/bumen';
+// import { getDepartments } from '@/services/echo-admin/bumen';
 
 const { Search } = Input;
 
 // 将部门数据转换为树形结构的数据
-const departmentItemTree = (menus: API.department[]): DataNode[] =>
-  menus.map(({ name, id, children }) => ({
-    title: name,
-    key: id ?? 0,
-    children: children && children.length > 0 ? departmentItemTree(children) : [],
-  }));
+// const departmentItemTree = (menus: API.department[]): DataNode[] =>
+//   menus.map(({ name, id, children }) => ({
+//     title: name,
+//     key: id ?? 0,
+//     children: children && children.length > 0 ? departmentItemTree(children) : [],
+//   }));
 
 // 获取父节点的 key
 const getParentKey = (key: React.Key, tree: DataNode[]): React.Key | undefined => {
@@ -26,26 +26,27 @@ const getParentKey = (key: React.Key, tree: DataNode[]): React.Key | undefined =
 
 export type TreeProps = {
   onSelect: (values: any) => Promise<void>;
+  department: DataNode[];
 };
 const Department: React.FC<TreeProps> = (props) => {
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [searchValue, setSearchValue] = useState('');
   const [autoExpandParent, setAutoExpandParent] = useState(true);
-  const [defaultData, setDefaultData] = useState<DataNode[]>([]);
-
+  // const [defaultData, setDefaultData] = useState<DataNode[]>([]);
+  const { onSelect, department } = props;
   // 在组件挂载时获取部门数据
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const result = await getDepartments({ page: 1, count: 1000 });
-        setDefaultData(departmentItemTree(result.data.list ?? []));
-      } catch (error) {
-        console.error('获取数据出错:', error);
-      }
-    };
-
-    fetchData();
-  }, []);
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     try {
+  //       const result = await getDepartments({ page: 1, count: 1000 });
+  //       setDefaultData(departmentItemTree(result.data.list ?? []));
+  //     } catch (error) {
+  //       console.error('获取数据出错:', error);
+  //     }
+  //   };
+  //
+  //   fetchData();
+  // }, []);
 
   // 展开或收起树节点时的回调
   const onExpand = useCallback((newExpandedKeys: React.Key[]) => {
@@ -63,7 +64,7 @@ const Department: React.FC<TreeProps> = (props) => {
         setExpandedKeys([]); // 如果搜索值为空，重置展开的键
       } else {
         // 如果有搜索值，找出所有匹配项的键和它们的父键
-        const expandedKeys = defaultData
+        const expandedKeys = department
           .reduce((accumulator, item) => {
             const matches = item.title?.toString().toLowerCase().includes(value.toLowerCase());
             let newAccumulator = [...accumulator];
@@ -71,7 +72,7 @@ const Department: React.FC<TreeProps> = (props) => {
             if (matches) {
               newAccumulator.push(item.key);
               // 如果当前项匹配，也需要将其父项的 key 添加到展开数组中
-              const parentKey = getParentKey(item.key, defaultData);
+              const parentKey = getParentKey(item.key, department);
               if (parentKey) {
                 newAccumulator.push(parentKey);
               }
@@ -93,14 +94,14 @@ const Department: React.FC<TreeProps> = (props) => {
       }
       setAutoExpandParent(true); // 允许自动展开父项
     },
-    [defaultData],
+    [department],
   );
 
-  const onSelect = (keys: React.Key[], info: any) => {
+  const onSelects = (keys: React.Key[], info: any) => {
     console.log(keys);
     console.log(info);
     if (keys.length > 0) {
-      props.onSelect(keys[0]);
+      onSelect(keys[0]);
     }
   };
   // 使用 useMemo 来优化树节点的渲染
@@ -129,8 +130,8 @@ const Department: React.FC<TreeProps> = (props) => {
         };
       });
 
-    return loop(defaultData);
-  }, [searchValue, defaultData]);
+    return department ? loop(department) : [];
+  }, [searchValue, department]);
 
   return (
     <div>
@@ -140,7 +141,7 @@ const Department: React.FC<TreeProps> = (props) => {
         expandedKeys={expandedKeys}
         autoExpandParent={autoExpandParent}
         treeData={treeData}
-        onSelect={onSelect}
+        onSelect={onSelects}
       />
     </div>
   );

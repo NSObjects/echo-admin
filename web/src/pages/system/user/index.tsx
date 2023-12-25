@@ -3,18 +3,35 @@ import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { Button, message } from 'antd';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { deleteUsersId, getUsers } from '@/services/echo-admin/yonghu';
 import UserEditor from '@/pages/system/user/components/editor';
 import { useState } from 'react';
 import Department from '@/pages/system/user/components/deparment';
 import { Card, Flex } from 'antd';
+import { DataNode } from 'antd/es/tree';
+import { getDepartments } from '@/services/echo-admin/bumen';
+
+const departmentItemTree = (menus: API.department[]): DataNode[] =>
+  menus.map(({ name, id, children }) => ({
+    title: name,
+    key: id ?? 0,
+    children: children && children.length > 0 ? departmentItemTree(children) : [],
+  }));
 
 const User: React.FC = () => {
+  // let deparment: DataNode[] = [];
+
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<API.user>();
   const actionRef = useRef<ActionType>();
   const [selectDept, setSelectDept] = useState<number>(0);
+  const [department, setDepartment] = useState<DataNode[]>([]);
+  useEffect(() => {
+    getDepartments({ page: 1, count: 1000 }).then((res) => {
+      setDepartment(departmentItemTree(res.data.list ?? []));
+    });
+  }, []);
   const columns: ProColumns<API.user>[] = [
     {
       dataIndex: 'index',
@@ -123,6 +140,7 @@ const User: React.FC = () => {
               setSelectDept(value);
               actionRef.current?.reload();
             }}
+            department={department}
           ></Department>
         </Card>
         <ProTable<API.user, API.getUsersParams>
@@ -192,6 +210,7 @@ const User: React.FC = () => {
         />
       </Flex>
       <UserEditor
+        depts={department}
         modalVisit={showModal}
         setModalVisit={(modalVisit: boolean) => {
           setShowModal(modalVisit);
