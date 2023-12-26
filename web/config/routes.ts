@@ -55,6 +55,19 @@ export default [
       },
     ],
   },
+
+  {
+    path: '/tools',
+    name: 'tools',
+    icon: 'crown',
+    routes: [
+      {
+        name: 'api',
+        path: '/tools/api',
+        component: './tools/api',
+      },
+    ],
+  },
   {
     path: '/admin',
     name: 'admin',
