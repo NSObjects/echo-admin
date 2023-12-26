@@ -9,11 +9,11 @@ import {
   ProFormTreeSelect,
   ModalForm,
 } from '@ant-design/pro-components';
+
 import { getRoles } from '@/services/echo-admin/jiaose';
 import ProFormSwitch from '@ant-design/pro-form/es/components/Switch';
 import { postUsers, putUsersId } from '@/services/echo-admin/yonghu';
 import { ProFormInstance } from '@ant-design/pro-form/lib';
-// import { getDepartments } from '@/services/echo-admin/bumen';
 import { DataNode } from 'antd/es/tree';
 
 type Props = {
@@ -68,19 +68,6 @@ const UserEditor: React.FC<Props> = (props) => {
         open={modalVisit}
         onFinish={async (fieldsValue: API.user) => {
           console.log(fieldsValue);
-          // let body = {
-          //   account: fieldsValue['phone'],
-          //   avatar: fieldsValue['avatar'],
-          //   name: fieldsValue['name'],
-          //   password: fieldsValue['password'],
-          //   phone: fieldsValue['phone'],
-          //   department_id: fieldsValue['department_id'],
-          //   posts: fieldsValue['posts'],
-          //   role_id: fieldsValue['role_id'],
-          //   sex: fieldsValue['sex'],
-          //   email: fieldsValue['email'],
-          //   status: fieldsValue['status'] ? 1 : 0,
-          // };
           fieldsValue.status = fieldsValue.status ? 1 : 2;
           let res: API.success;
           if (props.values?.id) {
@@ -111,7 +98,9 @@ const UserEditor: React.FC<Props> = (props) => {
             name="account"
             label="用户名"
             placeholder="请输入账户名称"
-            rules={[{ required: true, message: '请输入账户名称' }]}
+            rules={[
+              { required: true, message: '请输入账户名称', pattern: /^[a-zA-Z0-9_-]{4,16}$/ },
+            ]}
           />
           <ProFormText.Password
             width="md"
@@ -143,13 +132,15 @@ const UserEditor: React.FC<Props> = (props) => {
         </ProForm.Group>
         <ProForm.Group>
           <ProFormTreeSelect
-            fieldProps={{
-              treeDefaultExpandAll: true,
-            }}
             name="department_id"
             label="部门"
             width="md"
-            rules={[{ required: true, message: '请选择部门' }]}
+            rules={[
+              {
+                required: true,
+                message: '请输入用户部门！',
+              },
+            ]}
             request={async () => {
               return departmentItemTree(props.depts);
             }}
@@ -188,17 +179,17 @@ const UserEditor: React.FC<Props> = (props) => {
           />
         </ProForm.Group>
         <ProForm.Group>
-          <ProFormSelect
-            name="posts"
-            label="岗位"
-            width="md"
-            request={async () => {
-              const res = await getRoles({ page: 0, count: 1000 });
-              return (res.data.list ?? []).map((item: any) => {
-                return { label: item.name, value: item.id };
-              });
-            }}
-          />
+          {/*<ProFormSelect*/}
+          {/*  name="posts"*/}
+          {/*  label="岗位"*/}
+          {/*  width="md"*/}
+          {/*  request={async () => {*/}
+          {/*    const res = await getRoles({ page: 0, count: 1000 });*/}
+          {/*    return (res.data.list ?? []).map((item: any) => {*/}
+          {/*      return { label: item.name, value: item.id };*/}
+          {/*    });*/}
+          {/*  }}*/}
+          {/*/>*/}
           <ProFormSwitch
             colProps={{
               span: 4,

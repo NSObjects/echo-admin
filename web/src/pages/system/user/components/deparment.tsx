@@ -32,21 +32,8 @@ const Department: React.FC<TreeProps> = (props) => {
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [searchValue, setSearchValue] = useState('');
   const [autoExpandParent, setAutoExpandParent] = useState(true);
-  // const [defaultData, setDefaultData] = useState<DataNode[]>([]);
+
   const { onSelect, department } = props;
-  // 在组件挂载时获取部门数据
-  // useEffect(() => {
-  //   const fetchData = async () => {
-  //     try {
-  //       const result = await getDepartments({ page: 1, count: 1000 });
-  //       setDefaultData(departmentItemTree(result.data.list ?? []));
-  //     } catch (error) {
-  //       console.error('获取数据出错:', error);
-  //     }
-  //   };
-  //
-  //   fetchData();
-  // }, []);
 
   // 展开或收起树节点时的回调
   const onExpand = useCallback((newExpandedKeys: React.Key[]) => {

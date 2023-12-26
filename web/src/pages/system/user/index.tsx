@@ -57,12 +57,9 @@ const User: React.FC = () => {
       disable: true,
       title: '状态',
       dataIndex: 'status',
-      // filters: true,
       onFilter: true,
-      // ellipsis: true,
       valueType: 'select',
       valueEnum: {
-        all: { text: '未知', disabled: true },
         1: {
           text: '启用',
           status: 'Error',
@@ -115,9 +112,8 @@ const User: React.FC = () => {
           onClick={() => {
             deleteUsersId({ id: record.id ?? 0 }).then((res) => {
               if (res.code === 0) {
-                message.success('删除成功').then(() => {
-                  actionRef.current?.reload();
-                });
+                actionRef.current?.reload();
+                message.success('删除成功').then(() => {});
               } else {
                 message.error('删除失败').then((r) => console.log(r));
               }
@@ -132,8 +128,8 @@ const User: React.FC = () => {
 
   return (
     <>
-      <Flex>
-        <Card>
+      <Flex gap={'middle'}>
+        <Card style={{ width: '300px' }}>
           <Department
             onSelect={async (value: any) => {
               console.log('value: ', value);
