@@ -36,7 +36,7 @@ type Menu struct {
 	Remark     string         `gorm:"column:remark"`
 	API        string         `json:"api"  copier:"api"`
 	Link       string         `json:"link"  copier:"link"`
-	Identifier string         `json:"identifier" copier:"identifier" `
+	Identifier int            `json:"identifier" copier:"identifier" `
 	Sort       int            `json:"sort"  copier:"sort"`
 	Hidden     int            `json:"hidden" copier:"hidden"`
 	Cache      int            `json:"cache"  copier:"cache"`

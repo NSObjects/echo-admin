@@ -11,15 +11,18 @@ import {
 } from '@ant-design/pro-components';
 import { Modal } from 'antd';
 import { ProFormInstance } from '@ant-design/pro-form/lib';
-import { getMenus, postMenus, putMenusId } from '@/services/echo-admin/caidan';
+import { postMenus, putMenusId } from '@/services/echo-admin/caidan';
 import { getRoles } from '@/services/echo-admin/jiaose';
 import IconSelector from './iconSelector/index';
 import * as AntdIcons from '@ant-design/icons';
+import { type EnhancedMenuItem } from '@/pages/system/menu';
 
 type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
+  menu: EnhancedMenuItem[];
   values: Partial<API.menu>;
+  reload(): void;
 };
 
 const allIcons: Record<string, any> = AntdIcons;
@@ -40,26 +43,6 @@ function createIcon(icon: string | any): React.ReactNode | string {
   return '';
 }
 
-interface EnhancedMenuItem {
-  label: string;
-  value: number;
-  children?: EnhancedMenuItem[];
-}
-
-const fixMenuItemIcon = (menus: API.menu[]): EnhancedMenuItem[] => {
-  return menus.map((item) => {
-    const { name, id, children } = item;
-    const newItem: EnhancedMenuItem = {
-      label: name,
-      value: id ?? 0,
-    };
-    if (children && children.length > 0) {
-      newItem.children = fixMenuItemIcon(children);
-    }
-    return newItem;
-  });
-};
-
 const MenuEditor: React.FC<Props> = (props) => {
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
@@ -67,7 +50,7 @@ const MenuEditor: React.FC<Props> = (props) => {
   const [menuTypeId, setMenuTypeId] = useState<number>(1);
   const [iconSelectorOpen, setIconSelectorOpen] = useState<boolean>(false);
   useEffect(() => {
-    restFormRef.current?.resetFields();
+    // restFormRef.current?.resetFields();
     restFormRef.current?.setFieldsValue({
       id: props.values.id,
       api: props.values.name,
@@ -94,6 +77,9 @@ const MenuEditor: React.FC<Props> = (props) => {
         title="新建菜单"
         formRef={restFormRef}
         open={modalVisit}
+        initialValues={{
+          type: 1,
+        }}
         onFinish={async (fieldsValue: any) => {
           // fieldsValue.pid = fieldsValue.pid[fieldsValue.pid.length - 1];
           const body = {
@@ -108,13 +94,16 @@ const MenuEditor: React.FC<Props> = (props) => {
             link: fieldsValue['link'],
             name: fieldsValue['name'],
             path: fieldsValue['path'],
-            pid: fieldsValue['pid'].pop(),
+            pid:
+              fieldsValue['pid'] === undefined
+                ? undefined
+                : fieldsValue['pid'][fieldsValue['pid'].length - 1],
             redirect: fieldsValue['redirect'],
             remark: fieldsValue['remark'],
             role: fieldsValue['role'],
             sort: fieldsValue['sort'],
             status: fieldsValue['status'],
-            type: fieldsValue['type'],
+            type: fieldsValue['type'] === 0 ? 1 : fieldsValue['type'],
           };
 
           let res: API.success;
@@ -125,6 +114,7 @@ const MenuEditor: React.FC<Props> = (props) => {
           }
 
           if (res.code === 0) {
+            props.reload();
             message.success('提交成功');
             return true;
           } else {
@@ -135,21 +125,20 @@ const MenuEditor: React.FC<Props> = (props) => {
         onOpenChange={(visible: boolean) => {
           if (!visible) {
             restFormRef.current?.resetFields();
+            setMenuTypeId(1);
           }
-
           setModalVisit(visible);
         }}
       >
         <ProFormCascader
           name="pid"
-          request={async () => {
-            const msg = await getMenus();
-            return fixMenuItemIcon(msg.data.list ?? []);
+          fieldProps={{
+            options: props.menu,
           }}
           label="上级菜单"
         />
         <ProFormRadio.Group
-          name="menuType"
+          name="type"
           options={[
             {
               label: '目录',
@@ -168,7 +157,7 @@ const MenuEditor: React.FC<Props> = (props) => {
           placeholder="请输入菜单类型"
           rules={[
             {
-              required: false,
+              required: true,
               message: '请输入菜单类型',
             },
           ]}
@@ -200,10 +189,17 @@ const MenuEditor: React.FC<Props> = (props) => {
             name="path"
             label="路由路径"
             width="md"
+            hidden={menuTypeId === 3}
             placeholder="路由中的path值"
             rules={[{ required: true, message: '路由地址不能为空' }]}
           />
-          <ProFormText name="redirect" label="重定向" width="md" placeholder="请输入路由重定向" />
+          <ProFormText
+            name="redirect"
+            hidden={menuTypeId === 3}
+            label="重定向"
+            width="md"
+            placeholder="请输入路由重定向"
+          />
         </ProForm.Group>
         <ProForm.Group>
           <ProFormSelect
@@ -226,10 +222,22 @@ const MenuEditor: React.FC<Props> = (props) => {
               },
             ]}
           />
-          <ProFormText name="component" label="组件路径" width="md" placeholder="请输入组件路径" />
+          <ProFormText
+            name="component"
+            hidden={menuTypeId === 3}
+            label="组件路径"
+            width="md"
+            placeholder="请输入组件路径"
+          />
         </ProForm.Group>
         <ProForm.Group>
-          <ProFormText name="url" label="链接地址" width="md" placeholder="请输入组件路径" />
+          <ProFormText
+            hidden={menuTypeId === 3}
+            name="url"
+            label="链接地址"
+            width="md"
+            placeholder="请输入组件路径"
+          />
           <ProFormSelect
             name="identify"
             label="权限标识"
@@ -260,6 +268,7 @@ const MenuEditor: React.FC<Props> = (props) => {
           <ProFormRadio.Group
             radioType="button"
             name="hidden"
+            hidden={menuTypeId === 3}
             label="是否隐藏"
             width="md"
             options={[
@@ -279,6 +288,7 @@ const MenuEditor: React.FC<Props> = (props) => {
             radioType="button"
             width="sm"
             label="页面缓存"
+            hidden={menuTypeId === 3}
             name="cache"
             options={[
               {
@@ -294,6 +304,7 @@ const MenuEditor: React.FC<Props> = (props) => {
           <ProFormRadio.Group
             width="sm"
             label="是否固定"
+            hidden={menuTypeId === 3}
             name="fixed"
             // initialValue="固定"
             options={[

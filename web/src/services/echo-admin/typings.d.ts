@@ -82,54 +82,72 @@ declare namespace API {
   type listDepartmentsResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: department[] };
+    data: {
+      total?: number;
+      list?: department[];
+    };
   };
 
   type listMenuResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: menu[] };
+    data: {
+      total?: number;
+      list?: menu[];
+    };
   };
 
   type listResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: Record<string, any>[] };
+    data: {
+      total?: number;
+      list?: Record<string, any>[];
+    };
   };
 
   type listRoleResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: role[] };
+    data: {
+      total?: number;
+      list?: role[];
+    };
   };
 
   type listUserResp = {
     code: number;
     msg: string;
-    data: { total?: number; list?: user[] };
+    data: {
+      total?: number;
+      list?: user[];
+    };
   };
 
   type login = {
     code: number;
     msg: string;
-    data: { token?: string; type?: string };
+    data: {
+      token?: string;
+      type?: string;
+    };
   };
 
   type menu = {
     /** 父菜单id */
-    pid: number;
+    pid?: number;
     /** 菜单id */
     id?: number;
     /** 类型 1=目录 2=菜单 3=按钮 */
-    type: 1 | 2 | 3;
+    type?: 1 | 2 | 3;
     /** 菜单名称 */
-    name: string;
+    name?: string;
     /** api接口 */
-    api: string;
+    api?: string;
     /** 路由路径 */
-    path: string;
+    path?: string;
     /** 组件路径 */
-    component: string;
+    component?: string;
     layout?: number;
     /** 重定向 */
     redirect?: string;

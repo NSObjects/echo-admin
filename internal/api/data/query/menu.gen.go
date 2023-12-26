@@ -39,7 +39,7 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	_menu.Remark = field.NewString(tableName, "remark")
 	_menu.API = field.NewString(tableName, "api")
 	_menu.Link = field.NewString(tableName, "link")
-	_menu.Identifier = field.NewString(tableName, "identifier")
+	_menu.Identifier = field.NewInt(tableName, "identifier")
 	_menu.Sort = field.NewInt(tableName, "sort")
 	_menu.Hidden = field.NewInt(tableName, "hidden")
 	_menu.Cache = field.NewInt(tableName, "cache")
@@ -117,7 +117,7 @@ type menu struct {
 	Remark     field.String
 	API        field.String
 	Link       field.String
-	Identifier field.String
+	Identifier field.Int
 	Sort       field.Int
 	Hidden     field.Int
 	Cache      field.Int
@@ -156,7 +156,7 @@ func (m *menu) updateTableName(table string) *menu {
 	m.Remark = field.NewString(table, "remark")
 	m.API = field.NewString(table, "api")
 	m.Link = field.NewString(table, "link")
-	m.Identifier = field.NewString(table, "identifier")
+	m.Identifier = field.NewInt(table, "identifier")
 	m.Sort = field.NewInt(table, "sort")
 	m.Hidden = field.NewInt(table, "hidden")
 	m.Cache = field.NewInt(table, "cache")

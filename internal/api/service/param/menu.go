@@ -42,7 +42,7 @@ type Menu struct {
 	Fixed     *int           `json:"fixed,omitempty"`
 	Hidden    *int           `json:"hidden,omitempty"`
 	Icon      *string        `json:"icon,omitempty"`
-	Identify  *string        `json:"identify,omitempty"`
+	Identify  *int           `json:"identify,omitempty"`
 	Layout    *int           `json:"layout,omitempty"`
 	Link      *string        `json:"link,omitempty"`
 	Name      *string        `json:"name,omitempty"`

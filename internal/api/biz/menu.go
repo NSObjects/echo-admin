@@ -13,11 +13,12 @@ package biz
 import (
 	"context"
 	"fmt"
-
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
+	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/samber/lo"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/marmotedu/errors"
@@ -51,6 +52,13 @@ func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.
 		return nil, 0, errors.WrapC(err, code.ErrDatabase, "查询菜单列表失败")
 	}
 
+	for _, td := range menus {
+		td.Children, err = m.GetAllMenu(td.ID)
+		if err != nil {
+			log.Error(err)
+		}
+	}
+
 	total, err := m.q.Menu.Where(m.q.Menu.Pid.IsNotNull()).WithContext(ctx).Count()
 	if err != nil {
 		return nil, 0, err
@@ -58,6 +66,28 @@ func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.
 
 	return menus, total, nil
 
+}
+
+func (m *MenuHandler) GetAllMenu(parentID uint) ([]model.Menu, error) {
+	if parentID == 0 {
+		return nil, nil
+	}
+	departments, err := m.q.Menu.Where(m.q.Menu.Pid.Eq(int64(parentID))).
+		Preload(m.q.Menu.Children).Find()
+	if err != nil {
+		return nil, err
+	}
+	for i, department := range departments {
+		children, err := m.GetAllMenu(department.ID)
+		if err != nil {
+			return nil, err
+		}
+		departments[i].Children = children
+	}
+
+	return lo.Map(departments, func(item *model.Menu, index int) model.Menu {
+		return *item
+	}), nil
 }
 
 func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) error {
@@ -80,11 +110,35 @@ func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) 
 }
 
 func (m *MenuHandler) Delete(ctx context.Context, id uint) error {
-	if _, err := m.q.Menu.WithContext(ctx).
+	err := m.cleanChildMenu(ctx, int64(id))
+	if err != nil {
+		log.Error(err)
+	}
+	if _, err = m.q.Menu.WithContext(ctx).
 		Where(m.q.Menu.ID.Eq(id)).
 		Delete(); err != nil {
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("删除菜单失败 %v", id))
 	}
 
+	return nil
+}
+
+// cleanChildMenu
+func (m *MenuHandler) cleanChildMenu(ctx context.Context, id int64) error {
+	find, err := m.q.Menu.WithContext(ctx).Where(m.q.Menu.Pid.Eq(id)).Find()
+	if err != nil {
+		return err
+	}
+	for _, v := range find {
+		if _, err = m.q.Menu.WithContext(ctx).
+			Where(m.q.Menu.ID.Eq(v.ID)).
+			Delete(); err != nil {
+			log.Error(err)
+		}
+
+		if err = m.cleanChildMenu(ctx, int64(v.ID)); err != nil {
+			continue
+		}
+	}
 	return nil
 }

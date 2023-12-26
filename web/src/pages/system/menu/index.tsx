@@ -1,13 +1,34 @@
-import React, { useState,useRef} from 'react'
-import {ProColumns, ProTable,ActionType} from "@ant-design/pro-components";
-import {Button, message} from "antd";
-import {PlusOutlined} from "@ant-design/icons";
-import {deleteMenusId, getMenus} from "@/services/echo-admin/caidan";
-import MenuEditor from "@/pages/system/menu/components/editor";
+import React, { useState, useRef } from 'react';
+import { ProColumns, ProTable, ActionType } from '@ant-design/pro-components';
+import { Button, message } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { deleteMenusId, getMenus } from '@/services/echo-admin/caidan';
+import MenuEditor from '@/pages/system/menu/components/editor';
+
+export interface EnhancedMenuItem {
+  label: string;
+  value: number;
+  children?: EnhancedMenuItem[];
+}
+
+const fixMenuItemIcon = (menus: API.menu[]): EnhancedMenuItem[] => {
+  return menus.map((item) => {
+    const { name, id, children } = item;
+    const newItem: EnhancedMenuItem = {
+      label: name ?? '',
+      value: id ?? 0,
+    };
+    if (children && children.length > 0) {
+      newItem.children = fixMenuItemIcon(children);
+    }
+    return newItem;
+  });
+};
 
 const Menu: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<API.menu>();
+  const [menu, setMenu] = useState<EnhancedMenuItem[]>([]);
   const actionRef = useRef<ActionType>();
   const columns: ProColumns<API.menu>[] = [
     {
@@ -72,26 +93,37 @@ const Menu: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (text, record) => [
+        // <a
+        //   key="editable"
+        //   onClick={() => {
+        //     setShowModal(true);
+        //     setCurrentRow({
+        //       pid: record.id,
+        //     });
+        //   }}
+        // >
+        //   新增
+        // </a>,
         <a
           key="editable"
           onClick={() => {
-            setShowModal(true)
-            setCurrentRow(record)
+            setShowModal(true);
+            setCurrentRow(record);
           }}
         >
-          编辑
+          修改
         </a>,
         <a
           key="delete"
           onClick={() => {
-            deleteMenusId({id: record.id ?? 0}).then((res)=>{
+            deleteMenusId({ id: record.id ?? 0 }).then((res) => {
               if (res.code === 0) {
-                message.success('删除成功')
-                actionRef.current?.reload()
+                message.success('删除成功');
+                actionRef.current?.reload();
               } else {
                 message.error('删除失败');
               }
-            })
+            });
           }}
         >
           删除
@@ -100,64 +132,72 @@ const Menu: React.FC = () => {
     },
   ];
 
+  return (
+    <>
+      <ProTable<API.menu>
+        columns={columns}
+        actionRef={actionRef}
+        cardBordered
+        request={async () => {
+          const msg = await getMenus();
+          setMenu(fixMenuItemIcon(msg.data.list ?? []));
+          return {
+            data: msg.data.list ?? [],
+            total: msg.data.list?.length ?? 0,
+            success: true,
+          };
+        }}
+        editable={{
+          type: 'multiple',
+        }}
+        columnsState={{
+          persistenceKey: 'pro-table-singe-demos',
+          persistenceType: 'localStorage',
+          onChange(value) {
+            console.log('value: ', value);
+          },
+        }}
+        rowKey="id"
+        search={{
+          labelWidth: 'auto',
+          collapsed: false,
+        }}
+        options={{
+          setting: {
+            listsHeight: 400,
+          },
+        }}
+        dateFormatter="string"
+        headerTitle="菜单列表"
+        toolBarRender={() => [
+          <Button
+            key="button"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setShowModal(true);
+            }}
+            type="primary"
+          >
+            新建
+          </Button>,
+        ]}
+      />
+      <MenuEditor
+        modalVisit={showModal}
+        setModalVisit={(modalVisit: boolean) => {
+          setShowModal(modalVisit);
+          if (!modalVisit) {
+            setCurrentRow(undefined);
+          }
+        }}
+        values={currentRow || {}}
+        menu={menu}
+        reload={() => {
+          actionRef.current?.reload();
+        }}
+      ></MenuEditor>
+    </>
+  );
+};
 
-  return<>
-    <ProTable<API.menu>
-      columns={columns}
-      actionRef={actionRef}
-      cardBordered
-      request={async () => {
-        const msg = await getMenus()
-        return  {
-          data: msg.data.list ?? [],
-          total: msg.data.list?.length ?? 0,
-          success: true,
-        };
-      }}
-      editable={{
-        type: 'multiple',
-      }}
-      columnsState={{
-        persistenceKey: 'pro-table-singe-demos',
-        persistenceType: 'localStorage',
-        onChange(value) {
-          console.log('value: ', value);
-        },
-      }}
-      rowKey="id"
-      search={{
-        labelWidth: 'auto',
-        collapsed: false,
-      }}
-      options={{
-        setting: {
-          listsHeight: 400,
-        },
-      }}
-      dateFormatter="string"
-      headerTitle="菜单列表"
-      toolBarRender={() => [
-        <Button
-          key="button"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setShowModal(true)
-          }}
-          type="primary"
-        >
-          新建
-        </Button>,
-      ]}
-    />
-    <MenuEditor modalVisit={showModal} setModalVisit={(modalVisit: boolean)=>{
-      setShowModal(modalVisit)
-      if (!modalVisit) {
-        setCurrentRow(undefined)
-      }
-      actionRef.current?.reload()
-    }
-    }  values={currentRow || {}}></MenuEditor>
-  </>
-}
-
-export default Menu
+export default Menu;
