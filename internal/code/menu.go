@@ -17,4 +17,6 @@ package code
 const (
 	// ErrParentMenuExisted - 201: 父菜单id不存在，请确认后再选择.
 	ErrParentMenuExisted int = iota + 100501
+	// ErrNotAllowCreate - 201: 当上级菜单不是目录时，不允许创建子菜单.菜单类型只能创建按钮子集
+	ErrNotAllowCreate
 )

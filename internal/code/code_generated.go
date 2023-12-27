@@ -31,4 +31,5 @@ func init() {
 	register(ErrEncodingYaml, 500, "Yaml data could not be encoded")
 	register(ErrDecodingYaml, 500, "Yaml data could not be decoded")
 	register(ErrParentMenuExisted, 201, "父菜单id不存在，请确认后再选择")
+	register(ErrNotAllowCreate, 201, "当上级菜单不是目录时，不允许创建子菜单")
 }
