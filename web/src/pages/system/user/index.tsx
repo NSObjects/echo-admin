@@ -20,8 +20,6 @@ const departmentItemTree = (menus: API.department[]): DataNode[] =>
   }));
 
 const User: React.FC = () => {
-  // let deparment: DataNode[] = [];
-
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<API.user>();
   const actionRef = useRef<ActionType>();

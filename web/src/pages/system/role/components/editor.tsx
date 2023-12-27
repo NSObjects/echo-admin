@@ -1,28 +1,27 @@
-import React, {useRef,useEffect,useState} from 'react'
+import React, { useRef, useEffect, useState } from 'react';
 
-import {  message,Form } from 'antd';
+import { message, Form } from 'antd';
 import {
   ProForm,
   ModalForm,
   ProFormText,
   ProFormSwitch,
   ProFormDigit,
-  ProFormTextArea
-
+  ProFormTextArea,
 } from '@ant-design/pro-components';
 import type { DataNode } from 'antd/es/tree';
 
-import {ProFormInstance} from "@ant-design/pro-form/lib";
-import {getMenus} from "@/services/echo-admin/caidan";
-import MenuTree from "@/pages/system/role/components/menuTree";
-import {postRoles, putRolesId} from "@/services/echo-admin/jiaose";
-
+import { ProFormInstance } from '@ant-design/pro-form/lib';
+import { getMenus } from '@/services/echo-admin/caidan';
+import MenuTree from '@/pages/system/role/components/menuTree';
+import { postRoles, putRolesId } from '@/services/echo-admin/jiaose';
 
 type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
   values: Partial<API.role>;
-}
+  reload(): void;
+};
 
 const MenuItemTree = (menus: API.menu[]): DataNode[] => {
   return menus.map((item) => {
@@ -38,7 +37,7 @@ const MenuItemTree = (menus: API.menu[]): DataNode[] => {
   });
 };
 
-const RoleEditor: React.FC<Props> = props => {
+const RoleEditor: React.FC<Props> = (props) => {
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
   const [treeData, setTreeData] = useState<DataNode[]>([]);
@@ -46,10 +45,11 @@ const RoleEditor: React.FC<Props> = props => {
     restFormRef.current?.resetFields();
     restFormRef.current?.setFieldsValue({
       id: props.values.id,
-      name:props.values.name,
-      sort:props.values.sort,
-      mark:props.values.mark,
-      menus:props.values.menus,
+      name: props.values.name,
+      sort: props.values.sort,
+      mark: props.values.mark,
+      menus: props.values.menus,
+      status: props.values.id === undefined ? true : props.values.status === 1,
     });
   }, [restFormRef, props]);
   return (
@@ -59,20 +59,22 @@ const RoleEditor: React.FC<Props> = props => {
         formRef={restFormRef}
         open={modalVisit}
         request={async () => {
-          let res = await getMenus()
-          setTreeData(MenuItemTree(res.data.list??[]))
-          return {}
+          let res = await getMenus();
+          setTreeData(MenuItemTree(res.data.list ?? []));
+          return {};
         }}
         onFinish={async (fieldsValue: API.role) => {
-          console.log(fieldsValue)
-          let res: API.success
+          console.log(fieldsValue);
+          fieldsValue.status = fieldsValue.status ? 1 : 2;
+          let res: API.success;
           if (props.values?.id) {
-            res = await putRolesId({id: props.values.id}, fieldsValue)
+            res = await putRolesId({ id: props.values.id }, fieldsValue);
           } else {
-            res = await postRoles(fieldsValue)
+            res = await postRoles(fieldsValue);
           }
 
           if (res.code === 0) {
+            props.reload();
             message.success('提交成功');
             return true;
           } else {
@@ -80,20 +82,15 @@ const RoleEditor: React.FC<Props> = props => {
             return false;
           }
         }}
-        onOpenChange={(visible:boolean)=>{
+        onOpenChange={(visible: boolean) => {
           if (!visible) {
             restFormRef.current?.resetFields();
           }
-          setModalVisit(visible)
+          setModalVisit(visible);
         }}
       >
         <ProForm.Group>
-          <ProFormText
-            name="name"
-            width="md"
-            label="角色名称"
-            placeholder="请填写角色名称"
-          />
+          <ProFormText name="name" width="md" label="角色名称" placeholder="请填写角色名称" />
           <ProFormDigit
             name="sort"
             label="排序"
@@ -104,26 +101,17 @@ const RoleEditor: React.FC<Props> = props => {
           />
         </ProForm.Group>
         <ProForm.Group>
-          <ProFormSwitch
-            name="status"
-            label="角色状态"
-            width="md"
-          />
+          <ProFormSwitch name="status" label="角色状态" width="md" />
         </ProForm.Group>
         <ProForm.Group>
-          <ProFormTextArea
-            name="mark"
-            label="角色描述"
-            placeholder="请输入角色描述"
-            width="xl"
-          />
+          <ProFormTextArea name="mark" label="角色描述" placeholder="请输入角色描述" width="xl" />
         </ProForm.Group>
         <Form.Item name="menus">
-          <MenuTree treeData={treeData}/>
+          <MenuTree treeData={treeData} />
         </Form.Item>
       </ModalForm>
     </div>
-  )
-}
+  );
+};
 
-export default RoleEditor
+export default RoleEditor;

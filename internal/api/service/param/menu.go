@@ -11,11 +11,8 @@
 package param
 
 import (
-	"time"
-
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
-
 	"gorm.io/gen/field"
 )
 
@@ -61,16 +58,101 @@ type RoleMenu struct {
 	Creator string  `json:"creator" form:"creator" query:"creator"`
 }
 
+//type MenuResp struct {
+//	ID        uint         `json:"id"`
+//	Name      string       `json:"name"`
+//	Path      string       `json:"path"`
+//	Component string       `json:"component"`
+//	Redirect  string       `json:"redirect"`
+//	Pid       []int64      `json:"pid,omitempty"`
+//	Routes    []model.Menu `json:"routes"`
+//	CreatedAt time.Time    `json:"created_at" `
+//	UpdatedAt time.Time    `json:"updated_at" `
+//}
+
+// MenuResp 菜单
+// API api接口
+// Cache 是否缓存 1=是 2=否
+// Children 子菜单
+// Component 组件路径
+// Fixed 是否固定 1=是 2=否
+// Hidden 是否隐藏 1=是 2=否
+// Icon 图标
+// ID 菜单id
+// Identify 菜单标识符
+// Label 菜单名称
+// Layout 布局
+// Link 外链地址
+// Name 菜单名称
+// Path 路由路径
+// PID 父菜单id
+// Redirect 重定向
+// Remark 备注
+// Role 角色id列表
+// Sort 排序
+// Status 状态 1=启用 2=禁用
+// Type 类型 1=目录 2=菜单 3=按钮
 type MenuResp struct {
-	ID        uint         `json:"id"`
-	Name      string       `json:"name"`
-	Path      string       `json:"path"`
-	Component string       `json:"component"`
-	Redirect  string       `json:"redirect"`
-	Pid       int64        `json:"pid,omitempty"`
-	Routes    []model.Menu `json:"routes"`
-	CreatedAt time.Time    `json:"created_at" `
-	UpdatedAt time.Time    `json:"updated_at" `
+	API       string         `json:"api"`
+	Cache     int            `json:"cache,omitempty"`
+	Children  []MenuResp     `json:"children,omitempty"`
+	Component string         `json:"component"`
+	Fixed     int            `json:"fixed,omitempty"`
+	Hidden    int            `json:"hidden,omitempty"`
+	Icon      string         `json:"icon,omitempty"`
+	ID        uint           `json:"id,omitempty"`
+	Identify  string         `json:"identify,omitempty"`
+	Label     string         `json:"label,omitempty"`
+	Layout    int            `json:"layout,omitempty"`
+	Link      string         `json:"link,omitempty"`
+	Name      string         `json:"name"`
+	Path      string         `json:"path"`
+	PID       int64          `json:"pid"`
+	Redirect  string         `json:"redirect,omitempty"`
+	Remark    string         `json:"remark,omitempty"`
+	Role      []int64        `json:"role,omitempty"`
+	Sort      int            `json:"sort,omitempty"`
+	Status    int64          `json:"status,omitempty"`
+	Type      model.MenuType `json:"type"`
+	Value     int64          `json:"value,omitempty"`
+}
+
+func MentModel(v *model.Menu) MenuResp {
+
+	rp := MenuResp{
+		API:       v.API,
+		Cache:     v.Cache,
+		Children:  MenuModelResp(v.Children),
+		Component: v.Component,
+		Fixed:     v.Fixed,
+		Hidden:    v.Hidden,
+		Icon:      v.Icon,
+		ID:        v.ID,
+		Layout:    v.Layout,
+		Link:      v.Link,
+		Name:      v.Name,
+		Path:      v.Path,
+		PID:       v.Pid,
+		Redirect:  v.Redirect,
+		Remark:    v.Remark,
+		Sort:      v.Sort,
+		Type:      v.Type,
+	}
+	return rp
+}
+
+func MenuModelResp(child []*model.Menu) []MenuResp {
+	if len(child) == 0 {
+		return []MenuResp{}
+	}
+
+	resp := make([]MenuResp, len(child))
+	for index, v := range child {
+		rp := MentModel(v)
+		rp.Children = MenuModelResp(v.Children)
+		resp[index] = rp
+	}
+	return resp
 }
 
 func (m Menu) Data() ([]field.Expr, model.Menu) {
@@ -96,10 +178,12 @@ func (m Menu) Data() ([]field.Expr, model.Menu) {
 		filed = append(filed, query.Q.Menu.Layout)
 		menu.Layout = *m.Layout
 	}
+
 	if m.PID != nil {
 		filed = append(filed, query.Q.Menu.Pid)
 		menu.Pid = *m.PID
 	}
+
 	if m.Icon != nil {
 		filed = append(filed, query.Q.Menu.Icon)
 		menu.Icon = *m.Icon

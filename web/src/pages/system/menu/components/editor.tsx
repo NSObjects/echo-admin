@@ -4,7 +4,7 @@ import {
   ProForm,
   ModalForm,
   ProFormText,
-  ProFormCascader,
+  ProFormTreeSelect,
   ProFormRadio,
   ProFormDigit,
   ProFormSelect,
@@ -21,7 +21,7 @@ type Props = {
   modalVisit: boolean;
   setModalVisit: (modalVisit: boolean) => void;
   menu: EnhancedMenuItem[];
-  values: Partial<API.menu>;
+  menuValue: Partial<API.menu>;
   reload(): void;
 };
 
@@ -43,45 +43,81 @@ function createIcon(icon: string | any): React.ReactNode | string {
   return '';
 }
 
+interface TypeOption {
+  label: string;
+  value: number;
+}
+
+const typeOption = [
+  {
+    label: '目录',
+    value: 1,
+  },
+  {
+    label: '菜单',
+    value: 2,
+  },
+  {
+    label: '按钮',
+    value: 3,
+  },
+];
+
 const MenuEditor: React.FC<Props> = (props) => {
-  const { modalVisit, setModalVisit } = props;
+  const { modalVisit, setModalVisit, menu, menuValue } = props;
   const restFormRef = useRef<ProFormInstance>();
-  const [menuIconName, setMenuIconName] = useState<any>();
-  const [menuTypeId, setMenuTypeId] = useState<number>(1);
+  const [menuIconName, setMenuIconName] = useState<string>();
+  const [menuTypeId, setMenuTypeId] = useState<number>(menuValue.type || 1);
   const [iconSelectorOpen, setIconSelectorOpen] = useState<boolean>(false);
+  const [title, setTitle] = useState<string>('新建菜单'); // 初始值设置为 '新建菜单'
+  // const { modalVisit, setModalVisit, menu, menuValue } = props;
+  // const restFormRef = useRef<ProFormInstance>();
+  // const [menuIconName, setMenuIconName] = useState<any>();
+  // const [menuTypeId, setMenuTypeId] = useState<number>(1);
+  // const [iconSelectorOpen, setIconSelectorOpen] = useState<boolean>(false);
+  // const [title, setTitle] = useState<string>('新建菜单');
+  // const [typeOption, setTypeOption] = useState<TypeOption[]>([
+  //   {
+  //     label: '目录',
+  //     value: 1,
+  //   },
+  //   {
+  //     label: '菜单',
+  //     value: 2,
+  //   },
+  //   {
+  //     label: '按钮',
+  //     value: 3,
+  //   },
+  // ]);
+
   useEffect(() => {
-    // restFormRef.current?.resetFields();
-    restFormRef.current?.setFieldsValue({
-      id: props.values.id,
-      api: props.values.name,
-      cache: props.values.cache,
-      component: props.values.component,
-      fixed: props.values.fixed,
-      identify: props.values.identify,
-      layout: props.values.layout,
-      link: props.values.link,
-      name: props.values.name,
-      path: props.values.path,
-      pid: props.values.pid,
-      redirect: props.values.redirect,
-      remark: props.values.remark,
-      role: props.values.role,
-      sort: props.values.sort === 0 ? undefined : props.values.sort,
-      status: props.values.status,
-      type: props.values.type,
-    });
-  }, [restFormRef, props]);
+    restFormRef.current?.resetFields();
+    setTitle(menuValue?.id ? '编辑菜单' : '新建菜单');
+
+    if (menuValue.type === 2 && menuValue.id === undefined && menuValue.pid) {
+      restFormRef.current?.setFieldsValue({
+        pid: menuValue.pid,
+        type: 3,
+      });
+      console.log('menuValue.type === 2 && menuValue.id !== undefined', menuValue.id);
+      setMenuTypeId(3);
+    } else {
+      restFormRef.current?.setFieldsValue({
+        ...menuValue,
+        sort: menuValue.sort === 0 ? undefined : menuValue.sort,
+        // 如果有其他需要设置的字段，请在这里添加
+      });
+      setMenuTypeId(menuValue.type === undefined ? 1 : menuValue.type);
+    }
+  }, [menuValue]);
   return (
     <div>
       <ModalForm
-        title="新建菜单"
+        title={title}
         formRef={restFormRef}
         open={modalVisit}
-        initialValues={{
-          type: 1,
-        }}
         onFinish={async (fieldsValue: any) => {
-          // fieldsValue.pid = fieldsValue.pid[fieldsValue.pid.length - 1];
           const body = {
             api: fieldsValue['api'],
             cache: fieldsValue['cache'],
@@ -94,10 +130,7 @@ const MenuEditor: React.FC<Props> = (props) => {
             link: fieldsValue['link'],
             name: fieldsValue['name'],
             path: fieldsValue['path'],
-            pid:
-              fieldsValue['pid'] === undefined
-                ? undefined
-                : fieldsValue['pid'][fieldsValue['pid'].length - 1],
+            pid: fieldsValue['pid'],
             redirect: fieldsValue['redirect'],
             remark: fieldsValue['remark'],
             role: fieldsValue['role'],
@@ -107,52 +140,40 @@ const MenuEditor: React.FC<Props> = (props) => {
           };
 
           let res: API.success;
-          if (props.values?.id) {
-            res = await putMenusId({ id: props.values.id }, body);
+          if (props.menuValue?.id) {
+            res = await putMenusId({ id: props.menuValue.id }, body);
           } else {
             res = await postMenus(body);
           }
-
+          console.log('Onfinish');
           if (res.code === 0) {
             props.reload();
             message.success('提交成功');
             return true;
           } else {
-            message.error('提交失败');
+            message.error('提交失败:');
             return false;
           }
         }}
         onOpenChange={(visible: boolean) => {
-          if (!visible) {
-            restFormRef.current?.resetFields();
-            setMenuTypeId(1);
-          }
+          // restFormRef.current?.resetFields();
+          //
+          // if (!visible) {
+          //   setMenuTypeId(1);
+          // }
           setModalVisit(visible);
         }}
       >
-        <ProFormCascader
+        <ProFormTreeSelect
           name="pid"
-          fieldProps={{
-            options: props.menu,
+          request={async () => {
+            return menu;
           }}
           label="上级菜单"
         />
         <ProFormRadio.Group
           name="type"
-          options={[
-            {
-              label: '目录',
-              value: 1,
-            },
-            {
-              label: '菜单',
-              value: 2,
-            },
-            {
-              label: '按钮',
-              value: 3,
-            },
-          ]}
+          options={typeOption}
           label="菜单类型"
           placeholder="请输入菜单类型"
           rules={[
@@ -162,7 +183,7 @@ const MenuEditor: React.FC<Props> = (props) => {
             },
           ]}
           fieldProps={{
-            defaultValue: 1,
+            // defaultValue: { menuTypeId },
             onChange: (e) => {
               setMenuTypeId(e.target.value);
             },
@@ -183,8 +204,6 @@ const MenuEditor: React.FC<Props> = (props) => {
             placeholder="后端api地址"
             rules={[{ required: true, message: '接口规则不能为空' }]}
           />
-        </ProForm.Group>
-        <ProForm.Group>
           <ProFormText
             name="path"
             label="路由路径"
@@ -200,8 +219,8 @@ const MenuEditor: React.FC<Props> = (props) => {
             width="md"
             placeholder="请输入路由重定向"
           />
-        </ProForm.Group>
-        <ProForm.Group>
+          {/*</ProForm.Group>*/}
+          {/*<ProForm.Group>*/}
           <ProFormSelect
             name="icon"
             label="菜单图标"
@@ -229,8 +248,7 @@ const MenuEditor: React.FC<Props> = (props) => {
             width="md"
             placeholder="请输入组件路径"
           />
-        </ProForm.Group>
-        <ProForm.Group>
+
           <ProFormText
             hidden={menuTypeId === 3}
             name="url"
@@ -255,8 +273,7 @@ const MenuEditor: React.FC<Props> = (props) => {
               });
             }}
           />
-        </ProForm.Group>
-        <ProForm.Group>
+
           <ProFormDigit
             name="sort"
             label="菜单排序"
@@ -282,8 +299,7 @@ const MenuEditor: React.FC<Props> = (props) => {
               },
             ]}
           />
-        </ProForm.Group>
-        <ProForm.Group>
+
           <ProFormRadio.Group
             radioType="button"
             width="sm"

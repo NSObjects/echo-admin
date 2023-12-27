@@ -178,9 +178,11 @@ const Role: React.FC = () => {
           if (!modalVisit) {
             setCurrentRow(undefined);
           }
-          // actionRef.current?.reload()
         }}
         values={currentRow || {}}
+        reload={() => {
+          actionRef.current?.reload();
+        }}
       ></RoleEditor>
     </>
   );

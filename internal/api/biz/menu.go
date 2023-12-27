@@ -33,17 +33,26 @@ func NewMenuHandler(q *query.Query) *MenuHandler {
 	return &MenuHandler{q: q}
 }
 
-func (m *MenuHandler) CreateMenu(ctx context.Context, menu param.Menu) (err error) {
-
+func (m *MenuHandler) CreateMenu(ctx context.Context, menu param.Menu) error {
+	if menu.PID != nil && *menu.PID != 0 {
+		parent, err := m.q.Menu.WithContext(ctx).Where(m.q.Menu.ID.Eq(uint(*menu.PID))).First()
+		if err != nil {
+			return errors.WrapC(err, code.ErrParentMenuExisted, "父级菜单不存在")
+		}
+		if parent.Type == model.MenuTypeButton ||
+			(parent.Type == model.MenuTypeMenu && menu.Type != model.MenuTypeButton) {
+			return errors.WithCode(code.ErrNotAllowCreate, "父级菜单类型不正确")
+		}
+	}
 	filed, mm := menu.Data()
-	if err = m.q.Menu.WithContext(ctx).Select(filed...).Create(&mm); err != nil {
+	if err := m.q.Menu.WithContext(ctx).Select(filed...).Create(&mm); err != nil {
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单失败 %v", menu))
 	}
 
 	return nil
 }
 
-func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.Menu, int64, error) {
+func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]param.MenuResp, int64, error) {
 	menus, err := m.q.Menu.Offset(q.Offset()).
 		Limit(q.Limit()).Where(m.q.Menu.Pid.IsNull(), m.q.Menu.Layout.IsNull()).
 		Preload(field.Associations).WithContext(ctx).Find()
@@ -64,11 +73,11 @@ func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]*model.
 		return nil, 0, err
 	}
 
-	return menus, total, nil
+	return param.MenuModelResp(menus), total, nil
 
 }
 
-func (m *MenuHandler) GetAllMenu(parentID uint) ([]model.Menu, error) {
+func (m *MenuHandler) GetAllMenu(parentID uint) ([]*model.Menu, error) {
 	if parentID == 0 {
 		return nil, nil
 	}
@@ -85,8 +94,8 @@ func (m *MenuHandler) GetAllMenu(parentID uint) ([]model.Menu, error) {
 		departments[i].Children = children
 	}
 
-	return lo.Map(departments, func(item *model.Menu, index int) model.Menu {
-		return *item
+	return lo.Map(departments, func(item *model.Menu, index int) *model.Menu {
+		return item
 	}), nil
 }
 

@@ -6,7 +6,7 @@ import { deleteMenusId, getMenus } from '@/services/echo-admin/caidan';
 import MenuEditor from '@/pages/system/menu/components/editor';
 
 export interface EnhancedMenuItem {
-  label: string;
+  title: string;
   value: number;
   children?: EnhancedMenuItem[];
 }
@@ -15,7 +15,7 @@ const fixMenuItemIcon = (menus: API.menu[]): EnhancedMenuItem[] => {
   return menus.map((item) => {
     const { name, id, children } = item;
     const newItem: EnhancedMenuItem = {
-      label: name ?? '',
+      title: name ?? '',
       value: id ?? 0,
     };
     if (children && children.length > 0) {
@@ -65,7 +65,6 @@ const Menu: React.FC = () => {
       ellipsis: true,
       valueType: 'select',
       valueEnum: {
-        all: { text: '未知' },
         1: {
           text: '目录',
           status: 'Error',
@@ -93,17 +92,23 @@ const Menu: React.FC = () => {
       valueType: 'option',
       key: 'option',
       render: (text, record) => [
-        // <a
-        //   key="editable"
-        //   onClick={() => {
-        //     setShowModal(true);
-        //     setCurrentRow({
-        //       pid: record.id,
-        //     });
-        //   }}
-        // >
-        //   新增
-        // </a>,
+        <a
+          hidden={record.type === 3}
+          key="add"
+          onClick={() => {
+            if (record.type === 3) {
+              message.error('按钮不允许添加子菜单');
+              return;
+            }
+            setCurrentRow({
+              pid: record.id,
+              type: record.type,
+            });
+            setShowModal(true);
+          }}
+        >
+          新增
+        </a>,
         <a
           key="editable"
           onClick={() => {
@@ -174,6 +179,7 @@ const Menu: React.FC = () => {
             key="button"
             icon={<PlusOutlined />}
             onClick={() => {
+              setCurrentRow({ type: 1 });
               setShowModal(true);
             }}
             type="primary"
@@ -190,7 +196,7 @@ const Menu: React.FC = () => {
             setCurrentRow(undefined);
           }
         }}
-        values={currentRow || {}}
+        menuValue={currentRow || {}}
         menu={menu}
         reload={() => {
           actionRef.current?.reload();

@@ -42,7 +42,7 @@ type Menu struct {
 	Cache      int            `json:"cache"  copier:"cache"`
 	Fixed      int            `json:"fixed"  copier:"fixed"`
 	Pid        int64          `json:"pid,omitempty"  copier:"pid"`
-	Children   []Menu         `json:"children,omitempty" gorm:"foreignKey:Pid;references:ID"`
+	Children   []*Menu        `json:"children,omitempty" gorm:"foreignKey:Pid;references:ID"`
 	RoleMenus  []Role         `gorm:"many2many:role_menus;" json:"-"`
 	CreatedAt  time.Time      `json:"created_at" `
 	UpdatedAt  time.Time      `json:"updated_at" `
