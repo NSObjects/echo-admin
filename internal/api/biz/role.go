@@ -12,6 +12,7 @@ package biz
 
 import (
 	"context"
+	"github.com/casbin/casbin/v2"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
@@ -22,10 +23,11 @@ import (
 
 type RoleHandler struct {
 	q *query.Query
+	e *casbin.Enforcer
 }
 
-func NewRoleHandler(q *query.Query) *RoleHandler {
-	return &RoleHandler{q: q}
+func NewRoleHandler(q *query.Query, e *casbin.Enforcer) *RoleHandler {
+	return &RoleHandler{q: q, e: e}
 }
 
 func (r *RoleHandler) List(ctx context.Context, q param.RoleQuery) ([]param.RoleResp, int64, error) {

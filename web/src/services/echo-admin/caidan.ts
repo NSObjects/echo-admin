@@ -11,12 +11,7 @@ export async function getMenus(options?: { [key: string]: any }) {
 }
 
 /** 创建菜单 POST /api/menus */
-export async function postMenus(
-  body: API.putMenu,
-  options?: {
-    [key: string]: any;
-  },
-) {
+export async function postMenus(body: API.menu, options?: { [key: string]: any }) {
   return request<API.success>('/api/menus', {
     method: 'POST',
     headers: {
@@ -32,9 +27,7 @@ export async function putMenusId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.putMenusIdParams,
   body: API.putMenu,
-  options?: {
-    [key: string]: any;
-  },
+  options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
   return request<API.success>(`/api/menus/${param0}`, {
@@ -52,9 +45,7 @@ export async function putMenusId(
 export async function deleteMenusId(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.deleteMenusIdParams,
-  options?: {
-    [key: string]: any;
-  },
+  options?: { [key: string]: any },
 ) {
   const { id: param0, ...queryParams } = params;
   return request<API.success>(`/api/menus/${param0}`, {

@@ -76,61 +76,42 @@ declare namespace API {
     create_start?: number;
     /** 创建结束时间 */
     create_end?: number;
-    department_id?: number;
   };
 
   type listDepartmentsResp = {
     code: number;
     msg: string;
-    data: {
-      total?: number;
-      list?: department[];
-    };
+    data: { total?: number; list?: department[] };
   };
 
   type listMenuResp = {
     code: number;
     msg: string;
-    data: {
-      total?: number;
-      list?: menu[];
-    };
+    data: { total?: number; list?: menu[] };
   };
 
   type listResp = {
     code: number;
     msg: string;
-    data: {
-      total?: number;
-      list?: Record<string, any>[];
-    };
+    data: { total?: number; list?: Record<string, any>[] };
   };
 
   type listRoleResp = {
     code: number;
     msg: string;
-    data: {
-      total?: number;
-      list?: role[];
-    };
+    data: { total?: number; list?: role[] };
   };
 
   type listUserResp = {
     code: number;
     msg: string;
-    data: {
-      total?: number;
-      list?: user[];
-    };
+    data: { total?: number; list?: user[] };
   };
 
   type login = {
     code: number;
     msg: string;
-    data: {
-      token?: string;
-      type?: string;
-    };
+    data: { token?: string; type?: string };
   };
 
   type menu = {
@@ -143,7 +124,7 @@ declare namespace API {
     /** 菜单名称 */
     name?: string;
     /** api接口 */
-    api?: string;
+    api?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; url?: string };
     /** 路由路径 */
     path?: string;
     /** 组件路径 */

@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { ProColumns, ProTable, ActionType } from '@ant-design/pro-components';
+import React, { useState, useRef, useContext } from 'react';
+import { ProColumns, ProTable, ActionType, ProProvider } from '@ant-design/pro-components';
 import { Button, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { deleteMenusId, getMenus } from '@/services/echo-admin/caidan';
 import MenuEditor from '@/pages/system/menu/components/editor';
+import { Text } from '@umijs/utils/compiled/cheerio/domelementtype/lib';
 
 export interface EnhancedMenuItem {
   title: string;
@@ -30,7 +31,8 @@ const Menu: React.FC = () => {
   const [currentRow, setCurrentRow] = useState<API.menu>();
   const [menu, setMenu] = useState<EnhancedMenuItem[]>([]);
   const actionRef = useRef<ActionType>();
-  const columns: ProColumns<API.menu>[] = [
+
+  const columns: ProColumns<API.menu, 'api'>[] = [
     {
       title: '菜单名称',
       dataIndex: 'name',
@@ -50,6 +52,7 @@ const Menu: React.FC = () => {
       title: 'API接口',
       dataIndex: 'api',
       ellipsis: true,
+      valueType: 'api',
     },
     {
       title: '排序',
@@ -136,72 +139,85 @@ const Menu: React.FC = () => {
       ],
     },
   ];
-
+  const values = useContext(ProProvider);
   return (
     <>
-      <ProTable<API.menu>
-        columns={columns}
-        actionRef={actionRef}
-        cardBordered
-        request={async () => {
-          const msg = await getMenus();
-          setMenu(fixMenuItemIcon(msg.data.list ?? []));
-          return {
-            data: msg.data.list ?? [],
-            total: msg.data.list?.length ?? 0,
-            success: true,
-          };
-        }}
-        editable={{
-          type: 'multiple',
-        }}
-        columnsState={{
-          persistenceKey: 'pro-table-singe-demos',
-          persistenceType: 'localStorage',
-          onChange(value) {
-            console.log('value: ', value);
+      <ProProvider.Provider
+        value={{
+          ...values,
+          valueTypeMap: {
+            api: {
+              render: (text) => {
+                return <>{text.url}</>;
+              },
+            },
           },
         }}
-        rowKey="id"
-        search={{
-          labelWidth: 'auto',
-          collapsed: false,
-        }}
-        options={{
-          setting: {
-            listsHeight: 400,
-          },
-        }}
-        dateFormatter="string"
-        headerTitle="菜单列表"
-        toolBarRender={() => [
-          <Button
-            key="button"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setCurrentRow({ type: 1 });
-              setShowModal(true);
-            }}
-            type="primary"
-          >
-            新建
-          </Button>,
-        ]}
-      />
-      <MenuEditor
-        modalVisit={showModal}
-        setModalVisit={(modalVisit: boolean) => {
-          setShowModal(modalVisit);
-          if (!modalVisit) {
-            setCurrentRow(undefined);
-          }
-        }}
-        menuValue={currentRow || {}}
-        menu={menu}
-        reload={() => {
-          actionRef.current?.reload();
-        }}
-      ></MenuEditor>
+      >
+        <ProTable<API.menu, Record<string, any>, 'api'>
+          columns={columns}
+          actionRef={actionRef}
+          cardBordered
+          request={async () => {
+            const msg = await getMenus();
+            setMenu(fixMenuItemIcon(msg.data.list ?? []));
+            return {
+              data: msg.data.list ?? [],
+              total: msg.data.list?.length ?? 0,
+              success: true,
+            };
+          }}
+          editable={{
+            type: 'multiple',
+          }}
+          columnsState={{
+            persistenceKey: 'pro-table-singe-demos',
+            persistenceType: 'localStorage',
+            onChange(value) {
+              console.log('value: ', value);
+            },
+          }}
+          rowKey="id"
+          search={{
+            labelWidth: 'auto',
+            collapsed: false,
+          }}
+          options={{
+            setting: {
+              listsHeight: 400,
+            },
+          }}
+          dateFormatter="string"
+          headerTitle="菜单列表"
+          toolBarRender={() => [
+            <Button
+              key="button"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setCurrentRow({ type: 1 });
+                setShowModal(true);
+              }}
+              type="primary"
+            >
+              新建
+            </Button>,
+          ]}
+        />
+        <MenuEditor
+          modalVisit={showModal}
+          setModalVisit={(modalVisit: boolean) => {
+            setShowModal(modalVisit);
+            if (!modalVisit) {
+              setCurrentRow(undefined);
+            }
+          }}
+          menuValue={currentRow || {}}
+          menu={menu}
+          reload={() => {
+            actionRef.current?.reload();
+          }}
+        ></MenuEditor>
+      </ProProvider.Provider>
     </>
   );
 };

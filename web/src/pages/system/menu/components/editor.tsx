@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { message } from 'antd';
+import { message, Form } from 'antd';
 import {
   ProForm,
   ModalForm,
@@ -16,6 +16,7 @@ import { getRoles } from '@/services/echo-admin/jiaose';
 import IconSelector from './iconSelector/index';
 import * as AntdIcons from '@ant-design/icons';
 import { type EnhancedMenuItem } from '@/pages/system/menu';
+import APIInput from '@/pages/system/menu/components/api';
 
 type Props = {
   modalVisit: boolean;
@@ -43,11 +44,6 @@ function createIcon(icon: string | any): React.ReactNode | string {
   return '';
 }
 
-interface TypeOption {
-  label: string;
-  value: number;
-}
-
 const typeOption = [
   {
     label: '目录',
@@ -70,26 +66,6 @@ const MenuEditor: React.FC<Props> = (props) => {
   const [menuTypeId, setMenuTypeId] = useState<number>(menuValue.type || 1);
   const [iconSelectorOpen, setIconSelectorOpen] = useState<boolean>(false);
   const [title, setTitle] = useState<string>('新建菜单'); // 初始值设置为 '新建菜单'
-  // const { modalVisit, setModalVisit, menu, menuValue } = props;
-  // const restFormRef = useRef<ProFormInstance>();
-  // const [menuIconName, setMenuIconName] = useState<any>();
-  // const [menuTypeId, setMenuTypeId] = useState<number>(1);
-  // const [iconSelectorOpen, setIconSelectorOpen] = useState<boolean>(false);
-  // const [title, setTitle] = useState<string>('新建菜单');
-  // const [typeOption, setTypeOption] = useState<TypeOption[]>([
-  //   {
-  //     label: '目录',
-  //     value: 1,
-  //   },
-  //   {
-  //     label: '菜单',
-  //     value: 2,
-  //   },
-  //   {
-  //     label: '按钮',
-  //     value: 3,
-  //   },
-  // ]);
 
   useEffect(() => {
     restFormRef.current?.resetFields();
@@ -197,30 +173,6 @@ const MenuEditor: React.FC<Props> = (props) => {
             placeholder="请填写菜单名称"
             rules={[{ required: true, message: '菜单名称不能为空' }]}
           />
-          <ProFormText
-            name="rule"
-            width="md"
-            label="接口规则"
-            placeholder="后端api地址"
-            rules={[{ required: true, message: '接口规则不能为空' }]}
-          />
-          <ProFormText
-            name="path"
-            label="路由路径"
-            width="md"
-            hidden={menuTypeId === 3}
-            placeholder="路由中的path值"
-            rules={[{ required: true, message: '路由地址不能为空' }]}
-          />
-          <ProFormText
-            name="redirect"
-            hidden={menuTypeId === 3}
-            label="重定向"
-            width="md"
-            placeholder="请输入路由重定向"
-          />
-          {/*</ProForm.Group>*/}
-          {/*<ProForm.Group>*/}
           <ProFormSelect
             name="icon"
             label="菜单图标"
@@ -241,6 +193,25 @@ const MenuEditor: React.FC<Props> = (props) => {
               },
             ]}
           />
+
+          <Form.Item name="api" rules={[{ required: true, message: '接口规则不能为空' }]}>
+            <APIInput />
+          </Form.Item>
+          <ProFormText
+            name="path"
+            label="路由路径"
+            width="md"
+            hidden={menuTypeId === 3}
+            placeholder="路由中的path值"
+            rules={[{ required: true, message: '路由地址不能为空' }]}
+          />
+          <ProFormText
+            name="redirect"
+            hidden={menuTypeId === 3}
+            label="重定向"
+            width="md"
+            placeholder="请输入路由重定向"
+          />
           <ProFormText
             name="component"
             hidden={menuTypeId === 3}
@@ -248,7 +219,6 @@ const MenuEditor: React.FC<Props> = (props) => {
             width="md"
             placeholder="请输入组件路径"
           />
-
           <ProFormText
             hidden={menuTypeId === 3}
             name="url"
@@ -273,7 +243,6 @@ const MenuEditor: React.FC<Props> = (props) => {
               });
             }}
           />
-
           <ProFormDigit
             name="sort"
             label="菜单排序"
@@ -299,7 +268,6 @@ const MenuEditor: React.FC<Props> = (props) => {
               },
             ]}
           />
-
           <ProFormRadio.Group
             radioType="button"
             width="sm"

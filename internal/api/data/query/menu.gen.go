@@ -37,7 +37,8 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	_menu.Icon = field.NewString(tableName, "icon")
 	_menu.Type = field.NewInt(tableName, "type")
 	_menu.Remark = field.NewString(tableName, "remark")
-	_menu.API = field.NewString(tableName, "api")
+	_menu.RequestURL = field.NewString(tableName, "request_url")
+	_menu.RequestMethod = field.NewString(tableName, "request_method")
 	_menu.Link = field.NewString(tableName, "link")
 	_menu.Identifier = field.NewInt(tableName, "identifier")
 	_menu.Sort = field.NewInt(tableName, "sort")
@@ -105,28 +106,29 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 type menu struct {
 	menuDo
 
-	ALL        field.Asterisk
-	ID         field.Uint
-	Name       field.String
-	Path       field.String
-	Component  field.String
-	Redirect   field.String
-	Layout     field.Int
-	Icon       field.String
-	Type       field.Int
-	Remark     field.String
-	API        field.String
-	Link       field.String
-	Identifier field.Int
-	Sort       field.Int
-	Hidden     field.Int
-	Cache      field.Int
-	Fixed      field.Int
-	Pid        field.Int64
-	CreatedAt  field.Time
-	UpdatedAt  field.Time
-	DeletedAt  field.Field
-	Children   menuHasManyChildren
+	ALL           field.Asterisk
+	ID            field.Uint
+	Name          field.String
+	Path          field.String
+	Component     field.String
+	Redirect      field.String
+	Layout        field.Int
+	Icon          field.String
+	Type          field.Int
+	Remark        field.String
+	RequestURL    field.String
+	RequestMethod field.String
+	Link          field.String
+	Identifier    field.Int
+	Sort          field.Int
+	Hidden        field.Int
+	Cache         field.Int
+	Fixed         field.Int
+	Pid           field.Int64
+	CreatedAt     field.Time
+	UpdatedAt     field.Time
+	DeletedAt     field.Field
+	Children      menuHasManyChildren
 
 	RoleMenus menuManyToManyRoleMenus
 
@@ -154,7 +156,8 @@ func (m *menu) updateTableName(table string) *menu {
 	m.Icon = field.NewString(table, "icon")
 	m.Type = field.NewInt(table, "type")
 	m.Remark = field.NewString(table, "remark")
-	m.API = field.NewString(table, "api")
+	m.RequestURL = field.NewString(table, "request_url")
+	m.RequestMethod = field.NewString(table, "request_method")
 	m.Link = field.NewString(table, "link")
 	m.Identifier = field.NewInt(table, "identifier")
 	m.Sort = field.NewInt(table, "sort")
@@ -181,7 +184,7 @@ func (m *menu) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *menu) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 22)
+	m.fieldMap = make(map[string]field.Expr, 23)
 	m.fieldMap["id"] = m.ID
 	m.fieldMap["name"] = m.Name
 	m.fieldMap["path"] = m.Path
@@ -191,7 +194,8 @@ func (m *menu) fillFieldMap() {
 	m.fieldMap["icon"] = m.Icon
 	m.fieldMap["type"] = m.Type
 	m.fieldMap["remark"] = m.Remark
-	m.fieldMap["api"] = m.API
+	m.fieldMap["request_url"] = m.RequestURL
+	m.fieldMap["request_method"] = m.RequestMethod
 	m.fieldMap["link"] = m.Link
 	m.fieldMap["identifier"] = m.Identifier
 	m.fieldMap["sort"] = m.Sort

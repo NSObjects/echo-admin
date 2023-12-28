@@ -16,6 +16,15 @@ import (
 	"gorm.io/gen/field"
 )
 
+type Method string
+
+const (
+	Delete Method = "DELETE"
+	Get    Method = "GET"
+	Post   Method = "POST"
+	Put    Method = "PUT"
+)
+
 // Menu 菜单
 // Type: 1:目录 2:菜单 3:按钮
 // API: 接口规则
@@ -33,7 +42,7 @@ import (
 // Remark: 备注
 type Menu struct {
 	Type      model.MenuType `json:"type" copier:"type"`
-	API       *string        `json:"api,omitempty"`
+	API       *ChildAPI      `json:"api" query:"api" form:"api"`
 	Cache     *int           `json:"cache,omitempty"`
 	Component *string        `json:"component,omitempty"`
 	Fixed     *int           `json:"fixed,omitempty"`
@@ -53,22 +62,16 @@ type Menu struct {
 	Routes    []Menu         `json:"routes"`
 }
 
+// ChildAPI api接口
+type ChildAPI struct {
+	Method Method `json:"method" query:"method" form:"method"`
+	URL    string `json:"url" query:"url" form:"url"`
+}
+
 type RoleMenu struct {
 	MenuID  []int64 `json:"menu_id" form:"menu_id" query:"menu_id"`
 	Creator string  `json:"creator" form:"creator" query:"creator"`
 }
-
-//type MenuResp struct {
-//	ID        uint         `json:"id"`
-//	Name      string       `json:"name"`
-//	Path      string       `json:"path"`
-//	Component string       `json:"component"`
-//	Redirect  string       `json:"redirect"`
-//	Pid       []int64      `json:"pid,omitempty"`
-//	Routes    []model.Menu `json:"routes"`
-//	CreatedAt time.Time    `json:"created_at" `
-//	UpdatedAt time.Time    `json:"updated_at" `
-//}
 
 // MenuResp 菜单
 // API api接口
@@ -93,7 +96,7 @@ type RoleMenu struct {
 // Status 状态 1=启用 2=禁用
 // Type 类型 1=目录 2=菜单 3=按钮
 type MenuResp struct {
-	API       string         `json:"api"`
+	API       ChildAPI       `json:"api,omitempty"`
 	Cache     int            `json:"cache,omitempty"`
 	Children  []MenuResp     `json:"children,omitempty"`
 	Component string         `json:"component"`
@@ -120,7 +123,7 @@ type MenuResp struct {
 func MentModel(v *model.Menu) MenuResp {
 
 	rp := MenuResp{
-		API:       v.API,
+		API:       ChildAPI{Method: Method(v.RequestMethod), URL: v.RequestURL},
 		Cache:     v.Cache,
 		Children:  MenuModelResp(v.Children),
 		Component: v.Component,
@@ -193,8 +196,9 @@ func (m Menu) Data() ([]field.Expr, model.Menu) {
 		menu.Type = m.Type
 	}
 	if m.API != nil {
-		filed = append(filed, query.Q.Menu.API)
-		menu.API = *m.API
+		filed = append(filed, query.Q.Menu.RequestMethod, query.Q.Menu.RequestURL)
+		menu.RequestMethod = string(m.API.Method)
+		menu.RequestURL = m.API.URL
 	}
 	if m.Link != nil {
 		filed = append(filed, query.Q.Menu.Link)
