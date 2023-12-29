@@ -25,10 +25,10 @@ func NewCasbin(db *gorm.DB) *casbin.Enforcer {
 
 	m, err := model.NewModelFromString(`
 [request_definition]
-r = sub, obj, act
+r = sub, menu,obj, act
 
 [policy_definition]
-p = sub, obj, act
+p = sub,menu, obj, act
 
 [role_definition]
 g = _, _
@@ -37,7 +37,7 @@ g = _, _
 e = some(where (p.eft == allow))
 
 [matchers]
-m = g(r.sub, p.sub) && keyMatch2(r.obj, p.obj) && r.act == p.act || r.sub == "root"
+m = g(r.sub, p.sub) && g(r.menu, p.menu) && keyMatch2(r.obj, p.obj) && r.act == p.act || r.sub == "root"
 `)
 	if err != nil {
 		panic(err)

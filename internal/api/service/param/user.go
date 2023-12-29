@@ -30,19 +30,19 @@ type UserParam struct {
 }
 
 type UserResponse struct {
-	ID           uint   `json:"id"`
-	Name         string `json:"name"`
-	Phone        string `json:"phone"`
-	Status       int    `json:"status"`
-	Account      string `json:"account"`
-	DepartmentID uint   `json:"department_id"`
-	RoleID       uint   `json:"role_id"`
-	Sex          int    `json:"sex"`
-	Posts        string `json:"posts"`
-	Email        string `json:"email"`
-	Avatar       string `json:"avatar"`
-	Password     string `json:"password"`
-	CreatedAt    string `json:"created_at"`
+	ID           uint         `json:"id"`
+	Name         string       `json:"name"`
+	Phone        string       `json:"phone"`
+	Status       int          `json:"status"`
+	Account      string       `json:"account"`
+	DepartmentID uint         `json:"department_id"`
+	RoleID       []model.Role `json:"role_id"`
+	Sex          int          `json:"sex"`
+	Posts        string       `json:"posts"`
+	Email        string       `json:"email"`
+	Avatar       string       `json:"avatar"`
+	Password     string       `json:"password"`
+	CreatedAt    string       `json:"created_at"`
 }
 
 type UserBody struct {
@@ -64,7 +64,7 @@ type UserBody struct {
 	// 岗位
 	Posts *string `json:"posts,omitempty"`
 	// 角色id
-	RoleID *uint `json:"role_id,omitempty"`
+	RoleID *[]uint `json:"role_id,omitempty"`
 	// 性别
 	Sex *int `json:"sex,omitempty"`
 	// 状态
@@ -98,10 +98,10 @@ func (u UserBody) Data() ([]field.Expr, model.User) {
 		user.Phone = *u.Phone
 	}
 
-	if u.RoleID != nil {
-		filed = append(filed, query.Q.User.RoleID)
-		user.RoleID = *u.RoleID
-	}
+	//if u.RoleID != nil {
+	//	filed = append(filed, query.Q.User.RoleID)
+	//	user.RoleID = *u.RoleID
+	//}
 
 	if u.DepartmentID != nil {
 		filed = append(filed, query.Q.User.DepartmentID)

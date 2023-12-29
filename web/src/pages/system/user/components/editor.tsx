@@ -52,7 +52,9 @@ const UserEditor: React.FC<Props> = (props) => {
       // password: props.values.password,
       account: props.values.account,
       avatar: props.values.avatar,
-      role_id: props.values.role_id,
+      role_id: props.values.role_id?.map((item: API.role) => {
+        return { label: item.name, value: item.id };
+      }),
       department_id: props.values.department_id,
       email: props.values.email,
       sex: props.values.sex,
@@ -122,6 +124,9 @@ const UserEditor: React.FC<Props> = (props) => {
             name="role_id"
             label="关联角色"
             width="md"
+            fieldProps={{
+              mode: 'multiple',
+            }}
             request={async () => {
               const res = await getRoles({ page: 0, count: 1000 });
               return (res.data.list ?? []).map((item: any) => {

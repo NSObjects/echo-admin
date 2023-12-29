@@ -14,7 +14,6 @@ import (
 	"strconv"
 
 	"github.com/NSObjects/echo-admin/internal/api/biz"
-	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/resp"
 	"github.com/labstack/echo/v4"
@@ -68,7 +67,7 @@ func (r *RoleController) Create(c echo.Context) error {
 
 func (r *RoleController) Update(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
-	var role model.Role
+	var role param.Role
 	if err := BindAndValidate(&role, c); err != nil {
 		return err
 	}

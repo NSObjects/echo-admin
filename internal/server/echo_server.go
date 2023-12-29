@@ -59,7 +59,7 @@ func errorHandler(err error, c echo.Context) {
 	}
 }
 
-func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
+func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 	s.server.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
@@ -83,7 +83,7 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 	s.server.Use(echojwt.WithConfig(config))
 	//s.server.Use(middleware.Recover())
 	s.server.Use(casbin_mw.MiddlewareWithConfig(casbin_mw.Config{
-		Enforcer: c,
+		Enforcer: enforce,
 		Skipper: func(c echo.Context) bool {
 			return c.Path() == "/api/login/account"
 		},
@@ -105,6 +105,10 @@ func (s *EchoServer) loadMiddleware(c *casbin.Enforcer) {
 			}
 
 			return user.Name, nil
+		},
+		EnforceHandler: func(c echo.Context, user string) (bool, error) {
+
+			return enforce.Enforce(user, "14", c.Request().URL.Path, c.Request().Method)
 		},
 	}))
 

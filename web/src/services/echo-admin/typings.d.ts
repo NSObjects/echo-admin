@@ -76,6 +76,8 @@ declare namespace API {
     create_start?: number;
     /** 创建结束时间 */
     create_end?: number;
+    /** 部门id */
+    department_id?: number;
   };
 
   type listDepartmentsResp = {
@@ -116,19 +118,19 @@ declare namespace API {
 
   type menu = {
     /** 父菜单id */
-    pid?: number;
+    pid: number;
     /** 菜单id */
     id?: number;
     /** 类型 1=目录 2=菜单 3=按钮 */
-    type?: 1 | 2 | 3;
+    type: 1 | 2 | 3;
     /** 菜单名称 */
-    name?: string;
+    name: string;
     /** api接口 */
-    api?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; url?: string };
+    api: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; url?: string };
     /** 路由路径 */
-    path?: string;
+    path: string;
     /** 组件路径 */
-    component?: string;
+    component: string;
     layout?: number;
     /** 重定向 */
     redirect?: string;
@@ -262,7 +264,7 @@ declare namespace API {
     /** 头像 */
     avatar?: string;
     /** 角色id */
-    role_id?: number;
+    role_id?: role[];
     /** 部门Id */
     department_id?: number;
     id?: number;

@@ -40,7 +40,7 @@ type RoleResp struct {
 // Status 状态 1=启用 其他禁用
 type Role struct {
 	Mark   *string `json:"mark,omitempty"`
-	Menus  []int64 `json:"menus,omitempty"`
+	Menus  []uint  `json:"menus,omitempty"`
 	Name   *string `json:"name,omitempty"`
 	Order  *int    `json:"order,omitempty"`
 	Status *int    `json:"status,omitempty"`
@@ -70,12 +70,13 @@ func (r Role) Data() ([]field.Expr, model.Role) {
 		value.Status = *r.Status
 	}
 
-	if r.Menus != nil && len(r.Menus) > 0 {
-		for _, m := range r.Menus {
-			value.Menus = append(value.Menus, model.Menu{ID: uint(m)})
-		}
-		filed = append(filed, query.Role.Menus.Field())
-	}
+	//if r.Menus != nil && len(r.Menus) > 0 {
+	//	for _, m := range r.Menus {
+	//		value.Menus = append(value.Menus, model.Menu{ID: uint(m)})
+	//	}
+	//
+	//	filed = append(filed, query.Role.Menus.Field())
+	//}
 
 	return filed, value
 }
