@@ -126,7 +126,7 @@ declare namespace API {
     /** 菜单名称 */
     name: string;
     /** api接口 */
-    api: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; url?: string };
+    api?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; url?: string };
     /** 路由路径 */
     path: string;
     /** 组件路径 */

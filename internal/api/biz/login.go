@@ -48,7 +48,7 @@ func (h *LoginHandler) Login(ctx context.Context, account, password string) (res
 	claims := &data.JwtCustomClaims{
 		Name:  byAccount.Name,
 		ID:    int64(byAccount.ID),
-		Admin: true,
+		Admin: byAccount.Account == "admin",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * time.Duration(h.cfg.JWT.Expire))),
 		},

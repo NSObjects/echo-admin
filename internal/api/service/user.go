@@ -30,6 +30,7 @@ func (u *userController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc)
 	s.PUT("/users/:id", u.updateUser).Name = "更新用户"
 	s.GET("/users/:id", u.getUserDetail).Name = "获取某个用户信息"
 	s.GET("/users/current", u.current).Name = "获取当前用户信息"
+	s.GET("/user/menus", u.listUserMenu).Name = "获取当前用户的菜单"
 }
 
 func NewUserController(u *biz.UserHandler) RegisterRouter {
@@ -115,4 +116,23 @@ func (u *userController) deleteUser(c echo.Context) (err error) {
 	}
 
 	return resp.OperateSuccess(c)
+}
+
+func (u *userController) listUserMenu(c echo.Context) (err error) {
+	token := c.Get("user").(*jwt.Token)
+	if token == nil {
+		return errors.WithCode(code.ErrMissingHeader, "token is nil")
+	}
+
+	user := token.Claims.(*data.JwtCustomClaims)
+	if user == nil {
+		return errors.WithCode(code.ErrMissingHeader, "token is nil")
+	}
+
+	menu, total, err := u.user.ListUserMenu(c.Request().Context(), user.ID)
+	if err != nil {
+		return err
+	}
+
+	return resp.ListDataResponse(menu, int64(total), c)
 }

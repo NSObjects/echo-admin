@@ -1,23 +1,22 @@
 import Footer from '@/components/Footer';
-import {Question, SelectLang} from '@/components/RightContent';
-import {LinkOutlined} from '@ant-design/icons';
-import type {Settings as LayoutSettings} from '@ant-design/pro-components';
-import {SettingDrawer} from '@ant-design/pro-components';
-import type {RunTimeLayoutConfig} from '@umijs/max';
-import {history, Link} from '@umijs/max';
+import { Question, SelectLang } from '@/components/RightContent';
+import { LinkOutlined } from '@ant-design/icons';
+import type { Settings as LayoutSettings } from '@ant-design/pro-components';
+import { SettingDrawer } from '@ant-design/pro-components';
+import type { RunTimeLayoutConfig } from '@umijs/max';
+import { history, Link } from '@umijs/max';
 import defaultSettings from '../config/defaultSettings';
-import {errorConfig} from './requestErrorConfig';
+import { errorConfig } from './requestErrorConfig';
 
 import React from 'react';
-import {AvatarDropdown, AvatarName} from './components/RightContent/AvatarDropdown';
-
+import { AvatarDropdown, AvatarName } from './components/RightContent/AvatarDropdown';
 
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
-import fixMenuItemIcon from "@/fixMenuItemIcon";
+import fixMenuItemIcon from '@/fixMenuItemIcon';
 
-import {getUsersCurrent} from "@/services/echo-admin/yonghu";
-import {getMenus} from "@/services/echo-admin/caidan";
+import { getUserMenus, getUsersCurrent } from '@/services/echo-admin/yonghu';
+import { getMenus } from '@/services/echo-admin/caidan';
 
 /**
  * @see  https://umijs.org/zh-CN/plugins/plugin-initial-state
@@ -57,7 +56,6 @@ export async function getInitialState(): Promise<{
 
 // ProLayout 支持的api https://procomponents.ant.design/components/layout
 export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) => {
-
   return {
     actionsRender: () => [<Question key="doc" />, <SelectLang key="SelectLang" />],
     avatarProps: {
@@ -109,15 +107,15 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
       : [],
     menuHeaderRender: undefined,
     menu: {
-       // locale: false,
+      // locale: false,
       // 每当 initialState?.currentUser?.userid 发生修改时重新执行 request
       params: {
         userId: initialState?.currentUser,
       },
       request: async () => {
-        const menus = await getMenus();
+        const menus = await getUserMenus();
 
-        return  fixMenuItemIcon(menus.data.list ?? [])
+        return fixMenuItemIcon(menus.data.list ?? []);
       },
     },
     // 自定义 403 页面

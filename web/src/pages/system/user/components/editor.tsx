@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 import { message } from 'antd';
 import {
@@ -42,6 +42,15 @@ const departmentItemTree = (menus: DataNode[]): EnhancedMenuItem[] =>
 const UserEditor: React.FC<Props> = (props) => {
   const { modalVisit, setModalVisit } = props;
   const restFormRef = useRef<ProFormInstance>();
+  const [title, setTitle] = useState('新建用户');
+  useEffect(() => {
+    if (props.values.id) {
+      setTitle('编辑用户');
+    } else {
+      setTitle('新建用户');
+    }
+  }, [props.values]);
+
   useEffect(() => {
     restFormRef.current?.resetFields();
     restFormRef.current?.setFieldsValue({
@@ -65,7 +74,7 @@ const UserEditor: React.FC<Props> = (props) => {
     <>
       <ModalForm
         // @ts-ignore
-        title="新建用户"
+        title={title}
         formRef={restFormRef}
         open={modalVisit}
         onFinish={async (fieldsValue: API.user) => {
@@ -109,7 +118,12 @@ const UserEditor: React.FC<Props> = (props) => {
             name="password"
             label="账户密码"
             placeholder="请输入"
-            rules={[{ required: props.values.id !== undefined, message: '请输入密码' }]}
+            rules={[
+              {
+                required: title !== '编辑用户',
+                message: '请输入密码',
+              },
+            ]}
           />
         </ProForm.Group>
         <ProForm.Group>

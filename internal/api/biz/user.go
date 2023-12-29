@@ -7,13 +7,18 @@
 package biz
 
 import (
-	"github.com/NSObjects/echo-admin/internal/api/data/model"
+	"context"
 	"time"
 
-	"gorm.io/gen"
-
+	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
+	"github.com/NSObjects/echo-admin/internal/code"
+	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/marmotedu/errors"
+	"github.com/samber/lo"
+	"gorm.io/gen"
+	"gorm.io/gen/field"
 )
 
 type UserHandler struct {
@@ -163,4 +168,72 @@ func (h *UserHandler) GetUserDetail(id int64) (param.UserResponse, error) {
 		DepartmentID: user.DepartmentID,
 		ID:           user.ID,
 	}, nil
+}
+
+func (h *UserHandler) ListUserMenu(ctx context.Context, id int64) ([]param.MenuResp, int, error) {
+	user, err := h.q.User.Preload(h.q.User.Role).Preload(h.q.User.Role.Menus).GetById(int(id))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var menuIds []uint
+
+	for _, v := range user.Role {
+		//find, err := h.q.Role.Where(h.q.Role.ID.Eq(v.)).Find()
+		//if err != nil {
+		//	return nil, 0, err
+		//}
+		for _, menu := range v.Menus {
+			menuIds = append(menuIds, menu.ID)
+		}
+	}
+	menuIds = lo.Union(menuIds)
+	condition := []gen.Condition{h.q.Menu.Pid.IsNull(), h.q.Menu.Layout.IsNull()}
+	if len(menuIds) > 0 {
+		condition = append(condition, h.q.Menu.ID.In(menuIds...))
+	}
+
+	menus, err := h.q.Menu.Where(condition...).
+		Preload(field.Associations).WithContext(ctx).Find()
+
+	if err != nil {
+		return nil, 0, errors.WrapC(err, code.ErrDatabase, "查询菜单列表失败")
+	}
+	var respMenu []*model.Menu
+	for _, td := range menus {
+		td.Children, err = h.GetAllMenu(td.ID, menuIds)
+		if err != nil {
+			log.Error(err)
+		}
+		respMenu = append(respMenu, td)
+	}
+
+	return param.MenuModelResp(respMenu), len(menus), nil
+}
+
+func (h *UserHandler) GetAllMenu(parentID uint, menuID []uint) ([]*model.Menu, error) {
+	if parentID == 0 {
+		return nil, nil
+	}
+
+	condition := []gen.Condition{h.q.Menu.Pid.Eq(int64(parentID))}
+	if len(menuID) > 0 {
+		condition = append(condition, h.q.Menu.ID.In(menuID...))
+	}
+	menus, err := h.q.Menu.Where(condition...).Find()
+	if err != nil {
+		return nil, err
+	}
+	for i, menu := range menus {
+
+		children, err := h.GetAllMenu(menu.ID, menuID)
+		if err != nil {
+			return nil, err
+		}
+		menus[i].Children = children
+	}
+
+	return lo.Map(menus, func(item *model.Menu, index int) *model.Menu {
+		return item
+	}), nil
 }

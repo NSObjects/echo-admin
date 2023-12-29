@@ -8,6 +8,9 @@ package server
 
 import (
 	"context"
+	"github.com/NSObjects/echo-admin/internal/api/data/query"
+	"github.com/samber/lo"
+	"github.com/spf13/cast"
 
 	"github.com/NSObjects/echo-admin/internal/api/data"
 	"github.com/NSObjects/echo-admin/internal/code"
@@ -85,7 +88,12 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 	s.server.Use(casbin_mw.MiddlewareWithConfig(casbin_mw.Config{
 		Enforcer: enforce,
 		Skipper: func(c echo.Context) bool {
-			return c.Path() == "/api/login/account"
+			skipper := []string{
+				"/api/users/current",
+				"/api/login/account",
+				"/api/user/menus",
+				"/api/login/out"}
+			return lo.Contains(skipper, c.Path())
 		},
 		ErrorHandler: func(c echo.Context, internal error, proposedStatus int) error {
 			return errors.WrapC(internal, code.ErrPermissionDenied, "权限不足")
@@ -104,11 +112,30 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 				return "root", nil
 			}
 
-			return user.Name, nil
+			return cast.ToString(user.ID), nil
 		},
 		EnforceHandler: func(c echo.Context, user string) (bool, error) {
+			if user == "root" {
+				return enforce.Enforce(user, "", c.Request().URL.Path, c.Request().Method)
+			}
 
-			return enforce.Enforce(user, "14", c.Request().URL.Path, c.Request().Method)
+			first, err := query.User.WithContext(context.Background()).
+				Preload(query.User.Role).
+				Where(query.User.ID.Eq(cast.ToUint(user))).First()
+			if err != nil {
+				return false, err
+			}
+			for _, v := range first.Role {
+				allow, err := enforce.Enforce(user, cast.ToString(v.ID), c.Request().URL.Path, c.Request().Method)
+				if err != nil {
+					return false, err
+				}
+				if allow {
+					return true, nil
+				}
+			}
+
+			return false, nil
 		},
 	}))
 
