@@ -4,7 +4,7 @@ import { request } from '@umijs/max';
 
 /** api路径 GET /api/api */
 export async function getApi(options?: { [key: string]: any }) {
-  return request<{ method?: string; path?: string; name?: string }[]>('/api/api', {
+  return request<API.apiResp>('/api/api', {
     method: 'GET',
     ...(options || {}),
   });

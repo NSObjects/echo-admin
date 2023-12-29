@@ -37,9 +37,9 @@ const APIInput: React.FC<Props> = (props) => {
 
   return (
     <div>
-      <p>
-        <span style={{ color: 'red' }}>＊</span> 接口规则
-      </p>
+      {/*<p>*/}
+      {/*  <span style={{ color: 'red' }}>＊</span> 接口规则*/}
+      {/*</p>*/}
       <Space.Compact style={{ width: '328px' }}>
         <Select
           style={{ width: '120px' }}

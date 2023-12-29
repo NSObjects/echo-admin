@@ -92,7 +92,8 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 				"/api/users/current",
 				"/api/login/account",
 				"/api/user/menus",
-				"/api/login/out"}
+				"/api/login/out",
+				"/api/api"}
 			return lo.Contains(skipper, c.Path())
 		},
 		ErrorHandler: func(c echo.Context, internal error, proposedStatus int) error {
@@ -155,7 +156,7 @@ func (s *EchoServer) registerRouter() {
 		v.RegisterRouter(g)
 	}
 	g.GET("/api", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, s.server.Routes())
+		return resp.ListDataResponse(s.server.Routes(), int64(len(s.server.Routes())), c)
 	})
 }
 

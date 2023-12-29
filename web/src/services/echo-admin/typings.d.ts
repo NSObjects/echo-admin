@@ -5,6 +5,18 @@ declare namespace API {
     type: string;
   };
 
+  type api = {
+    method: string;
+    path: string;
+    name: string;
+  };
+
+  type apiResp = {
+    code: number;
+    msg: string;
+    data: { total?: number; list: api[] };
+  };
+
   type deleteDepartmentsIdParams = {
     id: number;
   };
