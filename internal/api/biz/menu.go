@@ -21,7 +21,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/marmotedu/errors"
 	"github.com/samber/lo"
-	"gorm.io/gen/field"
 )
 
 type MenuHandler struct {
@@ -52,23 +51,33 @@ func (m *MenuHandler) CreateMenu(ctx context.Context, menu param.Menu) error {
 	return nil
 }
 
-func (m *MenuHandler) ListMenu(ctx context.Context, q param.APIQuery) ([]param.MenuResp, int64, error) {
+func (m *MenuHandler) ListMenu(ctx context.Context, q param.MenuParam) ([]param.MenuResp, int64, error) {
+	condition := q.Condition()
+	needChild := false
+	countCondition := condition
+	countCondition = append(countCondition, m.q.Menu.Pid.IsNotNull())
+	if len(condition) == 0 {
+		condition = append(condition, m.q.Menu.Pid.IsNull(), m.q.Menu.Layout.IsNull())
+		needChild = true
+	}
+
 	menus, err := m.q.Menu.Offset(q.Offset()).
-		Limit(q.Limit()).Where(m.q.Menu.Pid.IsNull(), m.q.Menu.Layout.IsNull()).
-		Preload(field.Associations).WithContext(ctx).Find()
+		Limit(q.Limit()).Where(condition...).WithContext(ctx).Find()
 
 	if err != nil {
 		return nil, 0, errors.WrapC(err, code.ErrDatabase, "查询菜单列表失败")
 	}
 
-	for _, td := range menus {
-		td.Children, err = m.GetAllMenu(td.ID)
-		if err != nil {
-			log.Error(err)
+	if needChild {
+		for _, td := range menus {
+			td.Children, err = m.GetAllMenu(td.ID)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 	}
 
-	total, err := m.q.Menu.Where(m.q.Menu.Pid.IsNotNull()).WithContext(ctx).Count()
+	total, err := m.q.Menu.Where(countCondition...).WithContext(ctx).Count()
 	if err != nil {
 		return nil, 0, err
 	}

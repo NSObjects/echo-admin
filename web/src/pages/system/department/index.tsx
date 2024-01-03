@@ -12,12 +12,12 @@ const Department: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
   const actionRef = useRef<ActionType>();
   const [currentRow, setCurrentRow] = useState<API.department>();
+
   const columns: ProColumns<API.department>[] = [
     {
       title: '部门名称',
       dataIndex: 'name',
       ellipsis: true,
-      tip: '标题过长会自动收缩',
     },
     {
       disable: true,
@@ -89,8 +89,6 @@ const Department: React.FC = () => {
                 message.error('删除失败');
               }
             });
-
-            console.log(record);
           }}
         >
           删除
@@ -105,7 +103,6 @@ const Department: React.FC = () => {
         columns={columns}
         actionRef={actionRef}
         cardBordered
-        // request={getUsers}
         request={async (p, sort, filter) => {
           console.log(sort, filter);
           const msg = await getDepartments({
@@ -123,7 +120,7 @@ const Department: React.FC = () => {
           type: 'multiple',
         }}
         columnsState={{
-          persistenceKey: 'pro-table-singe-demos',
+          persistenceKey: 'pro-table-deparment',
           persistenceType: 'localStorage',
           onChange(value) {
             console.log('value: ', value);
@@ -156,7 +153,7 @@ const Department: React.FC = () => {
           onChange: (page) => console.log(page),
         }}
         dateFormatter="string"
-        headerTitle="用户列表"
+        headerTitle="部门列表"
         toolBarRender={() => [
           <Button
             key="button"

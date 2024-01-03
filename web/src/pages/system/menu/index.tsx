@@ -1,5 +1,5 @@
-import React, { useState, useRef, useContext } from 'react';
-import { ProColumns, ProTable, ActionType, ProProvider } from '@ant-design/pro-components';
+import React, { useState, useRef } from 'react';
+import { ProColumns, ProTable, ActionType } from '@ant-design/pro-components';
 import { Button, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { deleteMenusId, getMenus } from '@/services/echo-admin/caidan';
@@ -31,7 +31,7 @@ const Menu: React.FC = () => {
   const [menu, setMenu] = useState<EnhancedMenuItem[]>([]);
   const actionRef = useRef<ActionType>();
 
-  const columns: ProColumns<API.menu, 'api'>[] = [
+  const columns: ProColumns<API.menu>[] = [
     {
       title: '菜单名称',
       dataIndex: 'name',
@@ -119,85 +119,83 @@ const Menu: React.FC = () => {
       ],
     },
   ];
-  const values = useContext(ProProvider);
   return (
     <>
-      <ProProvider.Provider
-        value={{
-          ...values,
-          valueTypeMap: {
-            api: {
-              render: (text) => {
-                return <>{text.url}</>;
-              },
-            },
+      <ProTable<API.menu, API.getMenusParams>
+        columns={columns}
+        actionRef={actionRef}
+        cardBordered
+        request={async (params, sort, filter) => {
+          console.log('filter', filter);
+          const msg = await getMenus({
+            page: params.current,
+            count: params.pageSize,
+            name: params.name,
+            type: params.type,
+            path: params.path,
+            component: params.component,
+          });
+          setMenu(fixMenuItemIcon(msg.data.list ?? []));
+          return {
+            data: msg.data.list ?? [],
+            total: msg.data.list?.length ?? 0,
+            success: true,
+          };
+        }}
+        editable={{
+          type: 'multiple',
+        }}
+        columnsState={{
+          persistenceKey: 'pro-table-menu',
+          persistenceType: 'localStorage',
+          onChange(value) {
+            console.log('value: ', value);
           },
         }}
-      >
-        <ProTable<API.menu, Record<string, any>, 'api'>
-          columns={columns}
-          actionRef={actionRef}
-          cardBordered
-          request={async () => {
-            const msg = await getMenus();
-            setMenu(fixMenuItemIcon(msg.data.list ?? []));
-            return {
-              data: msg.data.list ?? [],
-              total: msg.data.list?.length ?? 0,
-              success: true,
-            };
-          }}
-          editable={{
-            type: 'multiple',
-          }}
-          columnsState={{
-            persistenceKey: 'pro-table-singe-demos',
-            persistenceType: 'localStorage',
-            onChange(value) {
-              console.log('value: ', value);
-            },
-          }}
-          rowKey="id"
-          search={{
-            labelWidth: 'auto',
-            collapsed: false,
-          }}
-          options={{
-            setting: {
-              listsHeight: 400,
-            },
-          }}
-          dateFormatter="string"
-          headerTitle="菜单列表"
-          toolBarRender={() => [
-            <Button
-              key="button"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setCurrentRow({ type: 1 });
-                setShowModal(true);
-              }}
-              type="primary"
-            >
-              新建
-            </Button>,
-          ]}
-        />
-        <MenuEditor
-          modalVisit={showModal}
-          setModalVisit={(modalVisit: boolean) => {
-            setShowModal(modalVisit);
-            if (!modalVisit) {
-              setCurrentRow(undefined);
-            }
-          }}
-          menuValue={currentRow || {}}
-          menu={menu}
-          reload={() => {
-            actionRef.current?.reload();
-          }}
-        ></MenuEditor>
-      </ProProvider.Provider>
+        rowKey="id"
+        search={{
+          labelWidth: 'auto',
+          collapsed: false,
+        }}
+        options={{
+          setting: {
+            listsHeight: 400,
+          },
+        }}
+        pagination={{
+          pageSize: 10,
+          onChange: (page) => console.log(page),
+        }}
+        dateFormatter="string"
+        headerTitle="菜单列表"
+        toolBarRender={() => [
+          <Button
+            key="button"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setCurrentRow({ type: 1 });
+              setShowModal(true);
+            }}
+            type="primary"
+          >
+            新建
+          </Button>,
+        ]}
+      />
+      <MenuEditor
+        modalVisit={showModal}
+        setModalVisit={(modalVisit: boolean) => {
+          setShowModal(modalVisit);
+          if (!modalVisit) {
+            setCurrentRow(undefined);
+          }
+        }}
+        menuValue={currentRow || {}}
+        menu={menu}
+        reload={() => {
+          actionRef.current?.reload();
+        }}
+      ></MenuEditor>
     </>
   );
 };

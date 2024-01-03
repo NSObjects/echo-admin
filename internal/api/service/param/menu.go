@@ -14,6 +14,7 @@ import (
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/samber/lo"
+	"gorm.io/gen"
 	"gorm.io/gen/field"
 )
 
@@ -25,6 +26,32 @@ const (
 	Post   Method = "POST"
 	Put    Method = "PUT"
 )
+
+type MenuParam struct {
+	APIQuery
+	Component string `json:"component" query:"component" form:"component"`
+	Name      string `json:"name" query:"name" form:"name"`
+	Path      string `json:"path" query:"path" form:"path"`
+	Type      int    `json:"type" query:"type" form:"type"`
+}
+
+func (m MenuParam) Condition() []gen.Condition {
+	var condition []gen.Condition
+	if m.Name != "" {
+		condition = append(condition, query.Q.Menu.Name.Like("%"+m.Name+"%"))
+	}
+	if m.Path != "" {
+		condition = append(condition, query.Q.Menu.Path.Like("%"+m.Path+"%"))
+	}
+	if m.Component != "" {
+		condition = append(condition, query.Q.Menu.Component.Like("%"+m.Component+"%"))
+	}
+	if m.Type != 0 {
+		condition = append(condition, query.Q.Menu.Type.Eq(m.Type))
+	}
+
+	return condition
+}
 
 // Menu 菜单
 // Type: 1:目录 2:菜单 3:按钮

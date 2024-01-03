@@ -14,7 +14,7 @@ declare namespace API {
   type apiResp = {
     code: number;
     msg: string;
-    data: { total?: number; list: api[] };
+    data: { total?: number; list?: api[] };
   };
 
   type deleteDepartmentsIdParams = {
@@ -62,6 +62,15 @@ declare namespace API {
     count?: number;
     name?: string;
     status?: number;
+  };
+
+  type getMenusParams = {
+    page?: number;
+    count?: number;
+    name?: string;
+    path?: string;
+    component?: string;
+    type?: number;
   };
 
   type getRolesParams = {
@@ -134,7 +143,7 @@ declare namespace API {
     /** 菜单id */
     id?: number;
     /** 类型 1=目录 2=菜单 3=按钮 */
-    type: 1 | 2 | 3;
+    type?: 1 | 2 | 3;
     /** 菜单名称 */
     name?: string;
     /** api接口 */

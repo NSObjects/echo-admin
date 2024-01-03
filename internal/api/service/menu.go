@@ -48,7 +48,7 @@ func (m *MenuController) create(ctx echo.Context) (err error) {
 }
 
 func (m *MenuController) list(ctx echo.Context) error {
-	var q param.APIQuery
+	var q param.MenuParam
 
 	if err := BindAndValidate(&q, ctx); err != nil {
 		return err
