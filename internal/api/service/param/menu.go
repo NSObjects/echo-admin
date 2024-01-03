@@ -13,6 +13,7 @@ package param
 import (
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
+	"github.com/samber/lo"
 	"gorm.io/gen/field"
 )
 
@@ -42,7 +43,7 @@ const (
 // Remark: 备注
 type Menu struct {
 	Type      model.MenuType `json:"type" copier:"type"`
-	API       *ChildAPI      `json:"api" query:"api" form:"api"`
+	API       []ChildAPI     `json:"apis" query:"apis" form:"apis"`
 	Cache     *int           `json:"cache,omitempty"`
 	Component *string        `json:"component,omitempty"`
 	Fixed     *int           `json:"fixed,omitempty"`
@@ -66,6 +67,7 @@ type Menu struct {
 type ChildAPI struct {
 	Method Method `json:"method" query:"method" form:"method"`
 	URL    string `json:"url" query:"url" form:"url"`
+	Name   string `json:"name" form:"name" query:"name"`
 }
 
 type RoleMenu struct {
@@ -96,7 +98,7 @@ type RoleMenu struct {
 // Status 状态 1=启用 2=禁用
 // Type 类型 1=目录 2=菜单 3=按钮
 type MenuResp struct {
-	API       ChildAPI       `json:"api,omitempty"`
+	API       []ChildAPI     `json:"apis,omitempty"`
 	Cache     int            `json:"cache,omitempty"`
 	Children  []MenuResp     `json:"children,omitempty"`
 	Component string         `json:"component"`
@@ -110,7 +112,7 @@ type MenuResp struct {
 	Link      string         `json:"link,omitempty"`
 	Name      string         `json:"name"`
 	Path      string         `json:"path"`
-	PID       int64          `json:"pid"`
+	PID       *int64         `json:"pid"`
 	Redirect  string         `json:"redirect,omitempty"`
 	Remark    string         `json:"remark,omitempty"`
 	Role      []int64        `json:"role,omitempty"`
@@ -123,7 +125,13 @@ type MenuResp struct {
 func MentModel(v *model.Menu) MenuResp {
 
 	rp := MenuResp{
-		API:       ChildAPI{Method: Method(v.RequestMethod), URL: v.RequestURL},
+		API: lo.Map(v.API, func(item model.API, index int) ChildAPI {
+			return ChildAPI{
+				Method: Method(item.Method),
+				URL:    item.Path,
+				Name:   item.Name,
+			}
+		}),
 		Cache:     v.Cache,
 		Children:  MenuModelResp(v.Children),
 		Component: v.Component,
@@ -184,7 +192,7 @@ func (m Menu) Data() ([]field.Expr, model.Menu) {
 
 	if m.PID != nil {
 		filed = append(filed, query.Q.Menu.Pid)
-		menu.Pid = *m.PID
+		menu.Pid = m.PID
 	}
 
 	if m.Icon != nil {
@@ -196,9 +204,13 @@ func (m Menu) Data() ([]field.Expr, model.Menu) {
 		menu.Type = m.Type
 	}
 	if m.API != nil {
-		filed = append(filed, query.Q.Menu.RequestMethod, query.Q.Menu.RequestURL)
-		menu.RequestMethod = string(m.API.Method)
-		menu.RequestURL = m.API.URL
+		//filed = append(filed, query.Q.Menu.API.Field())
+		for _, v := range m.API {
+			menu.API = append(menu.API, model.API{
+				Path:   v.URL,
+				Method: string(v.Method),
+			})
+		}
 	}
 	if m.Link != nil {
 		filed = append(filed, query.Q.Menu.Link)

@@ -76,6 +76,13 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 		},
 		SigningKey: []byte(s.cfg.JWT.Secret),
 		Skipper: func(c echo.Context) bool {
+			//skipper := []string{
+			//	"/api/users/current",
+			//	"/api/login/account",
+			//	"/api/user/menus",
+			//	"/api/login/out",
+			//	"/api/api",
+			//	"/api/users"}
 			return c.Path() == "/api/login/account"
 		},
 		ErrorHandler: func(c echo.Context, err error) error {
@@ -100,7 +107,11 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 			return errors.WrapC(internal, code.ErrPermissionDenied, "权限不足")
 		},
 		UserGetter: func(c echo.Context) (string, error) {
-			token := c.Get("user").(*jwt.Token)
+			//return "root", nil
+			token, ok := c.Get("user").(*jwt.Token)
+			if !ok {
+				return "", errors.WrapC(errors.New("token is nil"), code.ErrSignatureInvalid, "JWT签名无效")
+			}
 			if token == nil {
 				return "", nil
 			}
@@ -116,8 +127,12 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 			return cast.ToString(user.ID), nil
 		},
 		EnforceHandler: func(c echo.Context, user string) (bool, error) {
+			//if user == "root" {
+			//	return enforce.Enforce(user, "", c.Request().URL.Path, c.Request().Method)
+			//}
+
 			if user == "root" {
-				return enforce.Enforce(user, "", c.Request().URL.Path, c.Request().Method)
+				return true, nil
 			}
 
 			first, err := query.User.WithContext(context.Background()).

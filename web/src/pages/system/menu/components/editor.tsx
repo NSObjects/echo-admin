@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { message, Space, Input, Select } from 'antd';
+import { message, Space } from 'antd';
 import {
   ProForm,
   ModalForm,
@@ -8,19 +8,16 @@ import {
   ProFormRadio,
   ProFormDigit,
   ProFormSelect,
-  ProFormGroup,
-  ProFormDependency,
   ProFormList,
 } from '@ant-design/pro-components';
 import { Modal } from 'antd';
 import { ProFormInstance } from '@ant-design/pro-form/lib';
 import { postMenus, putMenusId } from '@/services/echo-admin/caidan';
-import { getRoles } from '@/services/echo-admin/jiaose';
 import IconSelector from './iconSelector/index';
 import * as AntdIcons from '@ant-design/icons';
 import { type EnhancedMenuItem } from '@/pages/system/menu';
-import APIInput from '@/pages/system/menu/components/api';
 import { getApi } from '@/services/echo-admin/zhanghao';
+import { LabeledValue } from 'antd/es/select';
 
 const options = [
   {
@@ -50,11 +47,6 @@ type Props = {
 };
 
 const allIcons: Record<string, any> = AntdIcons;
-
-export function getIcon(name: string): React.ReactNode | string {
-  const icon = allIcons[name];
-  return icon || '';
-}
 
 function createIcon(icon: string | any): React.ReactNode | string {
   if (typeof icon === 'object') {
@@ -119,7 +111,7 @@ const MenuEditor: React.FC<Props> = (props) => {
         onFinish={async (fieldsValue: any) => {
           console.log(fieldsValue);
           const body = {
-            api: fieldsValue['api'],
+            apis: fieldsValue['apis'],
             cache: fieldsValue['cache'],
             component: fieldsValue['component'],
             fixed: fieldsValue['fixed'],
@@ -225,13 +217,7 @@ const MenuEditor: React.FC<Props> = (props) => {
             placeholder="路由中的path值"
             rules={[{ required: true, message: '路由地址不能为空' }]}
           />
-          {/*<ProFormText*/}
-          {/*  name="redirect"*/}
-          {/*  hidden={menuTypeId === 3}*/}
-          {/*  label="重定向"*/}
-          {/*  width="md"*/}
-          {/*  placeholder="请输入路由重定向"*/}
-          {/*/>*/}
+
           <ProFormText
             name="component"
             hidden={menuTypeId === 3}
@@ -255,34 +241,47 @@ const MenuEditor: React.FC<Props> = (props) => {
             fieldProps={{ precision: 0 }}
           />
         </ProForm.Group>
-        <ProFormList name="apis" label="相关接口">
-          <ProFormSelect
-            label="API快捷输入"
-            showSearch
-            fieldProps={{
-              labelInValue: true,
-            }}
-            debounceTime={300}
-            onChange={(value) => {
-              console.log(value);
-            }}
-            request={async ({ keyWords }) => {
-              let resp = await getApi();
-              let apis = resp.data.list;
-              if (keyWords) {
-                apis = apis.filter((item: API.api) => {
-                  return item.name.includes(keyWords) || item.path.includes(keyWords);
-                });
-              }
-              return apis.map((item: API.api) => {
-                return { label: item.name, value: item.path };
-              });
-            }}
-          />
-          <Space.Compact>
-            <ProFormSelect style={{ width: '120px' }} options={options} name="method" />
-            <ProFormText placeholder="后端api地址" name="url" />
-          </Space.Compact>
+        <ProFormList name="apis">
+          {(meta, index, action) => {
+            return (
+              <ProForm.Group>
+                <ProFormSelect
+                  showSearch
+                  // name="api"
+                  fieldProps={{
+                    labelInValue: true,
+                    placeholder: 'API快捷输入',
+                  }}
+                  onChange={(value: LabeledValue) => {
+                    console.log('onChange', value);
+                    let values = value?.value.toString().split('@');
+                    action.setCurrentRowData({
+                      name: value?.label,
+                      method: values[1],
+                      url: values[0],
+                    });
+                  }}
+                  request={async ({ keyWords }) => {
+                    let resp = await getApi();
+                    let apis = resp.data.list;
+                    if (keyWords) {
+                      apis = apis.filter((item: API.api) => {
+                        return item.name.includes(keyWords) || item.path.includes(keyWords);
+                      });
+                    }
+                    return apis.map((item: API.api) => {
+                      return { label: item.name, value: item.path + '@' + item.method };
+                    });
+                  }}
+                />
+                <Space.Compact>
+                  <ProFormSelect style={{ width: '120px' }} options={options} name="method" />
+                  <ProFormText placeholder="接口名称" name="name" />
+                  <ProFormText placeholder="后端api路径" name="url" />
+                </Space.Compact>
+              </ProForm.Group>
+            );
+          }}
         </ProFormList>
         <Modal
           width={600}

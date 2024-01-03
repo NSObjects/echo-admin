@@ -4,7 +4,6 @@ import { Button, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { deleteMenusId, getMenus } from '@/services/echo-admin/caidan';
 import MenuEditor from '@/pages/system/menu/components/editor';
-import { Text } from '@umijs/utils/compiled/cheerio/domelementtype/lib';
 
 export interface EnhancedMenuItem {
   title: string;
@@ -49,18 +48,6 @@ const Menu: React.FC = () => {
       ellipsis: true,
     },
     {
-      title: 'API接口',
-      dataIndex: 'api',
-      ellipsis: true,
-      valueType: 'api',
-    },
-    {
-      title: '排序',
-      dataIndex: 'sort',
-      ellipsis: true,
-    },
-    {
-      disable: true,
       title: '类型',
       dataIndex: 'type',
       filters: true,
@@ -75,21 +62,14 @@ const Menu: React.FC = () => {
         2: {
           text: '菜单',
           status: 'Default',
-          disabled: true,
         },
         3: {
           text: '按钮',
           status: 'Processing',
-          disabled: true,
         },
       },
     },
 
-    {
-      title: '显示状态',
-      dataIndex: 'status',
-      ellipsis: true,
-    },
     {
       title: '操作',
       valueType: 'option',

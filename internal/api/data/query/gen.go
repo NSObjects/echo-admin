@@ -17,6 +17,7 @@ import (
 
 var (
 	Q          = new(Query)
+	API        *aPI
 	Department *department
 	Menu       *menu
 	Role       *role
@@ -25,6 +26,7 @@ var (
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
+	API = &Q.API
 	Department = &Q.Department
 	Menu = &Q.Menu
 	Role = &Q.Role
@@ -34,6 +36,7 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
 		db:         db,
+		API:        newAPI(db, opts...),
 		Department: newDepartment(db, opts...),
 		Menu:       newMenu(db, opts...),
 		Role:       newRole(db, opts...),
@@ -44,6 +47,7 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 type Query struct {
 	db *gorm.DB
 
+	API        aPI
 	Department department
 	Menu       menu
 	Role       role
@@ -55,6 +59,7 @@ func (q *Query) Available() bool { return q.db != nil }
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
 		db:         db,
+		API:        q.API.clone(db),
 		Department: q.Department.clone(db),
 		Menu:       q.Menu.clone(db),
 		Role:       q.Role.clone(db),
@@ -73,6 +78,7 @@ func (q *Query) WriteDB() *Query {
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
 		db:         db,
+		API:        q.API.replaceDB(db),
 		Department: q.Department.replaceDB(db),
 		Menu:       q.Menu.replaceDB(db),
 		Role:       q.Role.replaceDB(db),
@@ -81,6 +87,7 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 }
 
 type queryCtx struct {
+	API        IAPIDo
 	Department IDepartmentDo
 	Menu       IMenuDo
 	Role       IRoleDo
@@ -89,6 +96,7 @@ type queryCtx struct {
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
+		API:        q.API.WithContext(ctx),
 		Department: q.Department.WithContext(ctx),
 		Menu:       q.Menu.WithContext(ctx),
 		Role:       q.Role.WithContext(ctx),

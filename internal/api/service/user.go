@@ -40,7 +40,10 @@ func NewUserController(u *biz.UserHandler) RegisterRouter {
 }
 
 func (u *userController) current(c echo.Context) (err error) {
-	token := c.Get("user").(*jwt.Token)
+	token, ok := c.Get("user").(*jwt.Token)
+	if !ok {
+		return errors.WithCode(code.ErrMissingHeader, "token is nil")
+	}
 	if token == nil {
 		return errors.WithCode(code.ErrMissingHeader, "token is nil")
 	}

@@ -130,19 +130,19 @@ declare namespace API {
 
   type menu = {
     /** 父菜单id */
-    pid: number;
+    pid?: number;
     /** 菜单id */
     id?: number;
     /** 类型 1=目录 2=菜单 3=按钮 */
     type: 1 | 2 | 3;
     /** 菜单名称 */
-    name: string;
+    name?: string;
     /** api接口 */
     api?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; url?: string };
     /** 路由路径 */
-    path: string;
+    path?: string;
     /** 组件路径 */
-    component: string;
+    component?: string;
     layout?: number;
     /** 重定向 */
     redirect?: string;

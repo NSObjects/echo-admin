@@ -28,11 +28,12 @@ func NewDepartmentController(h *biz.DepartmentHandler) RegisterRouter {
 }
 
 func (d *departmentController) RegisterRouter(s *echo.Group, _ ...echo.MiddlewareFunc) {
-	s.GET("/departments/:id", d.get)
-	s.GET("/departments", d.list)
-	s.DELETE("/departments/:id", d.delete)
-	s.PUT("/departments/:id", d.update)
-	s.POST("/departments", d.create)
+	s.POST("/departments", d.create).Path = "创建部门"
+	s.GET("/departments", d.list).Name = "查询部门列表"
+	s.DELETE("/departments/:id", d.delete).Path = "删除某个部门"
+	s.GET("/departments/:id", d.get).Name = "查询某个部门列表"
+	s.PUT("/departments/:id", d.update).Path = "更新某个部门"
+
 }
 
 func (d *departmentController) create(c echo.Context) error {

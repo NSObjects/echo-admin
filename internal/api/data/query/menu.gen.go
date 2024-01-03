@@ -58,44 +58,17 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 		}{
 			RelationField: field.NewRelation("Children.Children", "model.Menu"),
 		},
-		RoleMenus: struct {
+		API: struct {
 			field.RelationField
-			Menus struct {
-				field.RelationField
-			}
-			User struct {
-				field.RelationField
-				Role struct {
-					field.RelationField
-				}
-			}
 		}{
-			RelationField: field.NewRelation("Children.RoleMenus", "model.Role"),
-			Menus: struct {
-				field.RelationField
-			}{
-				RelationField: field.NewRelation("Children.RoleMenus.Menus", "model.Menu"),
-			},
-			User: struct {
-				field.RelationField
-				Role struct {
-					field.RelationField
-				}
-			}{
-				RelationField: field.NewRelation("Children.RoleMenus.User", "model.User"),
-				Role: struct {
-					field.RelationField
-				}{
-					RelationField: field.NewRelation("Children.RoleMenus.User.Role", "model.Role"),
-				},
-			},
+			RelationField: field.NewRelation("Children.API", "model.API"),
 		},
 	}
 
-	_menu.RoleMenus = menuManyToManyRoleMenus{
+	_menu.API = menuManyToManyAPI{
 		db: db.Session(&gorm.Session{}),
 
-		RelationField: field.NewRelation("RoleMenus", "model.Role"),
+		RelationField: field.NewRelation("API", "model.API"),
 	}
 
 	_menu.fillFieldMap()
@@ -130,7 +103,7 @@ type menu struct {
 	DeletedAt     field.Field
 	Children      menuHasManyChildren
 
-	RoleMenus menuManyToManyRoleMenus
+	API menuManyToManyAPI
 
 	fieldMap map[string]field.Expr
 }
@@ -227,17 +200,8 @@ type menuHasManyChildren struct {
 	Children struct {
 		field.RelationField
 	}
-	RoleMenus struct {
+	API struct {
 		field.RelationField
-		Menus struct {
-			field.RelationField
-		}
-		User struct {
-			field.RelationField
-			Role struct {
-				field.RelationField
-			}
-		}
 	}
 }
 
@@ -306,13 +270,13 @@ func (a menuHasManyChildrenTx) Count() int64 {
 	return a.tx.Count()
 }
 
-type menuManyToManyRoleMenus struct {
+type menuManyToManyAPI struct {
 	db *gorm.DB
 
 	field.RelationField
 }
 
-func (a menuManyToManyRoleMenus) Where(conds ...field.Expr) *menuManyToManyRoleMenus {
+func (a menuManyToManyAPI) Where(conds ...field.Expr) *menuManyToManyAPI {
 	if len(conds) == 0 {
 		return &a
 	}
@@ -325,27 +289,27 @@ func (a menuManyToManyRoleMenus) Where(conds ...field.Expr) *menuManyToManyRoleM
 	return &a
 }
 
-func (a menuManyToManyRoleMenus) WithContext(ctx context.Context) *menuManyToManyRoleMenus {
+func (a menuManyToManyAPI) WithContext(ctx context.Context) *menuManyToManyAPI {
 	a.db = a.db.WithContext(ctx)
 	return &a
 }
 
-func (a menuManyToManyRoleMenus) Session(session *gorm.Session) *menuManyToManyRoleMenus {
+func (a menuManyToManyAPI) Session(session *gorm.Session) *menuManyToManyAPI {
 	a.db = a.db.Session(session)
 	return &a
 }
 
-func (a menuManyToManyRoleMenus) Model(m *model.Menu) *menuManyToManyRoleMenusTx {
-	return &menuManyToManyRoleMenusTx{a.db.Model(m).Association(a.Name())}
+func (a menuManyToManyAPI) Model(m *model.Menu) *menuManyToManyAPITx {
+	return &menuManyToManyAPITx{a.db.Model(m).Association(a.Name())}
 }
 
-type menuManyToManyRoleMenusTx struct{ tx *gorm.Association }
+type menuManyToManyAPITx struct{ tx *gorm.Association }
 
-func (a menuManyToManyRoleMenusTx) Find() (result []*model.Role, err error) {
+func (a menuManyToManyAPITx) Find() (result []*model.API, err error) {
 	return result, a.tx.Find(&result)
 }
 
-func (a menuManyToManyRoleMenusTx) Append(values ...*model.Role) (err error) {
+func (a menuManyToManyAPITx) Append(values ...*model.API) (err error) {
 	targetValues := make([]interface{}, len(values))
 	for i, v := range values {
 		targetValues[i] = v
@@ -353,7 +317,7 @@ func (a menuManyToManyRoleMenusTx) Append(values ...*model.Role) (err error) {
 	return a.tx.Append(targetValues...)
 }
 
-func (a menuManyToManyRoleMenusTx) Replace(values ...*model.Role) (err error) {
+func (a menuManyToManyAPITx) Replace(values ...*model.API) (err error) {
 	targetValues := make([]interface{}, len(values))
 	for i, v := range values {
 		targetValues[i] = v
@@ -361,7 +325,7 @@ func (a menuManyToManyRoleMenusTx) Replace(values ...*model.Role) (err error) {
 	return a.tx.Replace(targetValues...)
 }
 
-func (a menuManyToManyRoleMenusTx) Delete(values ...*model.Role) (err error) {
+func (a menuManyToManyAPITx) Delete(values ...*model.API) (err error) {
 	targetValues := make([]interface{}, len(values))
 	for i, v := range values {
 		targetValues[i] = v
@@ -369,11 +333,11 @@ func (a menuManyToManyRoleMenusTx) Delete(values ...*model.Role) (err error) {
 	return a.tx.Delete(targetValues...)
 }
 
-func (a menuManyToManyRoleMenusTx) Clear() error {
+func (a menuManyToManyAPITx) Clear() error {
 	return a.tx.Clear()
 }
 
-func (a menuManyToManyRoleMenusTx) Count() int64 {
+func (a menuManyToManyAPITx) Count() int64 {
 	return a.tx.Count()
 }
 

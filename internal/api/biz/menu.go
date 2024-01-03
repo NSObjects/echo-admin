@@ -18,10 +18,9 @@ import (
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/NSObjects/echo-admin/internal/log"
-	"github.com/samber/lo"
-
 	"github.com/go-sql-driver/mysql"
 	"github.com/marmotedu/errors"
+	"github.com/samber/lo"
 	"gorm.io/gen/field"
 )
 
@@ -44,8 +43,9 @@ func (m *MenuHandler) CreateMenu(ctx context.Context, menu param.Menu) error {
 			return errors.WithCode(code.ErrNotAllowCreate, "父级菜单类型不正确")
 		}
 	}
-	filed, mm := menu.Data()
-	if err := m.q.Menu.WithContext(ctx).Select(filed...).Create(&mm); err != nil {
+	_, mm := menu.Data()
+
+	if err := m.q.Menu.WithContext(ctx).Create(&mm); err != nil {
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单失败 %v", menu))
 	}
 
@@ -82,7 +82,7 @@ func (m *MenuHandler) GetAllMenu(parentID uint) ([]*model.Menu, error) {
 		return nil, nil
 	}
 	departments, err := m.q.Menu.Where(m.q.Menu.Pid.Eq(int64(parentID))).
-		Preload(m.q.Menu.Children).Find()
+		Preload(m.q.Menu.Children).Preload(m.q.Menu.API).Find()
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (m *MenuHandler) GetAllMenu(parentID uint) ([]*model.Menu, error) {
 func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) error {
 
 	selection, update := menu.Data()
-
+	update.ID = id
 	_, err := m.q.Menu.WithContext(ctx).Select(selection...).Where(m.q.Menu.ID.Eq(id)).Updates(update)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
@@ -113,6 +113,29 @@ func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) 
 		}
 
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("更新菜单失败 %v", menu))
+	}
+
+	if len(menu.API) > 0 {
+		err = m.q.Menu.API.Model(&update).Clear()
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("清除菜单API失败 %v", menu))
+		}
+		apis := make([]*model.API, len(menu.API))
+		for index, v := range menu.API {
+			apis[index] = &model.API{
+				Path:   v.URL,
+				Method: string(v.Method),
+				Name:   v.Name,
+			}
+		}
+		first, err := m.q.Menu.Where(m.q.Menu.ID.Eq(id)).First()
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单API失败 %v", menu))
+		}
+
+		if err = m.q.Menu.API.Model(first).Append(apis...); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单API失败 %v", menu))
+		}
 	}
 
 	return nil

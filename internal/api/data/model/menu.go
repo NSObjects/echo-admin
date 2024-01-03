@@ -42,9 +42,9 @@ type Menu struct {
 	Hidden        int            `json:"hidden" copier:"hidden"`
 	Cache         int            `json:"cache"  copier:"cache"`
 	Fixed         int            `json:"fixed"  copier:"fixed"`
-	Pid           int64          `json:"pid,omitempty"  copier:"pid"`
+	Pid           *int64         `gorm:"column:pid" json:"pid,omitempty" copier:"pid"`
 	Children      []*Menu        `json:"children,omitempty" gorm:"foreignKey:Pid;references:ID"`
-	RoleMenus     []Role         `gorm:"many2many:role_menus;" json:"-"`
+	API           []API          `gorm:"many2many:menu_apis"`
 	CreatedAt     time.Time      `json:"created_at" `
 	UpdatedAt     time.Time      `json:"updated_at" `
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`

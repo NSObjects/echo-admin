@@ -16,13 +16,13 @@ import (
 )
 
 type Role struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	Name      string `json:"name" form:"name" query:"name"`
-	Order     int    `json:"order" form:"order" query:"order"`
-	Mark      string `json:"mark" form:"mark" query:"mark"`
-	Status    int    `gorm:"column:status"`
-	Menus     []Menu `gorm:"many2many:role_menus;" json:"-"`
-	User      []User `gorm:"many2many:user_role;" json:"-"`
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	Name   string `json:"name" form:"name" query:"name"`
+	Order  int    `json:"order" form:"order" query:"order"`
+	Mark   string `json:"mark" form:"mark" query:"mark"`
+	Status int    `gorm:"column:status"`
+	Menus  []Menu `gorm:"many2many:role_menus;" json:"-"`
+	//User      []User `gorm:"many2many:user_role;" json:"-"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
