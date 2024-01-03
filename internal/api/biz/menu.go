@@ -18,6 +18,7 @@ import (
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/casbin/casbin/v2"
 	"github.com/go-sql-driver/mysql"
 	"github.com/marmotedu/errors"
 	"github.com/samber/lo"
@@ -25,6 +26,7 @@ import (
 
 type MenuHandler struct {
 	q *query.Query
+	e *casbin.Enforcer
 }
 
 func NewMenuHandler(q *query.Query) *MenuHandler {
@@ -124,27 +126,31 @@ func (m *MenuHandler) UpdateMenu(ctx context.Context, id uint, menu param.Menu) 
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("更新菜单失败 %v", menu))
 	}
 
-	if len(menu.API) > 0 {
-		err = m.q.Menu.API.Model(&update).Clear()
-		if err != nil {
-			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("清除菜单API失败 %v", menu))
-		}
-		apis := make([]*model.API, len(menu.API))
-		for index, v := range menu.API {
-			apis[index] = &model.API{
-				Path:   v.URL,
-				Method: string(v.Method),
-				Name:   v.Name,
-			}
-		}
-		first, err := m.q.Menu.Where(m.q.Menu.ID.Eq(id)).First()
-		if err != nil {
-			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单API失败 %v", menu))
-		}
+	err = m.q.Menu.API.Model(&update).Clear()
+	if err != nil {
+		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("清除菜单API失败 %v", menu))
+	}
 
-		if err = m.q.Menu.API.Model(first).Append(apis...); err != nil {
-			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单API失败 %v", menu))
+	if len(menu.API) <= 0 {
+		return nil
+	}
+
+	apis := make([]*model.API, len(menu.API))
+	for index, menuAPI := range menu.API {
+		apis[index] = &model.API{
+			Path:   menuAPI.URL,
+			Method: string(menuAPI.Method),
+			Name:   menuAPI.Name,
 		}
+	}
+
+	first, err := m.q.Menu.Where(m.q.Menu.ID.Eq(id)).First()
+	if err != nil {
+		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单API失败 %v", menu))
+	}
+
+	if err = m.q.Menu.API.Model(first).Append(apis...); err != nil {
+		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单API失败 %v", menu))
 	}
 
 	return nil

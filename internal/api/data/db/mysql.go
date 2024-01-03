@@ -22,6 +22,7 @@ import (
 func NewMysql(cfg configs.MysqlConfig) *gorm.DB {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
 		logger.Config{
@@ -32,10 +33,17 @@ func NewMysql(cfg configs.MysqlConfig) *gorm.DB {
 			Colorful:                  false,         // Disable color
 		},
 	)
+
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
 	if err != nil {
 		panic(err)
 	}
+
+	err = db.Callback().Create().After("gorm:create").Register("role:menu_after_create", AfterCreate)
+	if err != nil {
+		panic(err)
+	}
+
 	query.SetDefault(db)
 	return db
 }

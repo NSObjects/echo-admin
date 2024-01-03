@@ -14,6 +14,7 @@ import (
 	"github.com/NSObjects/echo-admin/internal/api/biz"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/resp"
+	"github.com/spf13/cast"
 	"strconv"
 
 	//nolint:goimports
@@ -63,14 +64,15 @@ func (m *MenuController) list(ctx echo.Context) error {
 }
 
 func (m *MenuController) edit(ctx echo.Context) error {
-	atoi, _ := strconv.Atoi(ctx.Param("id"))
+	atoi := cast.ToUint(ctx.Param("id"))
+
 	var menu param.Menu
 	err := BindAndValidate(&menu, ctx)
 	if err != nil {
 		return err
 	}
 
-	err = m.h.UpdateMenu(ctx.Request().Context(), uint(atoi), menu)
+	err = m.h.UpdateMenu(ctx.Request().Context(), atoi, menu)
 	if err != nil {
 		return err
 	}

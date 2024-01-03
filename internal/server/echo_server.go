@@ -127,10 +127,6 @@ func (s *EchoServer) loadMiddleware(enforce *casbin.Enforcer) {
 			return cast.ToString(user.ID), nil
 		},
 		EnforceHandler: func(c echo.Context, user string) (bool, error) {
-			//if user == "root" {
-			//	return enforce.Enforce(user, "", c.Request().URL.Path, c.Request().Method)
-			//}
-
 			if user == "root" {
 				return true, nil
 			}
