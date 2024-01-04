@@ -37,14 +37,9 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 	_menu.Icon = field.NewString(tableName, "icon")
 	_menu.Type = field.NewInt(tableName, "type")
 	_menu.Remark = field.NewString(tableName, "remark")
-	_menu.RequestURL = field.NewString(tableName, "request_url")
-	_menu.RequestMethod = field.NewString(tableName, "request_method")
 	_menu.Link = field.NewString(tableName, "link")
-	_menu.Identifier = field.NewInt(tableName, "identifier")
 	_menu.Sort = field.NewInt(tableName, "sort")
 	_menu.Hidden = field.NewInt(tableName, "hidden")
-	_menu.Cache = field.NewInt(tableName, "cache")
-	_menu.Fixed = field.NewInt(tableName, "fixed")
 	_menu.Pid = field.NewInt64(tableName, "pid")
 	_menu.CreatedAt = field.NewTime(tableName, "created_at")
 	_menu.UpdatedAt = field.NewTime(tableName, "updated_at")
@@ -79,29 +74,24 @@ func newMenu(db *gorm.DB, opts ...gen.DOOption) menu {
 type menu struct {
 	menuDo
 
-	ALL           field.Asterisk
-	ID            field.Uint
-	Name          field.String
-	Path          field.String
-	Component     field.String
-	Redirect      field.String
-	Layout        field.Int
-	Icon          field.String
-	Type          field.Int
-	Remark        field.String
-	RequestURL    field.String
-	RequestMethod field.String
-	Link          field.String
-	Identifier    field.Int
-	Sort          field.Int
-	Hidden        field.Int
-	Cache         field.Int
-	Fixed         field.Int
-	Pid           field.Int64
-	CreatedAt     field.Time
-	UpdatedAt     field.Time
-	DeletedAt     field.Field
-	Children      menuHasManyChildren
+	ALL       field.Asterisk
+	ID        field.Uint
+	Name      field.String
+	Path      field.String
+	Component field.String
+	Redirect  field.String
+	Layout    field.Int
+	Icon      field.String
+	Type      field.Int
+	Remark    field.String
+	Link      field.String
+	Sort      field.Int
+	Hidden    field.Int
+	Pid       field.Int64
+	CreatedAt field.Time
+	UpdatedAt field.Time
+	DeletedAt field.Field
+	Children  menuHasManyChildren
 
 	API menuManyToManyAPI
 
@@ -129,14 +119,9 @@ func (m *menu) updateTableName(table string) *menu {
 	m.Icon = field.NewString(table, "icon")
 	m.Type = field.NewInt(table, "type")
 	m.Remark = field.NewString(table, "remark")
-	m.RequestURL = field.NewString(table, "request_url")
-	m.RequestMethod = field.NewString(table, "request_method")
 	m.Link = field.NewString(table, "link")
-	m.Identifier = field.NewInt(table, "identifier")
 	m.Sort = field.NewInt(table, "sort")
 	m.Hidden = field.NewInt(table, "hidden")
-	m.Cache = field.NewInt(table, "cache")
-	m.Fixed = field.NewInt(table, "fixed")
 	m.Pid = field.NewInt64(table, "pid")
 	m.CreatedAt = field.NewTime(table, "created_at")
 	m.UpdatedAt = field.NewTime(table, "updated_at")
@@ -157,7 +142,7 @@ func (m *menu) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *menu) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 23)
+	m.fieldMap = make(map[string]field.Expr, 18)
 	m.fieldMap["id"] = m.ID
 	m.fieldMap["name"] = m.Name
 	m.fieldMap["path"] = m.Path
@@ -167,14 +152,9 @@ func (m *menu) fillFieldMap() {
 	m.fieldMap["icon"] = m.Icon
 	m.fieldMap["type"] = m.Type
 	m.fieldMap["remark"] = m.Remark
-	m.fieldMap["request_url"] = m.RequestURL
-	m.fieldMap["request_method"] = m.RequestMethod
 	m.fieldMap["link"] = m.Link
-	m.fieldMap["identifier"] = m.Identifier
 	m.fieldMap["sort"] = m.Sort
 	m.fieldMap["hidden"] = m.Hidden
-	m.fieldMap["cache"] = m.Cache
-	m.fieldMap["fixed"] = m.Fixed
 	m.fieldMap["pid"] = m.Pid
 	m.fieldMap["created_at"] = m.CreatedAt
 	m.fieldMap["updated_at"] = m.UpdatedAt

@@ -7,3 +7,6 @@ build:
 test:
 	export RUN_ENVIRONMENT=test
 	go test -race $(go list ./...)
+
+cover:
+	go test ./... -coverprofile=coverage.out
