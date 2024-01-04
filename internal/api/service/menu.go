@@ -11,14 +11,13 @@
 package service
 
 import (
+	"strconv"
+
 	"github.com/NSObjects/echo-admin/internal/api/biz"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/resp"
-	"github.com/spf13/cast"
-	"strconv"
-
-	//nolint:goimports
 	"github.com/labstack/echo/v4"
+	"github.com/spf13/cast"
 )
 
 type MenuController struct {

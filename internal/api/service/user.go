@@ -7,16 +7,16 @@
 package service
 
 import (
-	"github.com/NSObjects/echo-admin/internal/api/data"
-	"github.com/NSObjects/echo-admin/internal/code"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/marmotedu/errors"
 	"strconv"
 
 	"github.com/NSObjects/echo-admin/internal/api/biz"
+	"github.com/NSObjects/echo-admin/internal/api/data"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
+	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/NSObjects/echo-admin/internal/resp"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"github.com/marmotedu/errors"
 )
 
 type userController struct {

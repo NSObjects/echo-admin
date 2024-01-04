@@ -25,29 +25,24 @@ const (
 )
 
 type Menu struct {
-	ID            uint           `gorm:"primaryKey" json:"id"`
-	Name          string         `json:"name" gorm:"default:null"`
-	Path          string         `json:"path" gorm:"default:null"`
-	Component     string         `json:"component" gorm:"default:null"`
-	Redirect      string         `json:"redirect" gorm:"default:null"`
-	Layout        int            `json:"layout" gorm:"default:null"`
-	Icon          string         `json:"icon" gorm:"default:null"`
-	Type          MenuType       `json:"type" gorm:"default:null"`
-	Remark        string         `gorm:"column:remark"`
-	RequestURL    string         `gorm:"column:request_url" json:"request_url"`
-	RequestMethod string         `gorm:"column:request_method" json:"request_method"`
-	Link          string         `json:"link"  copier:"link"`
-	Identifier    int            `json:"identifier" copier:"identifier" `
-	Sort          int            `json:"sort"  copier:"sort"`
-	Hidden        int            `json:"hidden" copier:"hidden"`
-	Cache         int            `json:"cache"  copier:"cache"`
-	Fixed         int            `json:"fixed"  copier:"fixed"`
-	Pid           *int64         `gorm:"column:pid" json:"pid,omitempty" copier:"pid"`
-	Children      []*Menu        `json:"children,omitempty" gorm:"foreignKey:Pid;references:ID"`
-	API           []API          `gorm:"many2many:menu_apis"`
-	CreatedAt     time.Time      `json:"created_at" `
-	UpdatedAt     time.Time      `json:"updated_at" `
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	ID        uint           `gorm:"primaryKey" json:"id" copier:"ID"`
+	Name      string         `json:"name" gorm:"default:null" copier:"Name"`
+	Path      string         `json:"path" gorm:"default:null" copier:"Path"`
+	Component string         `json:"component" gorm:"default:null" copier:"Component"`
+	Redirect  string         `json:"redirect" gorm:"default:null" copier:"Redirect"`
+	Layout    int            `json:"layout" gorm:"default:null" copier:"Layout"`
+	Icon      string         `json:"icon" gorm:"default:null" copier:"Icon"`
+	Type      MenuType       `json:"type" gorm:"default:null" copier:"Type"`
+	Remark    string         `gorm:"column:remark" copier:"Remark"`
+	Link      string         `json:"link" copier:"Link"`
+	Sort      int            `json:"sort"  copier:"Sort"`
+	Hidden    int            `json:"hidden" copier:"Hidden"`
+	Pid       *int64         `gorm:"column:pid" json:"pid,omitempty" copier:"Pid"`
+	Children  []*Menu        `json:"children,omitempty" gorm:"foreignKey:Pid;references:ID" copier:"Children"`
+	API       []API          `gorm:"many2many:menu_apis" copier:"API"`
+	CreatedAt time.Time      `json:"created_at" copier:"CreatedAt"`
+	UpdatedAt time.Time      `json:"updated_at" copier:"UpdatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Menu) TableName() string {

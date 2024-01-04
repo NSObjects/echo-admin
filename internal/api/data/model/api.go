@@ -11,10 +11,10 @@
 package model
 
 type API struct {
-	ID          uint   `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string `gorm:"column:name;type:varchar(50);not null" json:"name"`
-	Path        string `gorm:"column:path;type:varchar(50);not null;uniqueIndex:udx_name_path" json:"path"`
-	Method      string `gorm:"column:method;type:varchar(50);not null;uniqueIndex:udx_name_path" json:"method"`
+	ID          uint   `gorm:"primaryKey;autoIncrement" json:"id" copier:"ID"`
+	Name        string `gorm:"column:name;type:varchar(50);not null" json:"name" copier:"Name"`
+	Path        string `gorm:"column:path;type:varchar(50);not null;uniqueIndex:udx_name_path"  copier:"Path"`
+	Method      string `gorm:"column:method;type:varchar(50);not null;uniqueIndex:udx_name_path" copier:"Method"`
 	Description string `gorm:"column:description;type:varchar(50);not null" json:"description"`
 	APIGroup    string `gorm:"column:api_group;type:varchar(50);not null" json:"api_group"`
 	CreatedAt   string `gorm:"column:created_at;type:varchar(50);not null" json:"created_at"`

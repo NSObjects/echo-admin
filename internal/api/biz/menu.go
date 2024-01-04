@@ -13,12 +13,12 @@ package biz
 import (
 	"context"
 	"fmt"
+
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
 	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/NSObjects/echo-admin/internal/log"
-	"github.com/casbin/casbin/v2"
 	"github.com/go-sql-driver/mysql"
 	"github.com/marmotedu/errors"
 	"github.com/samber/lo"
@@ -26,7 +26,7 @@ import (
 
 type MenuHandler struct {
 	q *query.Query
-	e *casbin.Enforcer
+	//e *casbin.Enforcer
 }
 
 func NewMenuHandler(q *query.Query) *MenuHandler {
@@ -44,9 +44,12 @@ func (m *MenuHandler) CreateMenu(ctx context.Context, menu param.Menu) error {
 			return errors.WithCode(code.ErrNotAllowCreate, "父级菜单类型不正确")
 		}
 	}
-	_, mm := menu.Data()
+	mm, err := menu.Model()
+	if err != nil {
+		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单失败 %v", menu))
+	}
 
-	if err := m.q.Menu.WithContext(ctx).Create(&mm); err != nil {
+	if err = m.q.Menu.WithContext(ctx).Create(&mm); err != nil {
 		return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建菜单失败 %v", menu))
 	}
 
@@ -83,8 +86,11 @@ func (m *MenuHandler) ListMenu(ctx context.Context, q param.MenuParam) ([]param.
 	if err != nil {
 		return nil, 0, err
 	}
-
-	return param.MenuModelResp(menus), total, nil
+	resp, err := param.MenuModelResp(menus)
+	if err != nil {
+		return nil, 0, err
+	}
+	return resp, total, nil
 
 }
 
@@ -172,6 +178,10 @@ func (m *MenuHandler) Delete(ctx context.Context, id uint) error {
 
 // cleanChildMenu
 func (m *MenuHandler) cleanChildMenu(ctx context.Context, id int64) error {
+	if id <= 0 {
+		return nil
+	}
+
 	find, err := m.q.Menu.WithContext(ctx).Where(m.q.Menu.Pid.Eq(id)).Find()
 	if err != nil {
 		return err

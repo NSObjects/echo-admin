@@ -5,8 +5,10 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/configs"
+
 	"github.com/spf13/cobra"
 	"gorm.io/driver/mysql"
 	"gorm.io/gen"

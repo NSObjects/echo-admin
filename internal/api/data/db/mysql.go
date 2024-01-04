@@ -8,15 +8,15 @@ package db
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"time"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/configs"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"log"
-	"os"
-	"time"
 )
 
 func NewMysql(cfg configs.MysqlConfig) *gorm.DB {

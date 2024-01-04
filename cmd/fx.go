@@ -8,16 +8,17 @@ package cmd
 
 import (
 	"context"
+
+	"log/slog"
+
 	"github.com/NSObjects/echo-admin/internal/api/biz"
 	"github.com/NSObjects/echo-admin/internal/api/data"
 	"github.com/NSObjects/echo-admin/internal/api/service"
+	"github.com/NSObjects/echo-admin/internal/configs"
 	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/NSObjects/echo-admin/internal/server"
 	"github.com/marmotedu/errors"
 	"go.uber.org/fx"
-	"log/slog"
-
-	"github.com/NSObjects/echo-admin/internal/configs"
-	"github.com/NSObjects/echo-admin/internal/server"
 )
 
 func Run(cfg string) {

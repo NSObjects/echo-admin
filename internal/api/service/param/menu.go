@@ -13,7 +13,9 @@ package param
 import (
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
-	"github.com/samber/lo"
+	"github.com/NSObjects/echo-admin/internal/log"
+	"github.com/jinzhu/copier"
+	"github.com/marmotedu/errors"
 	"gorm.io/gen"
 	"gorm.io/gen/field"
 )
@@ -69,32 +71,28 @@ func (m MenuParam) Condition() []gen.Condition {
 // Icon: 图标
 // Remark: 备注
 type Menu struct {
-	Type      model.MenuType `json:"type" copier:"type"`
-	API       []ChildAPI     `json:"apis" query:"apis" form:"apis"`
-	Cache     *int           `json:"cache,omitempty"`
-	Component *string        `json:"component,omitempty"`
-	Fixed     *int           `json:"fixed,omitempty"`
-	Hidden    *int           `json:"hidden,omitempty"`
-	Icon      *string        `json:"icon,omitempty"`
-	Identify  *int           `json:"identify,omitempty"`
-	Layout    *int           `json:"layout,omitempty"`
-	Link      *string        `json:"link,omitempty"`
-	Name      *string        `json:"name,omitempty"`
-	Path      *string        `json:"path,omitempty"`
-	PID       *int64         `json:"pid,omitempty"`
-	Redirect  *string        `json:"redirect,omitempty"`
-	Remark    *string        `json:"remark,omitempty"`
-	Role      []int64        `json:"role,omitempty"`
-	Sort      *int           `json:"sort,omitempty"`
-	Status    *int64         `json:"status,omitempty"`
-	Routes    []Menu         `json:"routes"`
+	Type      model.MenuType `json:"type" copier:"Type"`
+	API       []ChildAPI     `json:"apis" query:"apis" form:"apis" copier:"API" `
+	Component *string        `json:"component,omitempty" copier:"Component"`
+	Hidden    *int           `json:"hidden,omitempty" copier:"Hidden"`
+	Icon      *string        `json:"icon,omitempty" copier:"Icon"`
+	Layout    *int           `json:"layout,omitempty" copier:"Layout"`
+	Link      *string        `json:"link,omitempty" copier:"Link"`
+	Name      *string        `json:"name,omitempty" copier:"Name"`
+	Path      *string        `json:"path,omitempty" copier:"Path"`
+	PID       *int64         `json:"pid,omitempty" copier:"Pid"`
+	Redirect  *string        `json:"redirect,omitempty" copier:"Redirect"`
+	Remark    *string        `json:"remark,omitempty" copier:"Remark"`
+	Role      []int64        `json:"role,omitempty" copier:"Role"`
+	Sort      *int           `json:"sort,omitempty" copier:"Sort"`
+	Status    *int64         `json:"status,omitempty" copier:"Status"`
+	//Routes    []Menu         `json:"routes"`
 }
 
-// ChildAPI api接口
 type ChildAPI struct {
-	Method Method `json:"method" query:"method" form:"method"`
-	URL    string `json:"url" query:"url" form:"url"`
-	Name   string `json:"name" form:"name" query:"name"`
+	Method Method `json:"method" query:"method" form:"method" copier:"Method"`
+	URL    string `json:"url" query:"url" form:"url" copier:"URL"`
+	Name   string `json:"name" form:"name" query:"name" copier:"Name"`
 }
 
 type RoleMenu struct {
@@ -126,10 +124,8 @@ type RoleMenu struct {
 // Type 类型 1=目录 2=菜单 3=按钮
 type MenuResp struct {
 	API       []ChildAPI     `json:"apis,omitempty"`
-	Cache     int            `json:"cache,omitempty"`
 	Children  []MenuResp     `json:"children,omitempty"`
 	Component string         `json:"component"`
-	Fixed     int            `json:"fixed,omitempty"`
 	Hidden    int            `json:"hidden,omitempty"`
 	Icon      string         `json:"icon,omitempty"`
 	ID        uint           `json:"id,omitempty"`
@@ -149,123 +145,128 @@ type MenuResp struct {
 	Value     int64          `json:"value,omitempty"`
 }
 
-func MentModel(v *model.Menu) MenuResp {
-
-	rp := MenuResp{
-		API: lo.Map(v.API, func(item model.API, index int) ChildAPI {
-			return ChildAPI{
-				Method: Method(item.Method),
-				URL:    item.Path,
-				Name:   item.Name,
-			}
-		}),
-		Cache:     v.Cache,
-		Children:  MenuModelResp(v.Children),
-		Component: v.Component,
-		Fixed:     v.Fixed,
-		Hidden:    v.Hidden,
-		Icon:      v.Icon,
-		ID:        v.ID,
-		Layout:    v.Layout,
-		Link:      v.Link,
-		Name:      v.Name,
-		Path:      v.Path,
-		PID:       v.Pid,
-		Redirect:  v.Redirect,
-		Remark:    v.Remark,
-		Sort:      v.Sort,
-		Type:      v.Type,
+func MentModel(v *model.Menu) (MenuResp, error) {
+	var rp MenuResp
+	err := copier.CopyWithOption(&rp, v, defaultOpts())
+	if err != nil {
+		return MenuResp{}, err
 	}
-	return rp
+	return rp, nil
 }
 
-func MenuModelResp(child []*model.Menu) []MenuResp {
+func MenuModelResp(child []*model.Menu) ([]MenuResp, error) {
 	if len(child) == 0 {
-		return []MenuResp{}
+		return []MenuResp{}, nil
 	}
 
 	resp := make([]MenuResp, len(child))
 	for index, v := range child {
-		rp := MentModel(v)
-		rp.Children = MenuModelResp(v.Children)
+		rp, err := MentModel(v)
+		if err != nil {
+			return nil, err
+		}
 		resp[index] = rp
 	}
-	return resp
+	return resp, nil
 }
 
 func (m Menu) Data() ([]field.Expr, model.Menu) {
-	var filed []field.Expr
+	filed := m.Fields()
+	menu, err := m.Model()
+	if err != nil {
+		log.Error(err)
+	}
+
+	return filed, menu
+}
+
+func (m Menu) Model() (model.Menu, error) {
 	var menu model.Menu
+	err := copier.CopyWithOption(&menu, &m, defaultOpts())
+	if err != nil {
+		log.Error(err)
+		return model.Menu{}, err
+	}
+	return menu, nil
+}
+
+// Fields
+// 数据库插入需要的字段，代码太长还得想办法优化
+func (m Menu) Fields() []field.Expr {
+	var filed []field.Expr
 	if m.Name != nil {
 		filed = append(filed, query.Q.Menu.Name)
-		menu.Name = *m.Name
 	}
 	if m.Path != nil {
 		filed = append(filed, query.Q.Menu.Path)
-		menu.Path = *m.Path
 	}
 	if m.Component != nil {
 		filed = append(filed, query.Q.Menu.Component)
-		menu.Component = *m.Component
 	}
 	if m.Redirect != nil {
 		filed = append(filed, query.Q.Menu.Redirect)
-		menu.Redirect = *m.Redirect
 	}
 	if m.Layout != nil {
 		filed = append(filed, query.Q.Menu.Layout)
-		menu.Layout = *m.Layout
 	}
 
 	if m.PID != nil {
 		filed = append(filed, query.Q.Menu.Pid)
-		menu.Pid = m.PID
 	}
 
 	if m.Icon != nil {
 		filed = append(filed, query.Q.Menu.Icon)
-		menu.Icon = *m.Icon
 	}
 	if m.Type != 0 {
 		filed = append(filed, query.Q.Menu.Type)
-		menu.Type = m.Type
 	}
-	if m.API != nil {
-		//filed = append(filed, query.Q.Menu.API.Field())
-		for _, v := range m.API {
-			menu.API = append(menu.API, model.API{
-				Path:   v.URL,
-				Method: string(v.Method),
-			})
-		}
-	}
+
 	if m.Link != nil {
 		filed = append(filed, query.Q.Menu.Link)
-		menu.Link = *m.Link
 	}
 	if m.Remark != nil {
 		filed = append(filed, query.Q.Menu.Remark)
-		menu.Remark = *m.Remark
 	}
 	if m.Hidden != nil {
 		filed = append(filed, query.Q.Menu.Hidden)
-		menu.Hidden = *m.Hidden
 	}
-	if m.Cache != nil {
-		filed = append(filed, query.Q.Menu.Cache)
-		menu.Cache = *m.Cache
-	}
-	if m.Fixed != nil {
-		filed = append(filed, query.Q.Menu.Fixed)
-		menu.Fixed = *m.Fixed
-	}
+
 	if m.Sort != nil {
 		filed = append(filed, query.Q.Menu.Sort)
-		menu.Sort = *m.Sort
 	}
-	if m.Identify != nil {
-		filed = append(filed, query.Q.Menu.Identifier)
-		menu.Identifier = *m.Identify
+
+	return filed
+}
+
+func apiConverter(src interface{}) (dst interface{}, err error) {
+	m2, ok := src.(ChildAPI)
+	if !ok {
+		return nil, errors.New("menu type error")
 	}
-	return filed, menu
+
+	return model.API{Path: m2.URL, Method: string(m2.Method), Name: m2.Name}, err
+}
+
+func apiToModel(src interface{}) (dst interface{}, err error) {
+	m2, ok := src.(model.API)
+	if !ok {
+		return nil, errors.New("menu type error")
+	}
+
+	return ChildAPI{URL: m2.Path, Method: Method(m2.Method), Name: m2.Name}, err
+}
+
+func defaultOpts() copier.Option {
+	return copier.Option{IgnoreEmpty: true, DeepCopy: true, Converters: []copier.TypeConverter{
+		{
+			SrcType: ChildAPI{},
+			DstType: model.API{},
+			Fn:      apiConverter,
+		},
+		{
+			SrcType: model.API{},
+			DstType: ChildAPI{},
+			Fn:      apiToModel,
+		},
+	}}
 }

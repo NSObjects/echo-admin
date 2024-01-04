@@ -13,11 +13,13 @@ package log
 import (
 	"context"
 	"fmt"
-	"github.com/NSObjects/echo-admin/internal/configs"
-	"github.com/lmittmann/tint"
-	"log/slog"
 	"os"
 	"time"
+
+	"log/slog"
+
+	"github.com/NSObjects/echo-admin/internal/configs"
+	"github.com/lmittmann/tint"
 )
 
 type log struct {

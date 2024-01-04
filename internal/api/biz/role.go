@@ -113,7 +113,10 @@ func (r *RoleHandler) Policies(ctx context.Context, menusID []uint, roleId uint)
 	}
 	rules := make([][]string, len(find))
 	for index, v := range find {
-		rules[index] = []string{cast.ToString(roleId), cast.ToString(v.ID), v.RequestURL, v.Path}
+		for _, api := range v.API {
+			rules[index] = []string{cast.ToString(roleId), cast.ToString(api.ID), api.Path, api.Method}
+		}
+
 	}
 	return rules
 }
@@ -129,9 +132,9 @@ func (r *RoleHandler) Update(ctx context.Context, id uint, role *param.Role) err
 	if err = r.q.Role.Menus.Model(&m).Clear(); err != nil {
 		return err
 	}
-	var value []*model.Menu
-	for _, menuID := range role.Menus {
-		value = append(value, &model.Menu{ID: menuID})
+	value := make([]*model.Menu, len(role.Menus))
+	for index, menuID := range role.Menus {
+		value[index] = &model.Menu{ID: menuID}
 	}
 	m.ID = id
 	if err = r.q.Role.Menus.Model(&m).Append(value...); err != nil {

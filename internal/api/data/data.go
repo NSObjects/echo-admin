@@ -8,6 +8,7 @@ package data
 
 import (
 	"fmt"
+
 	"github.com/NSObjects/echo-admin/internal/api/data/db"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/configs"

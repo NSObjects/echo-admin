@@ -199,16 +199,19 @@ func (h *UserHandler) ListUserMenu(ctx context.Context, id int64) ([]param.MenuR
 	if err != nil {
 		return nil, 0, errors.WrapC(err, code.ErrDatabase, "查询菜单列表失败")
 	}
-	var respMenu []*model.Menu
-	for _, td := range menus {
+	respMenu := make([]*model.Menu, len(menus))
+	for index, td := range menus {
 		td.Children, err = h.GetAllMenu(td.ID, menuIds)
 		if err != nil {
 			log.Error(err)
 		}
-		respMenu = append(respMenu, td)
+		respMenu[index] = td
 	}
-
-	return param.MenuModelResp(respMenu), len(menus), nil
+	resp, err := param.MenuModelResp(respMenu)
+	if err != nil {
+		return nil, 0, err
+	}
+	return resp, len(menus), nil
 }
 
 func (h *UserHandler) GetAllMenu(parentID uint, menuID []uint) ([]*model.Menu, error) {
