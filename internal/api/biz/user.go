@@ -80,6 +80,7 @@ func (h *UserHandler) ListUser(p param.UserParam) ([]param.UserResponse, int64, 
 			RoleID:       user.Role,
 			DepartmentID: user.DepartmentID,
 			ID:           user.ID,
+			Sex:          user.Sex,
 			CreatedAt:    user.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
@@ -93,66 +94,69 @@ func (h *UserHandler) ListUser(p param.UserParam) ([]param.UserResponse, int64, 
 }
 
 func (h *UserHandler) CreateUser(param param.UserBody) (err error) {
-
-	selection, m := param.Data()
-	if err = h.q.User.Select(selection...).Create(&m); err != nil {
-		return err
-	}
-
-	if param.RoleID != nil && len(*param.RoleID) > 0 {
-		var value []*model.Role
-		for _, menuID := range *param.RoleID {
-			value = append(value, &model.Role{ID: menuID})
+	return h.q.Transaction(func(tx *query.Query) error {
+		selection, m := param.Data()
+		if err = h.q.User.Select(selection...).Create(&m); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "创建用户失败")
 		}
-		if err = h.q.User.Role.Model(&m).Append(value...); err != nil {
-			return err
-		}
-	}
 
-	return nil
+		if param.RoleID != nil && len(*param.RoleID) > 0 {
+			var value []*model.Role
+			for _, menuID := range *param.RoleID {
+				value = append(value, &model.Role{ID: menuID})
+			}
+			if err = h.q.User.Role.Model(&m).Append(value...); err != nil {
+				return errors.WrapC(err, code.ErrDatabase, "添加用户角色失败")
+			}
+		}
+		return nil
+	})
 }
 
 func (h *UserHandler) DeleteUser(id int64) (err error) {
 
-	if err = h.q.User.DeleteByID(id); err != nil {
-		return err
-	}
+	return h.q.Transaction(func(tx *query.Query) error {
+		if err = h.q.User.DeleteByID(id); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "删除用户失败")
+		}
 
-	if err = h.q.User.Role.Model(&model.User{ID: uint(id)}).Clear(); err != nil {
-		return err
-	}
-
-	return err
+		if err = h.q.User.Role.Model(&model.User{ID: uint(id)}).Clear(); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "删除用户失败")
+		}
+		return nil
+	})
 }
 
 func (h *UserHandler) UpdateUser(user param.UserBody, id int64) error {
-	selection, m := user.Data()
-	m.ID = uint(id)
-	if _, err := h.q.User.Select(selection...).
-		Where(h.q.User.ID.Eq(uint(id))).
-		Updates(&m); err != nil {
-		return err
-	}
 
-	if err := h.q.User.Role.Model(&m).Clear(); err != nil {
-		return err
-	}
-	value := make([]*model.Role, len(*user.RoleID))
-	for index, menuID := range *user.RoleID {
-		value[index] = &model.Role{ID: menuID}
-	}
-	if err := h.q.User.Role.Model(&m).Append(value...); err != nil {
-		return err
-	}
+	return h.q.Transaction(func(tx *query.Query) error {
+		selection, m := user.Data()
+		m.ID = uint(id)
+		if _, err := h.q.User.Select(selection...).
+			Where(h.q.User.ID.Eq(uint(id))).
+			Updates(&m); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "更新用户失败")
+		}
 
-	return nil
+		if err := h.q.User.Role.Model(&m).Clear(); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "更新用户失败")
+		}
+		value := make([]*model.Role, len(*user.RoleID))
+		for index, menuID := range *user.RoleID {
+			value[index] = &model.Role{ID: menuID}
+		}
+		if err := h.q.User.Role.Model(&m).Append(value...); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "更新用户失败")
+		}
+		return nil
+	})
 }
 
 func (h *UserHandler) GetUserDetail(id int64) (param.UserResponse, error) {
 
 	user, err := h.q.User.Preload(h.q.User.Role).GetById(int(id))
 	if err != nil {
-		return param.UserResponse{}, err
+		return param.UserResponse{}, errors.WrapC(err, code.ErrDatabase, "查询用户详情失败")
 	}
 
 	return param.UserResponse{

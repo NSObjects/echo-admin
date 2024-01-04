@@ -77,32 +77,59 @@ func (r *RoleHandler) List(ctx context.Context, q param.RoleQuery) ([]param.Role
 }
 
 func (r *RoleHandler) Create(ctx context.Context, role *param.Role) error {
-	selection, m := role.Data()
-	err := r.q.Role.WithContext(ctx).Select(selection...).Create(&m)
-	if err != nil {
-		return errors.WrapC(err, code.ErrDatabase, "创建角色失败")
-	}
-	if role.Menus != nil && len(role.Menus) > 0 {
-		var value []*model.Menu
-		for _, menuID := range role.Menus {
-			value = append(value, &model.Menu{ID: menuID})
-		}
-		if err = r.q.Role.Menus.Model(&m).Append(value...); err != nil {
-			return err
-		}
-	}
 
-	policies := r.Policies(ctx, role.Menus, m.ID)
-	if len(policies) > 0 {
-		if _, err = r.e.AddPolicies(policies); err != nil {
-			return err
-		}
-	}
+	//if err := r.q.Transaction(func(tx *query.Query) error {
+	//	selection, m := role.Data()
+	//	err := r.q.Role.WithContext(ctx).Select(selection...).Create(&m)
+	//	if err != nil {
+	//		return errors.WrapC(err, code.ErrDatabase, "创建角色失败")
+	//	}
+	//	if role.Menus != nil && len(role.Menus) > 0 {
+	//		var value []*model.Menu
+	//		for _, menuID := range role.Menus {
+	//			value = append(value, &model.Menu{ID: menuID})
+	//		}
+	//		if err = r.q.Role.Menus.Model(&m).Append(value...); err != nil {
+	//			return errors.WrapC(err, code.ErrDatabase, "添加角色菜单失败")
+	//		}
+	//	}
+	//	policies := r.Policies(ctx, role.Menus, m.ID)
+	//	if len(policies) > 0 {
+	//		if _, err := r.e.AddPolicies(policies); err != nil {
+	//			return errors.WrapC(err, code.ErrDatabase, "添加角色策略失败")
+	//		}
+	//	}
+	//	return nil
+	//}); err != nil {
+	//	return err
+	//}
 
-	return nil
+	return r.q.Transaction(func(tx *query.Query) error {
+		selection, m := role.Data()
+		err := r.q.Role.WithContext(ctx).Select(selection...).Create(&m)
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "创建角色失败")
+		}
+		if role.Menus != nil && len(role.Menus) > 0 {
+			var value []*model.Menu
+			for _, menuID := range role.Menus {
+				value = append(value, &model.Menu{ID: menuID})
+			}
+			if err = r.q.Role.Menus.Model(&m).Append(value...); err != nil {
+				return errors.WrapC(err, code.ErrDatabase, "添加角色菜单失败")
+			}
+		}
+		policies := r.Policies(ctx, role.Menus, m.ID)
+		if len(policies) > 0 {
+			if _, err := r.e.AddPolicies(policies); err != nil {
+				return errors.WrapC(err, code.ErrDatabase, "添加角色策略失败")
+			}
+		}
+		return nil
+	})
 }
 
-func (r *RoleHandler) Policies(ctx context.Context, menusID []uint, roleId uint) [][]string {
+func (r *RoleHandler) Policies(ctx context.Context, menusID []uint, roleID uint) [][]string {
 	if len(menusID) == 0 {
 		return nil
 	}
@@ -111,10 +138,10 @@ func (r *RoleHandler) Policies(ctx context.Context, menusID []uint, roleId uint)
 		log.Error(err)
 		return nil
 	}
-	rules := make([][]string, len(find))
+	var rules [][]string
 	for index, v := range find {
 		for _, api := range v.API {
-			rules[index] = []string{cast.ToString(roleId), cast.ToString(api.ID), api.Path, api.Method}
+			rules[index] = []string{cast.ToString(roleID), cast.ToString(api.ID), api.Path, api.Method}
 		}
 
 	}
@@ -122,49 +149,57 @@ func (r *RoleHandler) Policies(ctx context.Context, menusID []uint, roleId uint)
 }
 
 func (r *RoleHandler) Update(ctx context.Context, id uint, role *param.Role) error {
-
-	selection, m := role.Data()
-	m.ID = id
-	_, err := r.q.Role.WithContext(ctx).Select(selection...).Where(r.q.Role.ID.Eq(id)).Updates(&m)
-	if err != nil {
-		return err
-	}
-	if err = r.q.Role.Menus.Model(&m).Clear(); err != nil {
-		return err
-	}
-	value := make([]*model.Menu, len(role.Menus))
-	for index, menuID := range role.Menus {
-		value[index] = &model.Menu{ID: menuID}
-	}
-	m.ID = id
-	if err = r.q.Role.Menus.Model(&m).Append(value...); err != nil {
-		return err
-	}
-
-	_, err = r.e.RemoveFilteredPolicy(0, cast.ToString(id))
-	if err != nil {
-		return err
-	}
-
-	policies := r.Policies(ctx, role.Menus, id)
-	if len(policies) > 0 {
-		if _, err = r.e.AddNamedPolicy(cast.ToString(m.ID), policies); err != nil {
+	return r.q.Transaction(func(tx *query.Query) error {
+		selection, m := role.Data()
+		m.ID = id
+		_, err := r.q.Role.WithContext(ctx).Select(selection...).Where(r.q.Role.ID.Eq(id)).Updates(&m)
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "更新角色失败")
+		}
+		if err = r.q.Role.Menus.Model(&m).Clear(); err != nil {
 			return err
 		}
-	}
+		value := make([]*model.Menu, len(role.Menus))
+		for index, menuID := range role.Menus {
+			value[index] = &model.Menu{ID: menuID}
+		}
+		m.ID = id
+		if err = r.q.Role.Menus.Model(&m).Append(value...); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "更新角色失败")
+		}
 
-	return nil
+		_, err = r.e.RemoveFilteredPolicy(0, cast.ToString(id))
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "移除角色策略失败")
+		}
+
+		policies := r.Policies(ctx, role.Menus, id)
+		if len(policies) > 0 {
+			if _, err = r.e.AddNamedPolicy(cast.ToString(m.ID), policies); err != nil {
+				return errors.WrapC(err, code.ErrDatabase, "添加角色策略失败")
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *RoleHandler) Delete(ctx context.Context, id uint) error {
-	_, err := r.q.Role.WithContext(ctx).Where(r.q.Role.ID.Eq(id)).Delete()
-	if err != nil {
-		return err
-	}
-	if err = r.q.Role.Menus.Model(&model.Role{ID: id}).Clear(); err != nil {
-		return err
-	}
-	return nil
+	return r.q.Transaction(func(tx *query.Query) error {
+		_, err := r.q.Role.WithContext(ctx).Where(r.q.Role.ID.Eq(id)).Delete()
+
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "删除角色失败")
+		}
+		if err = r.q.Role.Menus.Model(&model.Role{ID: id}).Clear(); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "删除角色菜单失败")
+		}
+
+		if _, err = r.e.RemoveFilteredPolicy(0, cast.ToString(id)); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "移除角色策略失败")
+		}
+		return nil
+	})
 }
 
 func (r *RoleHandler) Get(ctx context.Context, id uint) (*model.Role, error) {
@@ -177,24 +212,25 @@ func (r *RoleHandler) Get(ctx context.Context, id uint) (*model.Role, error) {
 
 func (r *RoleHandler) UpdateRoleMenu(ctx context.Context, roleID int64, menuIDs []int64) error {
 
-	first, err := r.q.Role.WithContext(ctx).Where(r.q.Role.ID.Eq(uint(roleID))).First()
-	if err != nil {
-		return err
-	}
+	return r.q.Transaction(func(tx *query.Query) error {
+		first, err := r.q.Role.WithContext(ctx).Where(r.q.Role.ID.Eq(uint(roleID))).First()
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "查询角色失败")
+		}
 
-	err = r.q.Role.Menus.Model(first).Clear()
-	if err != nil {
-		return err
-	}
+		err = r.q.Role.Menus.Model(first).Clear()
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "清除角色菜单失败")
+		}
 
-	roleMenus := make([]*model.Menu, len(menuIDs))
-	for index, v := range menuIDs {
-		roleMenus[index] = &model.Menu{ID: uint(v)}
-	}
-	err = r.q.Role.Menus.Model(first).Append(roleMenus...)
-	if err != nil {
-		return err
-	}
-
-	return nil
+		roleMenus := make([]*model.Menu, len(menuIDs))
+		for index, v := range menuIDs {
+			roleMenus[index] = &model.Menu{ID: uint(v)}
+		}
+		err = r.q.Role.Menus.Model(first).Append(roleMenus...)
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, "添加角色菜单失败")
+		}
+		return nil
+	})
 }

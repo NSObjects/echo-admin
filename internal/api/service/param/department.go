@@ -65,6 +65,10 @@ func (r Department) Data() ([]field.Expr, model.Department) {
 		filed = append(filed, query.Department.Sort)
 		value.Sort = *r.Sort
 	}
+	if r.Phone != nil && *r.Phone != "" {
+		filed = append(filed, query.Department.Phone)
+		value.Phone = *r.Phone
+	}
 
 	if r.ParentID != nil && *r.ParentID != 0 {
 		filed = append(filed, query.Department.ParentID)

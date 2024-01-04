@@ -12,11 +12,14 @@ package biz
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/NSObjects/echo-admin/internal/api/data/model"
 	"github.com/NSObjects/echo-admin/internal/api/data/query"
 	"github.com/NSObjects/echo-admin/internal/api/service/param"
+	"github.com/NSObjects/echo-admin/internal/code"
 	"github.com/google/martian/log"
+	"github.com/marmotedu/errors"
 	"github.com/samber/lo"
 	"gorm.io/gen"
 )
@@ -41,12 +44,14 @@ func (d *DepartmentHandler) Get(ctx context.Context, id uint) (*model.Department
 }
 
 func (d *DepartmentHandler) Create(ctx context.Context, department param.Department) error {
-	selection, m := department.Data()
+	return d.q.Transaction(func(tx *query.Query) error {
+		selection, m := department.Data()
 
-	if err := d.q.Department.WithContext(ctx).Select(selection...).Create(&m); err != nil {
-		return err
-	}
-	return nil
+		if err := d.q.Department.WithContext(ctx).Select(selection...).Create(&m); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("创建部门失败 %v", department))
+		}
+		return nil
+	})
 
 }
 
@@ -106,21 +111,23 @@ func (d *DepartmentHandler) GetAllDepartments(parentID uint) ([]model.Department
 }
 
 func (d *DepartmentHandler) Delete(ctx context.Context, id uint) error {
-	_, err := d.q.Department.WithContext(ctx).Where(d.q.Department.ID.Eq(id)).Delete()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return d.q.Transaction(func(tx *query.Query) error {
+		_, err := d.q.Department.WithContext(ctx).Where(d.q.Department.ID.Eq(id)).Delete()
+		if err != nil {
+			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("删除部门失败 %v", id))
+		}
+		return nil
+	})
 }
 
 func (d *DepartmentHandler) Update(ctx context.Context, id uint, department param.Department) error {
-	selection, m := department.Data()
-	if _, err := d.q.Department.WithContext(ctx).Select(selection...).
-		Where(d.q.Department.ID.Eq(id)).
-		Updates(&m); err != nil {
-		return err
-	}
-
-	return nil
+	return d.q.Transaction(func(tx *query.Query) error {
+		selection, m := department.Data()
+		if _, err := d.q.Department.WithContext(ctx).Select(selection...).
+			Where(d.q.Department.ID.Eq(id)).
+			Updates(&m); err != nil {
+			return errors.WrapC(err, code.ErrDatabase, fmt.Sprintf("更新部门失败 %v", department))
+		}
+		return nil
+	})
 }
