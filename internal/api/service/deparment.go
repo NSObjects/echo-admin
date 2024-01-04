@@ -33,7 +33,6 @@ func (d *departmentController) RegisterRouter(s *echo.Group, _ ...echo.Middlewar
 	s.DELETE("/departments/:id", d.delete).Path = "删除某个部门"
 	s.GET("/departments/:id", d.get).Name = "查询某个部门列表"
 	s.PUT("/departments/:id", d.update).Path = "更新某个部门"
-
 }
 
 func (d *departmentController) create(c echo.Context) error {

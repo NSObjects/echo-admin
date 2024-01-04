@@ -2,8 +2,6 @@ module github.com/NSObjects/echo-admin
 
 go 1.21
 
-toolchain go1.21.1
-
 require (
 	github.com/casbin/casbin/v2 v2.77.2
 	github.com/casbin/gorm-adapter/v3 v3.20.0
