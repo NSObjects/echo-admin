@@ -122,6 +122,51 @@ func (s *Store) CreateDictionary(ctx context.Context, dictionary domain.Dictiona
 	return s.findDictionaryByCode(ctx, model.Code)
 }
 
+// UpdateDictionary changes a dictionary name by stable code.
+func (s *Store) UpdateDictionary(ctx context.Context, dictionary domain.Dictionary) (domain.Dictionary, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Dictionary{}, err
+	}
+	now := time.Now().UTC()
+	result := s.db.WithContext(ctx).Model(&dictionaryModel{}).
+		Where("code = ?", dictionary.Code).
+		Updates(map[string]interface{}{
+			"name":       dictionary.Name,
+			"updated_at": now,
+		})
+	if result.Error != nil {
+		return domain.Dictionary{}, mapWriteError(result.Error, "dictionary code already exists", "update dictionary")
+	}
+	if result.RowsAffected == 0 {
+		return domain.Dictionary{}, apperr.NewNotFound("dictionary")
+	}
+	return s.findDictionaryByCode(ctx, dictionary.Code)
+}
+
+// DeleteDictionary removes a dictionary and all of its items.
+func (s *Store) DeleteDictionary(ctx context.Context, code string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var dictionary dictionaryModel
+		if err := tx.First(&dictionary, "code = ?", code).Error; err != nil {
+			return mapReadError(err, "dictionary", "find dictionary")
+		}
+		if err := tx.Delete(&dictionaryItemModel{}, "dictionary_id = ?", dictionary.ID).Error; err != nil {
+			return apperr.WrapDatabase(err, "delete dictionary items")
+		}
+		result := tx.Delete(&dictionaryModel{}, "id = ?", dictionary.ID)
+		if result.Error != nil {
+			return apperr.WrapDatabase(result.Error, "delete dictionary")
+		}
+		if result.RowsAffected == 0 {
+			return apperr.NewNotFound("dictionary")
+		}
+		return nil
+	})
+}
+
 // AddDictionaryItem inserts one dictionary item under code.
 func (s *Store) AddDictionaryItem(ctx context.Context, code string, item domain.DictionaryItem) (domain.Dictionary, error) {
 	if err := ctx.Err(); err != nil {
@@ -158,6 +203,25 @@ func (s *Store) UpdateDictionaryItem(ctx context.Context, code string, item doma
 		})
 	if result.Error != nil {
 		return domain.Dictionary{}, apperr.WrapDatabase(result.Error, "update dictionary item")
+	}
+	if result.RowsAffected == 0 {
+		return domain.Dictionary{}, apperr.NewNotFound("dictionary item")
+	}
+	return s.findDictionaryByCode(ctx, code)
+}
+
+// DeleteDictionaryItem removes one dictionary item under code.
+func (s *Store) DeleteDictionaryItem(ctx context.Context, code string, itemID int64) (domain.Dictionary, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Dictionary{}, err
+	}
+	var dictionary dictionaryModel
+	if err := s.db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
+		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
+	}
+	result := s.db.WithContext(ctx).Delete(&dictionaryItemModel{}, "id = ? AND dictionary_id = ?", itemID, dictionary.ID)
+	if result.Error != nil {
+		return domain.Dictionary{}, apperr.WrapDatabase(result.Error, "delete dictionary item")
 	}
 	if result.RowsAffected == 0 {
 		return domain.Dictionary{}, apperr.NewNotFound("dictionary item")

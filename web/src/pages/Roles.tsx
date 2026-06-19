@@ -1,4 +1,9 @@
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  CopyOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
@@ -7,6 +12,7 @@ import {
   Input,
   Modal,
   message,
+  Popconfirm,
   Select,
   Space,
   Switch,
@@ -17,7 +23,9 @@ import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
 import {
+  copyRole,
   createRole,
+  deleteRole,
   type ListParams,
   listMenus,
   listPermissions,
@@ -48,6 +56,7 @@ const Roles: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Role>();
+  const [copying, setCopying] = useState<Role>();
   const [form] = Form.useForm<RoleFormValues>();
 
   const loadData = async (params: ListParams = {}) => {
@@ -74,6 +83,7 @@ const Roles: React.FC = () => {
 
   const openCreate = () => {
     setEditing(undefined);
+    setCopying(undefined);
     form.resetFields();
     form.setFieldsValue({
       active: true,
@@ -87,10 +97,26 @@ const Roles: React.FC = () => {
 
   const openEdit = (record: Role) => {
     setEditing(record);
+    setCopying(undefined);
     form.setFieldsValue({
       parent_id: record.parent_id,
       code: record.code,
       name: record.name,
+      permissions: record.permissions,
+      menu_ids: record.menu_ids,
+      default_path: record.default_path,
+      active: record.active,
+    });
+    setModalOpen(true);
+  };
+
+  const openCopy = (record: Role) => {
+    setEditing(undefined);
+    setCopying(record);
+    form.setFieldsValue({
+      parent_id: record.parent_id,
+      code: `${record.code}_copy`,
+      name: `${record.name}副本`,
       permissions: record.permissions,
       menu_ids: record.menu_ids,
       default_path: record.default_path,
@@ -111,6 +137,15 @@ const Roles: React.FC = () => {
         active: values.active,
       });
       message.success('角色已更新');
+    } else if (copying) {
+      await copyRole(copying.id, {
+        parent_id: values.parent_id,
+        code: values.code,
+        name: values.name,
+        default_path: values.default_path,
+        active: values.active,
+      });
+      message.success('角色已复制');
     } else {
       await createRole({
         parent_id: values.parent_id,
@@ -124,6 +159,13 @@ const Roles: React.FC = () => {
       message.success('角色已创建');
     }
     setModalOpen(false);
+    setCopying(undefined);
+    await loadData({ page: page?.page, page_size: page?.page_size });
+  };
+
+  const removeRole = async (record: Role) => {
+    await deleteRole(record.id);
+    message.success('角色已删除');
     await loadData({ page: page?.page, page_size: page?.page_size });
   };
 
@@ -168,12 +210,37 @@ const Roles: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) =>
-        access.canRoleUpdate ? (
-          <Button type="link" onClick={() => openEdit(record)}>
-            编辑
-          </Button>
-        ) : null,
+      render: (_, record) => (
+        <Space>
+          {access.canRoleUpdate ? (
+            <Button type="link" onClick={() => openEdit(record)}>
+              编辑
+            </Button>
+          ) : null}
+          {access.canRoleCreate ? (
+            <Button
+              type="link"
+              icon={<CopyOutlined />}
+              onClick={() => openCopy(record)}
+            >
+              复制
+            </Button>
+          ) : null}
+          {access.canRoleDelete ? (
+            <Popconfirm
+              title="删除角色"
+              description={`确认删除 ${record.name}？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeRole(record)}
+            >
+              <Button danger type="link" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 
@@ -232,10 +299,13 @@ const Roles: React.FC = () => {
         )}
       />
       <Modal
-        title={editing ? '编辑角色' : '新增角色'}
+        title={editing ? '编辑角色' : copying ? '复制角色' : '新增角色'}
         open={modalOpen}
         onOk={() => void submit()}
-        onCancel={() => setModalOpen(false)}
+        onCancel={() => {
+          setModalOpen(false);
+          setCopying(undefined);
+        }}
         destroyOnHidden
       >
         <Form<RoleFormValues> form={form} layout="vertical">
@@ -261,10 +331,18 @@ const Roles: React.FC = () => {
             name="permissions"
             rules={[{ required: true, message: '请选择权限' }]}
           >
-            <Select mode="multiple" options={permissionOptions} />
+            <Select
+              disabled={Boolean(copying)}
+              mode="multiple"
+              options={permissionOptions}
+            />
           </Form.Item>
           <Form.Item label="菜单" name="menu_ids">
-            <Select mode="multiple" options={menuOptions} />
+            <Select
+              disabled={Boolean(copying)}
+              mode="multiple"
+              options={menuOptions}
+            />
           </Form.Item>
           <Form.Item
             label="默认入口"

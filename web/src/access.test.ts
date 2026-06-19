@@ -14,27 +14,29 @@ const baseUser = {
 };
 
 describe('access', () => {
-  it('allows admin management when the permission is granted', () => {
+  it('allows admin delete when the permission is granted', () => {
     const result = access({
       currentUser: {
         ...baseUser,
-        permissions: ['admin:read'],
+        permissions: ['admin:delete'],
       },
     });
 
-    expect(result.canAdminRead).toBe(true);
+    expect(result.canAdminDelete).toBe(true);
   });
 
   it('denies admin management without the permission', () => {
     const result = access({
       currentUser: {
         ...baseUser,
-        permissions: ['role:read'],
+        permissions: ['role:delete', 'dict:delete'],
       },
     });
 
     expect(result.canAdminRead).toBe(false);
-    expect(result.canRoleRead).toBe(true);
+    expect(result.canRoleDelete).toBe(true);
+    expect(result.canMenuDelete).toBe(false);
+    expect(result.canDictDelete).toBe(true);
   });
 
   it('denies admin management without a current user', () => {

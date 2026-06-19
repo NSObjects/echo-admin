@@ -1,4 +1,9 @@
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
@@ -8,6 +13,7 @@ import {
   InputNumber,
   Modal,
   message,
+  Popconfirm,
   Space,
   Switch,
   Table,
@@ -21,7 +27,10 @@ import {
   createDictionary,
   type Dictionary,
   type DictionaryItem,
+  deleteDictionary,
+  deleteDictionaryItem,
   listDictionaries,
+  updateDictionary,
   updateDictionaryItem,
 } from '@/services/admin';
 
@@ -47,6 +56,7 @@ const Dictionaries: React.FC = () => {
   const [dictionaries, setDictionaries] = useState<Dictionary[]>([]);
   const [loading, setLoading] = useState(false);
   const [dictionaryModalOpen, setDictionaryModalOpen] = useState(false);
+  const [editingDictionary, setEditingDictionary] = useState<Dictionary>();
   const [itemTarget, setItemTarget] = useState<ItemTarget>();
   const [dictionaryForm] = Form.useForm<DictionaryFormValues>();
   const [itemForm] = Form.useForm<ItemFormValues>();
@@ -64,16 +74,29 @@ const Dictionaries: React.FC = () => {
     void loadData();
   }, []);
 
-  const openDictionaryModal = () => {
+  const openDictionaryModal = (dictionary?: Dictionary) => {
+    setEditingDictionary(dictionary);
     dictionaryForm.resetFields();
+    if (dictionary) {
+      dictionaryForm.setFieldsValue({
+        code: dictionary.code,
+        name: dictionary.name,
+      });
+    }
     setDictionaryModalOpen(true);
   };
 
   const submitDictionary = async () => {
     const values = await dictionaryForm.validateFields();
-    await createDictionary(values);
-    message.success('字典已创建');
+    if (editingDictionary) {
+      await updateDictionary(editingDictionary.code, { name: values.name });
+      message.success('字典已更新');
+    } else {
+      await createDictionary(values);
+      message.success('字典已创建');
+    }
     setDictionaryModalOpen(false);
+    setEditingDictionary(undefined);
     await loadData();
   };
 
@@ -100,7 +123,19 @@ const Dictionaries: React.FC = () => {
     await loadData();
   };
 
-  const itemColumns: ColumnsType<DictionaryItem> = [
+  const removeDictionary = async (record: Dictionary) => {
+    await deleteDictionary(record.code);
+    message.success('字典已删除');
+    await loadData();
+  };
+
+  const removeDictionaryItem = async (code: string, item: DictionaryItem) => {
+    await deleteDictionaryItem(code, item.id);
+    message.success('字典项已删除');
+    await loadData();
+  };
+
+  const itemColumns = (code: string): ColumnsType<DictionaryItem> => [
     { title: '标签', dataIndex: 'label' },
     { title: '值', dataIndex: 'value' },
     { title: '排序', dataIndex: 'sort', width: 88 },
@@ -116,15 +151,32 @@ const Dictionaries: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, item) =>
-        access.canDictUpdate ? (
-          <Button
-            type="link"
-            onClick={() => openItemModal(itemTarget?.code ?? '', item)}
-          >
-            编辑
-          </Button>
-        ) : null,
+      render: (_, item) => (
+        <Space>
+          {access.canDictUpdate ? (
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => openItemModal(code, item)}
+            >
+              编辑
+            </Button>
+          ) : null}
+          {access.canDictDelete ? (
+            <Popconfirm
+              title="删除字典项"
+              description={`确认删除 ${item.label}？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeDictionaryItem(code, item)}
+            >
+              <Button danger type="link" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 
@@ -139,12 +191,37 @@ const Dictionaries: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) =>
-        access.canDictCreate ? (
-          <Button type="link" onClick={() => openItemModal(record.code)}>
-            新增字典项
-          </Button>
-        ) : null,
+      render: (_, record) => (
+        <Space>
+          {access.canDictCreate ? (
+            <Button type="link" onClick={() => openItemModal(record.code)}>
+              新增字典项
+            </Button>
+          ) : null}
+          {access.canDictUpdate ? (
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => openDictionaryModal(record)}
+            >
+              编辑
+            </Button>
+          ) : null}
+          {access.canDictDelete ? (
+            <Popconfirm
+              title="删除字典"
+              description={`确认删除 ${record.name}？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeDictionary(record)}
+            >
+              <Button danger type="link" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 
@@ -160,22 +237,7 @@ const Dictionaries: React.FC = () => {
           expandedRowRender: (record) => (
             <Table<DictionaryItem>
               rowKey="id"
-              columns={itemColumns.map((column) =>
-                column.key === 'actions'
-                  ? {
-                      ...column,
-                      render: (_, item: DictionaryItem) =>
-                        access.canDictUpdate ? (
-                          <Button
-                            type="link"
-                            onClick={() => openItemModal(record.code, item)}
-                          >
-                            编辑
-                          </Button>
-                        ) : null,
-                    }
-                  : column,
-              )}
+              columns={itemColumns(record.code)}
               dataSource={record.items}
               pagination={false}
               size="small"
@@ -188,7 +250,7 @@ const Dictionaries: React.FC = () => {
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
-                onClick={openDictionaryModal}
+                onClick={() => openDictionaryModal()}
               >
                 新增字典
               </Button>
@@ -200,10 +262,13 @@ const Dictionaries: React.FC = () => {
         )}
       />
       <Modal
-        title="新增字典"
+        title={editingDictionary ? '编辑字典' : '新增字典'}
         open={dictionaryModalOpen}
         onOk={() => void submitDictionary()}
-        onCancel={() => setDictionaryModalOpen(false)}
+        onCancel={() => {
+          setDictionaryModalOpen(false);
+          setEditingDictionary(undefined);
+        }}
         destroyOnHidden
       >
         <Form<DictionaryFormValues> form={dictionaryForm} layout="vertical">
@@ -212,7 +277,7 @@ const Dictionaries: React.FC = () => {
             name="code"
             rules={[{ required: true, message: '请输入字典编码' }]}
           >
-            <Input maxLength={80} />
+            <Input disabled={Boolean(editingDictionary)} maxLength={80} />
           </Form.Item>
           <Form.Item
             label="名称"

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -519,6 +520,11 @@ func freeLocalAddr(t *testing.T) string {
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		// Some sandboxed test runners disallow creating local TCP listeners; in
+		// that environment this lifecycle test cannot exercise Server.Run.
+		if errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) {
+			t.Skipf("local TCP listener unavailable: %v", err)
+		}
 		t.Fatalf("listen on free local port: %v", err)
 	}
 	addr := listener.Addr().String()

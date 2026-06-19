@@ -1,4 +1,8 @@
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
@@ -7,6 +11,7 @@ import {
   Input,
   Modal,
   message,
+  Popconfirm,
   Select,
   Space,
   Switch,
@@ -19,6 +24,7 @@ import React, { useEffect, useState } from 'react';
 import {
   type AdminUser,
   createAdmin,
+  deleteAdmin,
   type ListParams,
   listAdmins,
   listRoles,
@@ -133,6 +139,12 @@ const Admins: React.FC = () => {
     await loadData({ page: page?.page, page_size: page?.page_size });
   };
 
+  const removeAdmin = async (record: AdminUser) => {
+    await deleteAdmin(record.id);
+    message.success('管理员已删除');
+    await loadData({ page: page?.page, page_size: page?.page_size });
+  };
+
   const roleName = (roleID: number) =>
     roles.find((role) => role.id === roleID)?.name ?? `#${roleID}`;
 
@@ -173,12 +185,28 @@ const Admins: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) =>
-        access.canAdminUpdate ? (
-          <Button type="link" onClick={() => openEdit(record)}>
-            编辑
-          </Button>
-        ) : null,
+      render: (_, record) => (
+        <Space>
+          {access.canAdminUpdate ? (
+            <Button type="link" onClick={() => openEdit(record)}>
+              编辑
+            </Button>
+          ) : null}
+          {access.canAdminDelete ? (
+            <Popconfirm
+              title="删除管理员"
+              description={`确认删除 ${record.username}？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeAdmin(record)}
+            >
+              <Button danger type="link" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 

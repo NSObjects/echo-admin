@@ -20,6 +20,7 @@ type Store interface {
 	ListAll(context.Context) ([]domain.Admin, error)
 	Create(context.Context, domain.Admin) (domain.Admin, error)
 	Update(context.Context, domain.Admin) (domain.Admin, error)
+	Delete(context.Context, int64) error
 }
 
 // RoleScope authorizes role assignments without exposing access storage details.

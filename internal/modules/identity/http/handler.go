@@ -45,6 +45,7 @@ func Register(group *echo.Group, handler *Handler) {
 	group.GET("/admins", handler.ListAdmins)
 	group.POST("/admins", handler.CreateAdmin)
 	group.PATCH("/admins/:id", handler.UpdateAdmin)
+	group.DELETE("/admins/:id", handler.DeleteAdmin)
 }
 
 // ListAdmins returns administrators.
@@ -121,6 +122,24 @@ func (h *Handler) UpdateAdmin(c *echo.Context) error {
 	return httpresp.OK(c, admin)
 }
 
+// DeleteAdmin deletes an administrator.
+func (h *Handler) DeleteAdmin(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionAdminDelete); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "admin")
+	if err != nil {
+		return err
+	}
+	if err := h.usecase.Delete(c.Request().Context(), id); err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "delete", "admin", strconv.FormatInt(id, 10), "deleted admin"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, deletedResponse{ID: id})
+}
+
 func (h *Handler) authorize(c *echo.Context, permission string) error {
 	if err := h.ready(); err != nil {
 		return err
@@ -169,4 +188,8 @@ func paginated(c *echo.Context, items interface{}, page, pageSize, total int) er
 		return err
 	}
 	return httpresp.List(c, items, meta)
+}
+
+type deletedResponse struct {
+	ID int64 `json:"id"`
 }

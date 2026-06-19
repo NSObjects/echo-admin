@@ -57,7 +57,7 @@ curl http://127.0.0.1:9322/api/ready
 curl http://127.0.0.1:9322/api/capabilities
 ```
 
-第一次启动会在 MySQL 中创建基础菜单、`super_admin` 角色、系统配置、状态字典和一个本地管理员：
+第一次启动会在 MySQL 中创建权限目录、API 目录、基础菜单、`super_admin` 角色、系统配置、状态字典和一个本地管理员：
 
 ```text
 username: admin
@@ -137,7 +137,7 @@ internal/modules/audit/          # 操作日志和登录日志
 
 授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。当前生效角色决定本次请求的权限集合，已分配但未激活的其他角色不会参与授权。
 
-`access` 模块提供权限目录、角色树和菜单管理。角色通过 `parent_id` 形成委派树：`super_admin` 可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限或菜单。菜单项通过 `permission` token 控制可见性，前端静态路由只注册页面，最终菜单显示以后端 `/api/auth/me` 返回的菜单为准。
+`access` 模块提供权限目录、API 目录、角色树和菜单管理。权限目录和 API 目录会持久化到 MySQL，便于初始化检查和后台审计；实际授权仍以角色持有的 permission token 为准，避免数据库 API 元数据和代码路由形成两套授权真源。角色通过 `parent_id` 形成委派树：`super_admin` 可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限或菜单。菜单项通过 `permission` token 控制可见性，前端静态路由只注册页面，最终菜单显示以后端 `/api/auth/me` 返回的菜单为准。
 
 HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase、统一响应。核心业务规则放在 `domain` 和 `usecase`。
 
@@ -163,21 +163,29 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | `GET` | `/api/admins` | 管理员列表 |
 | `POST` | `/api/admins` | 创建管理员 |
 | `PATCH` | `/api/admins/:id` | 更新管理员 |
+| `DELETE` | `/api/admins/:id` | 删除管理员 |
 | `GET` | `/api/roles` | 角色列表 |
 | `POST` | `/api/roles` | 创建角色 |
 | `PATCH` | `/api/roles/:id` | 更新角色 |
+| `DELETE` | `/api/roles/:id` | 删除角色 |
+| `POST` | `/api/roles/:id/copy` | 复制角色 |
 | `GET` | `/api/permissions` | 权限目录元数据 |
 | `GET` | `/api/menus` | 菜单列表 |
 | `POST` | `/api/menus` | 创建菜单 |
 | `PATCH` | `/api/menus/:id` | 更新菜单 |
+| `DELETE` | `/api/menus/:id` | 删除菜单 |
 | `GET` | `/api/system/configs` | 系统配置列表 |
 | `PUT` | `/api/system/configs/:key` | 创建或更新系统配置 |
 | `GET` | `/api/dictionaries` | 字典列表 |
 | `POST` | `/api/dictionaries` | 创建字典 |
+| `PATCH` | `/api/dictionaries/:code` | 更新字典 |
+| `DELETE` | `/api/dictionaries/:code` | 删除字典 |
 | `POST` | `/api/dictionaries/:code/items` | 新增字典项 |
 | `PATCH` | `/api/dictionaries/:code/items/:item_id` | 更新字典项 |
+| `DELETE` | `/api/dictionaries/:code/items/:item_id` | 删除字典项 |
 | `GET` | `/api/files` | 文件列表 |
 | `POST` | `/api/files` | 上传文件 |
+| `GET` | `/api/uploads/*` | 上传文件静态访问 |
 | `GET` | `/api/logs/operations` | 操作日志 |
 | `GET` | `/api/logs/logins` | 登录日志 |
 

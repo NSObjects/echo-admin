@@ -19,14 +19,17 @@ const (
 	PermissionAdminRead   = "admin:read"
 	PermissionAdminCreate = "admin:create"
 	PermissionAdminUpdate = "admin:update"
+	PermissionAdminDelete = "admin:delete"
 
 	PermissionRoleRead   = "role:read"
 	PermissionRoleCreate = "role:create"
 	PermissionRoleUpdate = "role:update"
+	PermissionRoleDelete = "role:delete"
 
 	PermissionMenuRead   = "menu:read"
 	PermissionMenuCreate = "menu:create"
 	PermissionMenuUpdate = "menu:update"
+	PermissionMenuDelete = "menu:delete"
 
 	PermissionConfigRead   = "config:read"
 	PermissionConfigUpdate = "config:update"
@@ -34,6 +37,7 @@ const (
 	PermissionDictRead   = "dict:read"
 	PermissionDictCreate = "dict:create"
 	PermissionDictUpdate = "dict:update"
+	PermissionDictDelete = "dict:delete"
 
 	PermissionFileRead   = "file:read"
 	PermissionFileUpload = "file:upload"
@@ -178,17 +182,21 @@ var permissionCatalog = []PermissionDefinition{
 	{Token: PermissionAdminRead, Resource: "管理员", Action: "查看", Name: "查看管理员"},
 	{Token: PermissionAdminCreate, Resource: "管理员", Action: "创建", Name: "创建管理员"},
 	{Token: PermissionAdminUpdate, Resource: "管理员", Action: "更新", Name: "更新管理员"},
+	{Token: PermissionAdminDelete, Resource: "管理员", Action: "删除", Name: "删除管理员"},
 	{Token: PermissionRoleRead, Resource: "角色", Action: "查看", Name: "查看角色"},
 	{Token: PermissionRoleCreate, Resource: "角色", Action: "创建", Name: "创建角色"},
 	{Token: PermissionRoleUpdate, Resource: "角色", Action: "更新", Name: "更新角色"},
+	{Token: PermissionRoleDelete, Resource: "角色", Action: "删除", Name: "删除角色"},
 	{Token: PermissionMenuRead, Resource: "菜单", Action: "查看", Name: "查看菜单"},
 	{Token: PermissionMenuCreate, Resource: "菜单", Action: "创建", Name: "创建菜单"},
 	{Token: PermissionMenuUpdate, Resource: "菜单", Action: "更新", Name: "更新菜单"},
+	{Token: PermissionMenuDelete, Resource: "菜单", Action: "删除", Name: "删除菜单"},
 	{Token: PermissionConfigRead, Resource: "系统配置", Action: "查看", Name: "查看系统配置"},
 	{Token: PermissionConfigUpdate, Resource: "系统配置", Action: "更新", Name: "更新系统配置"},
 	{Token: PermissionDictRead, Resource: "数据字典", Action: "查看", Name: "查看数据字典"},
 	{Token: PermissionDictCreate, Resource: "数据字典", Action: "创建", Name: "创建数据字典"},
 	{Token: PermissionDictUpdate, Resource: "数据字典", Action: "更新", Name: "更新数据字典"},
+	{Token: PermissionDictDelete, Resource: "数据字典", Action: "删除", Name: "删除数据字典"},
 	{Token: PermissionFileRead, Resource: "文件", Action: "查看", Name: "查看文件"},
 	{Token: PermissionFileUpload, Resource: "文件", Action: "上传", Name: "上传文件"},
 	{Token: PermissionLogRead, Resource: "审计日志", Action: "查看", Name: "查看日志"},

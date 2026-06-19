@@ -91,6 +91,24 @@ func (u *Usecase) Update(ctx context.Context, input UpdateAdminInput) (Admin, er
 	return fromAdmin(saved), nil
 }
 
+// Delete removes an administrator within the active role delegation scope.
+func (u *Usecase) Delete(ctx context.Context, id int64) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	existing, err := u.store.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if checkErr := u.roles.EnsureAssignableRoles(ctx, existing.RoleIDs); checkErr != nil {
+		return checkErr
+	}
+	if checkErr := rejectSelfDelete(ctx, existing.ID); checkErr != nil {
+		return checkErr
+	}
+	return u.store.Delete(ctx, existing.ID)
+}
+
 func (u *Usecase) ready() error {
 	if u == nil || u.store == nil || u.roles == nil {
 		return apperr.New(apperr.ErrInternalServer, "identity dependencies are not configured")
@@ -161,6 +179,19 @@ func rejectSelfDisable(ctx context.Context, adminID int64, active *bool) error {
 	}
 	if currentID == adminID {
 		return apperr.NewBadRequest("cannot disable current admin")
+	}
+	return nil
+}
+
+// The current administrator must keep at least one usable session owner; deleting
+// self would immediately invalidate accountability for the request in progress.
+func rejectSelfDelete(ctx context.Context, adminID int64) error {
+	currentID, err := currentAdminID(ctx)
+	if err != nil {
+		return err
+	}
+	if currentID == adminID {
+		return apperr.NewBadRequest("cannot delete current admin")
 	}
 	return nil
 }

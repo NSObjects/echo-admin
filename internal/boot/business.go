@@ -125,7 +125,22 @@ func newIdentityStore(i do.Injector) (*identitymysql.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return identitymysql.NewStore(ctx, db)
+	store, err := identitymysql.NewStore(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	accessStore, err := do.Invoke[*accessmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	role, err := accessStore.FindRoleByCode(ctx, accessdomain.RoleCodeSuperAdmin)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.SeedDefaultAdmin(ctx, role.ID); err != nil {
+		return nil, err
+	}
+	return store, nil
 }
 
 func newIdentityUsecase(i do.Injector) (*identityusecase.Usecase, error) {
@@ -185,10 +200,6 @@ func newAuditHandler(i do.Injector) (*audithttp.Handler, error) {
 }
 
 func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
-	ctx, err := do.Invoke[context.Context](i)
-	if err != nil {
-		return nil, err
-	}
 	identityStore, err := do.Invoke[*identitymysql.Store](i)
 	if err != nil {
 		return nil, err
@@ -196,13 +207,6 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	accessStore, err := do.Invoke[*accessmysql.Store](i)
 	if err != nil {
 		return nil, err
-	}
-	role, err := accessStore.FindRoleByCode(ctx, accessdomain.RoleCodeSuperAdmin)
-	if err != nil {
-		return nil, err
-	}
-	if seedErr := identityStore.SeedDefaultAdmin(ctx, role.ID); seedErr != nil {
-		return nil, seedErr
 	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
@@ -336,6 +340,10 @@ func (r accessAdminRoleReader) AdminRoleState(ctx context.Context, adminID int64
 		RoleIDs:      admin.RoleIDs,
 		ActiveRoleID: admin.ActiveRoleID,
 	}, nil
+}
+
+func (r accessAdminRoleReader) RoleAssigned(ctx context.Context, roleID int64) (bool, error) {
+	return r.store.RoleAssigned(ctx, roleID)
 }
 
 func (r authLoginRecorder) RecordLogin(ctx context.Context, record authusecase.LoginRecord) error {

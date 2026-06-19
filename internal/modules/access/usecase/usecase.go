@@ -144,6 +144,75 @@ func (u *Usecase) UpdateRole(ctx context.Context, input UpdateRoleInput) (Role, 
 	return fromRole(saved), nil
 }
 
+// DeleteRole removes a role only when the active role owns it and no admin or child role still depends on it.
+func (u *Usecase) DeleteRole(ctx context.Context, id int64) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return err
+	}
+	existing, err := u.store.FindRoleByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if checkErr := scope.ensureRoleMutable(existing); checkErr != nil {
+		return checkErr
+	}
+	if existing.IsSuperAdmin() {
+		return apperr.NewBadRequest("super admin role cannot be deleted")
+	}
+	if roleHasChildren(scope.allRoles, existing.ID) {
+		return apperr.NewConflict("role has child roles")
+	}
+	assigned, err := u.admins.RoleAssigned(ctx, existing.ID)
+	if err != nil {
+		return err
+	}
+	if assigned {
+		return apperr.NewConflict("role is assigned to admins")
+	}
+	return u.store.DeleteRole(ctx, existing.ID)
+}
+
+// CopyRole creates a new role by copying grants from an existing role inside the active delegation scope.
+func (u *Usecase) CopyRole(ctx context.Context, input CopyRoleInput) (Role, error) {
+	if err := u.ready(); err != nil {
+		return Role{}, err
+	}
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return Role{}, err
+	}
+	source, err := u.store.FindRoleByID(ctx, input.SourceID)
+	if err != nil {
+		return Role{}, err
+	}
+	if checkErr := scope.ensureRoleMutable(source); checkErr != nil {
+		return Role{}, checkErr
+	}
+	if source.IsSuperAdmin() {
+		return Role{}, apperr.NewBadRequest("super admin role cannot be copied")
+	}
+	draft := copyRoleDraftFrom(source, input)
+	if checkErr := scope.ensureParentAllowed(draft.parentID, 0); checkErr != nil {
+		return Role{}, checkErr
+	}
+	if checkErr := scope.ensureGrantSubset(source.Permissions, source.MenuIDs); checkErr != nil {
+		return Role{}, checkErr
+	}
+	role, err := domain.RestoreRole(0, draft.parentID, input.Code, input.Name, source.Permissions, source.MenuIDs, draft.defaultPath, draft.active, time.Time{}, time.Time{})
+	if err != nil {
+		return Role{}, mapDomainError(err)
+	}
+	created, err := u.store.CreateRole(ctx, role)
+	if err != nil {
+		return Role{}, err
+	}
+	return fromRole(created), nil
+}
+
 type roleUpdateDraft struct {
 	parentID    int64
 	name        string
@@ -167,6 +236,30 @@ func roleUpdateDraftFrom(existing domain.Role, input UpdateRoleInput) roleUpdate
 	}
 	if input.Name != nil {
 		draft.name = *input.Name
+	}
+	if input.DefaultPath != nil {
+		draft.defaultPath = *input.DefaultPath
+	}
+	if input.Active != nil {
+		draft.active = *input.Active
+	}
+	return draft
+}
+
+type copyRoleDraft struct {
+	parentID    int64
+	defaultPath string
+	active      bool
+}
+
+func copyRoleDraftFrom(source domain.Role, input CopyRoleInput) copyRoleDraft {
+	draft := copyRoleDraft{
+		parentID:    source.ParentID,
+		defaultPath: source.DefaultPath,
+		active:      source.Active,
+	}
+	if input.ParentID != nil {
+		draft.parentID = *input.ParentID
 	}
 	if input.DefaultPath != nil {
 		draft.defaultPath = *input.DefaultPath
@@ -252,6 +345,32 @@ func (u *Usecase) UpdateMenu(ctx context.Context, input UpdateMenuInput) (Menu, 
 		return Menu{}, err
 	}
 	return fromMenu(updated), nil
+}
+
+// DeleteMenu removes a menu only when no child menu or role grant still references it.
+func (u *Usecase) DeleteMenu(ctx context.Context, id int64) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	existing, err := u.store.FindMenuByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	menus, err := u.store.ListMenus(ctx)
+	if err != nil {
+		return err
+	}
+	if menuHasChildren(menus, existing.ID) {
+		return apperr.NewConflict("menu has child menus")
+	}
+	roles, err := u.store.ListAllRoles(ctx)
+	if err != nil {
+		return err
+	}
+	if menuAssignedToRole(roles, existing.ID) {
+		return apperr.NewConflict("menu is assigned to roles")
+	}
+	return u.store.DeleteMenu(ctx, existing.ID)
 }
 
 func (u *Usecase) ready() error {
@@ -510,6 +629,33 @@ func roleParentWouldCycle(roles []domain.Role, roleID, parentID int64) bool {
 			return false
 		}
 		parentID = parent.ParentID
+	}
+	return false
+}
+
+func roleHasChildren(roles []domain.Role, roleID int64) bool {
+	for _, role := range roles {
+		if role.ParentID == roleID {
+			return true
+		}
+	}
+	return false
+}
+
+func menuHasChildren(menus []domain.Menu, menuID int64) bool {
+	for _, menu := range menus {
+		if menu.ParentID == menuID {
+			return true
+		}
+	}
+	return false
+}
+
+func menuAssignedToRole(roles []domain.Role, menuID int64) bool {
+	for _, role := range roles {
+		if containsID(role.MenuIDs, menuID) {
+			return true
+		}
 	}
 	return false
 }

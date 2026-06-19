@@ -176,6 +176,14 @@ export type RoleUpdateInput = {
   active?: boolean;
 };
 
+export type RoleCopyInput = {
+  parent_id?: number;
+  code: string;
+  name: string;
+  default_path?: string;
+  active?: boolean;
+};
+
 export type MenuInput = {
   parent_id: number;
   name: string;
@@ -194,6 +202,10 @@ export type ConfigInput = {
 
 export type DictionaryCreateInput = {
   code: string;
+  name: string;
+};
+
+export type DictionaryUpdateInput = {
   name: string;
 };
 
@@ -253,6 +265,10 @@ export async function updateAdmin(
   await request(`/api/admins/${id}`, { method: 'PATCH', data: body });
 }
 
+export async function deleteAdmin(id: number): Promise<void> {
+  await request(`/api/admins/${id}`, { method: 'DELETE' });
+}
+
 export async function listRoles(
   params?: ListParams,
 ): Promise<Envelope<Role[]>> {
@@ -276,6 +292,14 @@ export async function updateRole(
   await request(`/api/roles/${id}`, { method: 'PATCH', data: body });
 }
 
+export async function deleteRole(id: number): Promise<void> {
+  await request(`/api/roles/${id}`, { method: 'DELETE' });
+}
+
+export async function copyRole(id: number, body: RoleCopyInput): Promise<void> {
+  await request(`/api/roles/${id}/copy`, { method: 'POST', data: body });
+}
+
 export async function listMenus(): Promise<Menu[]> {
   const response = await request<Envelope<Menu[]>>('/api/menus');
   return response.data;
@@ -287,6 +311,10 @@ export async function createMenu(body: MenuInput): Promise<void> {
 
 export async function updateMenu(id: number, body: MenuInput): Promise<void> {
   await request(`/api/menus/${id}`, { method: 'PATCH', data: body });
+}
+
+export async function deleteMenu(id: number): Promise<void> {
+  await request(`/api/menus/${id}`, { method: 'DELETE' });
 }
 
 export async function listConfigs(): Promise<SystemConfig[]> {
@@ -312,6 +340,22 @@ export async function createDictionary(
   await request('/api/dictionaries', { method: 'POST', data: body });
 }
 
+export async function updateDictionary(
+  code: string,
+  body: DictionaryUpdateInput,
+): Promise<void> {
+  await request(`/api/dictionaries/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    data: body,
+  });
+}
+
+export async function deleteDictionary(code: string): Promise<void> {
+  await request(`/api/dictionaries/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function addDictionaryItem(
   code: string,
   body: DictionaryItemInput,
@@ -330,6 +374,16 @@ export async function updateDictionaryItem(
   await request(
     `/api/dictionaries/${encodeURIComponent(code)}/items/${itemID}`,
     { method: 'PATCH', data: body },
+  );
+}
+
+export async function deleteDictionaryItem(
+  code: string,
+  itemID: number,
+): Promise<void> {
+  await request(
+    `/api/dictionaries/${encodeURIComponent(code)}/items/${itemID}`,
+    { method: 'DELETE' },
   );
 }
 

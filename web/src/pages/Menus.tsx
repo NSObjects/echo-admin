@@ -1,4 +1,8 @@
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
@@ -8,6 +12,7 @@ import {
   InputNumber,
   Modal,
   message,
+  Popconfirm,
   Select,
   Space,
   Switch,
@@ -19,6 +24,7 @@ import React, { useEffect, useState } from 'react';
 
 import {
   createMenu,
+  deleteMenu,
   listMenus,
   listPermissions,
   type Menu,
@@ -98,6 +104,12 @@ const Menus: React.FC = () => {
     await loadData();
   };
 
+  const removeMenu = async (record: Menu) => {
+    await deleteMenu(record.id);
+    message.success('菜单已删除');
+    await loadData();
+  };
+
   const columns: ColumnsType<Menu> = [
     { title: '名称', dataIndex: 'name' },
     { title: '路径', dataIndex: 'path' },
@@ -128,12 +140,28 @@ const Menus: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) =>
-        access.canMenuUpdate ? (
-          <Button type="link" onClick={() => openEdit(record)}>
-            编辑
-          </Button>
-        ) : null,
+      render: (_, record) => (
+        <Space>
+          {access.canMenuUpdate ? (
+            <Button type="link" onClick={() => openEdit(record)}>
+              编辑
+            </Button>
+          ) : null}
+          {access.canMenuDelete ? (
+            <Popconfirm
+              title="删除菜单"
+              description={`确认删除 ${record.name}？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeMenu(record)}
+            >
+              <Button danger type="link" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 

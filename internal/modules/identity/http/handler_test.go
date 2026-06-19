@@ -63,6 +63,30 @@ func TestListAdminsRejectsUnauthorizedBeforeStore(t *testing.T) {
 	}
 }
 
+func TestDeleteAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth := newIdentityEcho(nil)
+	store.admins = map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}
+
+	rec := doJSON(t, e, http.MethodDelete, "/api/admins/7", "", "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete admin status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAdminDelete {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAdminDelete)
+	}
+	if store.deletedID != 7 {
+		t.Fatalf("deletedID = %d, want 7", store.deletedID)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if got := recorder.records[0].Action; got != "delete" {
+		t.Fatalf("operation action = %q, want delete", got)
+	}
+}
+
 func newIdentityEcho(authErr error) (*echo.Echo, *identityStore, *operationRecorder, *identityAuthorizer) {
 	store := &identityStore{}
 	uc := identityusecase.New(store, identityRoleScope{})
@@ -93,13 +117,19 @@ type identityStore struct {
 	createCalls int
 	listCalls   int
 	created     identitydomain.Admin
+	admins      map[int64]identitydomain.Admin
+	deletedID   int64
 }
 
 func (s *identityStore) FindByUsername(context.Context, string) (identitydomain.Admin, error) {
 	return identitydomain.Admin{}, apperr.NewNotFound("admin")
 }
 
-func (s *identityStore) FindByID(context.Context, int64) (identitydomain.Admin, error) {
+func (s *identityStore) FindByID(_ context.Context, id int64) (identitydomain.Admin, error) {
+	admin, ok := s.admins[id]
+	if ok {
+		return admin, nil
+	}
 	return identitydomain.Admin{}, apperr.NewNotFound("admin")
 }
 
@@ -125,6 +155,11 @@ func (s *identityStore) Update(ctx context.Context, admin identitydomain.Admin) 
 		return identitydomain.Admin{}, err
 	}
 	return admin, nil
+}
+
+func (s *identityStore) Delete(_ context.Context, id int64) error {
+	s.deletedID = id
+	return nil
 }
 
 type identityAuthorizer struct {
@@ -154,6 +189,15 @@ func (identityRoleScope) AssignableRoleIDs(context.Context) ([]int64, error) {
 
 func (identityRoleScope) EnsureAssignableRoles(_ context.Context, _ []int64) error {
 	return nil
+}
+
+func newAdmin(t *testing.T, id int64, username string) identitydomain.Admin {
+	t.Helper()
+	admin, err := identitydomain.RestoreAdmin(id, username, username, username+"@example.com", []byte("hash"), []int64{1}, 1, true, fixedTime(), fixedTime())
+	if err != nil {
+		t.Fatalf("RestoreAdmin() error = %v", err)
+	}
+	return admin
 }
 
 func fixedTime() time.Time {

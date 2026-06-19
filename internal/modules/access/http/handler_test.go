@@ -47,6 +47,31 @@ func TestCreateRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
+func TestCopyRoleRequiresCreatePermissionAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth := newAccessEcho(nil)
+	store.roles = twoRoles(t)
+
+	rec := doJSON(t, e, http.MethodPost, "/api/roles/2/copy", `{"code":"operator_copy","name":"运营副本"}`, "42")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("copy role status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleCreate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleCreate)
+	}
+	if store.createRoleCalls != 1 {
+		t.Fatalf("createRoleCalls = %d, want 1", store.createRoleCalls)
+	}
+	if got := store.createdRole.Code; got != "operator_copy" {
+		t.Fatalf("created role code = %q, want operator_copy", got)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if got := recorder.records[0].Action; got != "copy" {
+		t.Fatalf("operation action = %q, want copy", got)
+	}
+}
+
 func TestListMenusRejectsUnauthorizedBeforeStore(t *testing.T) {
 	e, store, recorder, _ := newAccessEcho(apperr.NewPermissionDenied("menu", "read"))
 
@@ -59,6 +84,54 @@ func TestListMenusRejectsUnauthorizedBeforeStore(t *testing.T) {
 	}
 	if len(recorder.records) != 0 {
 		t.Fatalf("operation records = %d, want 0", len(recorder.records))
+	}
+}
+
+func TestDeleteRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth := newAccessEcho(nil)
+	store.roles = twoRoles(t)
+
+	rec := doJSON(t, e, http.MethodDelete, "/api/roles/2", "", "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete role status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleDelete {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleDelete)
+	}
+	if store.deletedRoleID != 2 {
+		t.Fatalf("deletedRoleID = %d, want 2", store.deletedRoleID)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if got := recorder.records[0].Action; got != "delete" {
+		t.Fatalf("operation action = %q, want delete", got)
+	}
+}
+
+func TestDeleteMenuRequiresPermissionAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth := newAccessEcho(nil)
+	menu, err := accessdomain.RestoreMenu(2, 0, "临时菜单", "/scratch", "menu", "", 20, true, fixedTime(), fixedTime())
+	if err != nil {
+		t.Fatalf("RestoreMenu() error = %v", err)
+	}
+	store.menus = []accessdomain.Menu{menu}
+
+	rec := doJSON(t, e, http.MethodDelete, "/api/menus/2", "", "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete menu status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionMenuDelete {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionMenuDelete)
+	}
+	if store.deletedMenuID != 2 {
+		t.Fatalf("deletedMenuID = %d, want 2", store.deletedMenuID)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if got := recorder.records[0].Resource; got != "menu" {
+		t.Fatalf("operation resource = %q, want menu", got)
 	}
 }
 
@@ -93,9 +166,18 @@ type accessStore struct {
 	createRoleCalls int
 	listMenuCalls   int
 	createdRole     accessdomain.Role
+	roles           []accessdomain.Role
+	menus           []accessdomain.Menu
+	deletedRoleID   int64
+	deletedMenuID   int64
 }
 
-func (s *accessStore) FindRoleByID(context.Context, int64) (accessdomain.Role, error) {
+func (s *accessStore) FindRoleByID(_ context.Context, id int64) (accessdomain.Role, error) {
+	for _, role := range s.roles {
+		if role.ID == id {
+			return role, nil
+		}
+	}
 	return accessdomain.Role{}, apperr.NewNotFound("role")
 }
 
@@ -106,6 +188,9 @@ func (s *accessStore) FindRoleByCode(context.Context, string) (accessdomain.Role
 func (s *accessStore) ListAllRoles(ctx context.Context) ([]accessdomain.Role, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if len(s.roles) > 0 {
+		return s.roles, nil
 	}
 	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessusecase.AllPermissions(), []int64{1}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
 	if err != nil {
@@ -120,7 +205,7 @@ func (s *accessStore) CreateRole(ctx context.Context, role accessdomain.Role) (a
 	}
 	s.createRoleCalls++
 	s.createdRole = role
-	return accessdomain.RestoreRole(1, role.ParentID, role.Code, role.Name, role.Permissions, role.MenuIDs, role.DefaultPath, role.Active, fixedTime(), fixedTime())
+	return accessdomain.RestoreRole(10, role.ParentID, role.Code, role.Name, role.Permissions, role.MenuIDs, role.DefaultPath, role.Active, fixedTime(), fixedTime())
 }
 
 func (s *accessStore) UpdateRole(ctx context.Context, role accessdomain.Role) (accessdomain.Role, error) {
@@ -130,17 +215,27 @@ func (s *accessStore) UpdateRole(ctx context.Context, role accessdomain.Role) (a
 	return role, nil
 }
 
+func (s *accessStore) DeleteRole(_ context.Context, id int64) error {
+	s.deletedRoleID = id
+	return nil
+}
+
 func (s *accessStore) ListMenus(ctx context.Context) ([]accessdomain.Menu, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	s.listMenuCalls++
-	return nil, nil
+	return s.menus, nil
 }
 
 func (s *accessStore) FindMenuByID(ctx context.Context, id int64) (accessdomain.Menu, error) {
 	if err := ctx.Err(); err != nil {
 		return accessdomain.Menu{}, err
+	}
+	for _, menu := range s.menus {
+		if menu.ID == id {
+			return menu, nil
+		}
 	}
 	return accessdomain.RestoreMenu(id, 0, "Existing", "/existing", "menu", "log:read", 10, true, fixedTime(), fixedTime())
 }
@@ -157,6 +252,11 @@ func (s *accessStore) UpdateMenu(ctx context.Context, menu accessdomain.Menu) (a
 		return accessdomain.Menu{}, err
 	}
 	return menu, nil
+}
+
+func (s *accessStore) DeleteMenu(_ context.Context, id int64) error {
+	s.deletedMenuID = id
+	return nil
 }
 
 type accessAuthorizer struct {
@@ -182,6 +282,23 @@ type accessAdminRoleReader struct{}
 
 func (accessAdminRoleReader) AdminRoleState(context.Context, int64) (accessusecase.AdminRoleState, error) {
 	return accessusecase.AdminRoleState{RoleIDs: []int64{1}, ActiveRoleID: 1}, nil
+}
+
+func (accessAdminRoleReader) RoleAssigned(context.Context, int64) (bool, error) {
+	return false, nil
+}
+
+func twoRoles(t *testing.T) []accessdomain.Role {
+	t.Helper()
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessusecase.AllPermissions(), []int64{1}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
+	if err != nil {
+		t.Fatalf("RestoreRole(root) error = %v", err)
+	}
+	operator, err := accessdomain.RestoreRole(2, 1, "operator", "运营", []string{accessdomain.PermissionAdminRead}, []int64{1}, "/admins", true, fixedTime(), fixedTime())
+	if err != nil {
+		t.Fatalf("RestoreRole(operator) error = %v", err)
+	}
+	return []accessdomain.Role{root, operator}
 }
 
 func fixedTime() time.Time {

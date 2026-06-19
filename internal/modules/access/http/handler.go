@@ -46,9 +46,12 @@ func Register(group *echo.Group, handler *Handler) {
 	group.GET("/roles", handler.ListRoles)
 	group.POST("/roles", handler.CreateRole)
 	group.PATCH("/roles/:id", handler.UpdateRole)
+	group.DELETE("/roles/:id", handler.DeleteRole)
+	group.POST("/roles/:id/copy", handler.CopyRole)
 	group.GET("/menus", handler.ListMenus)
 	group.POST("/menus", handler.CreateMenu)
 	group.PATCH("/menus/:id", handler.UpdateMenu)
+	group.DELETE("/menus/:id", handler.DeleteMenu)
 }
 
 // ListPermissions returns grant metadata.
@@ -131,6 +134,54 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 	return httpresp.OK(c, role)
 }
 
+// DeleteRole deletes a role.
+func (h *Handler) DeleteRole(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionRoleDelete); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "role")
+	if err != nil {
+		return err
+	}
+	if err := h.usecase.DeleteRole(c.Request().Context(), id); err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "delete", "role", strconv.FormatInt(id, 10), "deleted role"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, deletedResponse{ID: id})
+}
+
+// CopyRole copies a role with its grants.
+func (h *Handler) CopyRole(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionRoleCreate); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "role")
+	if err != nil {
+		return err
+	}
+	var req copyRoleRequest
+	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
+		return bindErr
+	}
+	role, err := h.usecase.CopyRole(c.Request().Context(), usecase.CopyRoleInput{
+		SourceID:    id,
+		ParentID:    req.ParentID,
+		Code:        req.Code,
+		Name:        req.Name,
+		DefaultPath: req.DefaultPath,
+		Active:      req.Active,
+	})
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "copy", "role", strconv.FormatInt(role.ID, 10), "copied role"); err != nil {
+		return err
+	}
+	return httpresp.Created(c, role)
+}
+
 // ListMenus returns menus.
 func (h *Handler) ListMenus(c *echo.Context) error {
 	if err := h.authorize(c, accessdomain.PermissionMenuRead); err != nil {
@@ -192,6 +243,24 @@ func (h *Handler) UpdateMenu(c *echo.Context) error {
 		return err
 	}
 	return httpresp.OK(c, menu)
+}
+
+// DeleteMenu deletes a menu.
+func (h *Handler) DeleteMenu(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionMenuDelete); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "menu")
+	if err != nil {
+		return err
+	}
+	if err := h.usecase.DeleteMenu(c.Request().Context(), id); err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "delete", "menu", strconv.FormatInt(id, 10), "deleted menu"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, deletedResponse{ID: id})
 }
 
 func (h *Handler) authorize(c *echo.Context, permission string) error {
@@ -266,4 +335,8 @@ func paginated(c *echo.Context, items interface{}, page, pageSize, total int) er
 		return err
 	}
 	return httpresp.List(c, items, meta)
+}
+
+type deletedResponse struct {
+	ID int64 `json:"id"`
 }

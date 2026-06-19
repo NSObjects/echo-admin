@@ -11,6 +11,10 @@ type dictionaryRequest struct {
 	Name string `json:"name" validate:"required,max=120"`
 }
 
+type updateDictionaryRequest struct {
+	Name string `json:"name" validate:"required,max=120"`
+}
+
 type dictionaryItemRequest struct {
 	Label  string `json:"label" validate:"required,max=120"`
 	Value  string `json:"value" validate:"required,max=120"`

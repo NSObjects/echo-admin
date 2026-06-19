@@ -44,8 +44,11 @@ func Register(group *echo.Group, handler *Handler) {
 	group.PUT("/system/configs/:key", handler.UpsertConfig)
 	group.GET("/dictionaries", handler.ListDictionaries)
 	group.POST("/dictionaries", handler.CreateDictionary)
+	group.PATCH("/dictionaries/:code", handler.UpdateDictionary)
+	group.DELETE("/dictionaries/:code", handler.DeleteDictionary)
 	group.POST("/dictionaries/:code/items", handler.AddDictionaryItem)
 	group.PATCH("/dictionaries/:code/items/:item_id", handler.UpdateDictionaryItem)
+	group.DELETE("/dictionaries/:code/items/:item_id", handler.DeleteDictionaryItem)
 }
 
 // ListConfigs returns system configs.
@@ -119,6 +122,43 @@ func (h *Handler) CreateDictionary(c *echo.Context) error {
 	return httpresp.Created(c, dictionary)
 }
 
+// UpdateDictionary updates a dictionary.
+func (h *Handler) UpdateDictionary(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionDictUpdate); err != nil {
+		return err
+	}
+	var req updateDictionaryRequest
+	if err := httpreq.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+	dictionary, err := h.usecase.UpdateDictionary(c.Request().Context(), usecase.UpdateDictionaryInput{
+		Code: c.Param("code"),
+		Name: req.Name,
+	})
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "update", "dictionary", dictionary.Code, "updated dictionary"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, dictionary)
+}
+
+// DeleteDictionary deletes a dictionary.
+func (h *Handler) DeleteDictionary(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionDictDelete); err != nil {
+		return err
+	}
+	code := c.Param("code")
+	if err := h.usecase.DeleteDictionary(c.Request().Context(), code); err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "delete", "dictionary", code, "deleted dictionary"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, deletedResponse{Code: code})
+}
+
 // AddDictionaryItem appends one dictionary item.
 func (h *Handler) AddDictionaryItem(c *echo.Context) error {
 	if err := h.authorize(c, accessdomain.PermissionDictCreate); err != nil {
@@ -172,6 +212,25 @@ func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
 	return httpresp.OK(c, dictionary)
 }
 
+// DeleteDictionaryItem deletes one dictionary item.
+func (h *Handler) DeleteDictionaryItem(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionDictDelete); err != nil {
+		return err
+	}
+	itemID, err := httpreq.PathID(c, "item_id", "dictionary item")
+	if err != nil {
+		return err
+	}
+	dictionary, err := h.usecase.DeleteDictionaryItem(c.Request().Context(), c.Param("code"), itemID)
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "delete", "dictionary_item", strconv.FormatInt(itemID, 10), "deleted dictionary item"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, dictionary)
+}
+
 func (h *Handler) authorize(c *echo.Context, permission string) error {
 	if err := h.ready(); err != nil {
 		return err
@@ -204,4 +263,8 @@ func (h *Handler) ready() error {
 		return apperr.New(apperr.ErrInternalServer, "settings handler is not configured")
 	}
 	return nil
+}
+
+type deletedResponse struct {
+	Code string `json:"code"`
 }

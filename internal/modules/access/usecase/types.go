@@ -20,15 +20,18 @@ type Store interface {
 	ListAllRoles(context.Context) ([]domain.Role, error)
 	CreateRole(context.Context, domain.Role) (domain.Role, error)
 	UpdateRole(context.Context, domain.Role) (domain.Role, error)
+	DeleteRole(context.Context, int64) error
 	FindMenuByID(context.Context, int64) (domain.Menu, error)
 	ListMenus(context.Context) ([]domain.Menu, error)
 	CreateMenu(context.Context, domain.Menu) (domain.Menu, error)
 	UpdateMenu(context.Context, domain.Menu) (domain.Menu, error)
+	DeleteMenu(context.Context, int64) error
 }
 
 // AdminRoleReader reads the current administrator role assignment without exposing identity storage.
 type AdminRoleReader interface {
 	AdminRoleState(context.Context, int64) (AdminRoleState, error)
+	RoleAssigned(context.Context, int64) (bool, error)
 }
 
 // AdminRoleState is the minimal identity snapshot needed for scoped role delegation.
@@ -66,6 +69,16 @@ type UpdateRoleInput struct {
 	Name        *string
 	Permissions []string
 	MenuIDs     []int64
+	DefaultPath *string
+	Active      *bool
+}
+
+// CopyRoleInput carries the new identity fields for a copied role.
+type CopyRoleInput struct {
+	SourceID    int64
+	ParentID    *int64
+	Code        string
+	Name        string
 	DefaultPath *string
 	Active      *bool
 }

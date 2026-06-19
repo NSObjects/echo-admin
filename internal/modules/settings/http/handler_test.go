@@ -60,6 +60,27 @@ func TestListDictionariesRejectsUnauthorizedBeforeStore(t *testing.T) {
 	}
 }
 
+func TestDeleteDictionaryRequiresPermissionAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth := newSettingsEcho(nil)
+
+	rec := doJSON(t, e, http.MethodDelete, "/api/dictionaries/color", "", "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete dictionary status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionDictDelete {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionDictDelete)
+	}
+	if got := store.deletedDictionaryCode; got != "color" {
+		t.Fatalf("deletedDictionaryCode = %q, want color", got)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if got := recorder.records[0].Resource; got != "dictionary" {
+		t.Fatalf("operation resource = %q, want dictionary", got)
+	}
+}
+
 func newSettingsEcho(authErr error) (*echo.Echo, *settingsStore, *operationRecorder, *settingsAuthorizer) {
 	store := &settingsStore{}
 	uc := settingsusecase.New(store)
@@ -87,9 +108,10 @@ func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *http
 }
 
 type settingsStore struct {
-	upsertCalls         int
-	listDictionaryCalls int
-	config              settingsdomain.SystemConfig
+	upsertCalls           int
+	listDictionaryCalls   int
+	config                settingsdomain.SystemConfig
+	deletedDictionaryCode string
 }
 
 func (s *settingsStore) ListConfigs(ctx context.Context) ([]settingsdomain.SystemConfig, error) {
@@ -123,6 +145,21 @@ func (s *settingsStore) CreateDictionary(ctx context.Context, dictionary setting
 	return dictionary, nil
 }
 
+func (s *settingsStore) UpdateDictionary(ctx context.Context, dictionary settingsdomain.Dictionary) (settingsdomain.Dictionary, error) {
+	if err := ctx.Err(); err != nil {
+		return settingsdomain.Dictionary{}, err
+	}
+	return dictionary, nil
+}
+
+func (s *settingsStore) DeleteDictionary(ctx context.Context, code string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.deletedDictionaryCode = code
+	return nil
+}
+
 func (s *settingsStore) AddDictionaryItem(ctx context.Context, _ string, item settingsdomain.DictionaryItem) (settingsdomain.Dictionary, error) {
 	if err := ctx.Err(); err != nil {
 		return settingsdomain.Dictionary{}, err
@@ -132,6 +169,17 @@ func (s *settingsStore) AddDictionaryItem(ctx context.Context, _ string, item se
 
 func (s *settingsStore) UpdateDictionaryItem(ctx context.Context, _ string, item settingsdomain.DictionaryItem) (settingsdomain.Dictionary, error) {
 	if err := ctx.Err(); err != nil {
+		return settingsdomain.Dictionary{}, err
+	}
+	return settingsdomain.RestoreDictionary(1, "status", "状态", []settingsdomain.DictionaryItem{item}, fixedTime(), fixedTime())
+}
+
+func (s *settingsStore) DeleteDictionaryItem(ctx context.Context, _ string, itemID int64) (settingsdomain.Dictionary, error) {
+	if err := ctx.Err(); err != nil {
+		return settingsdomain.Dictionary{}, err
+	}
+	item, err := settingsdomain.RestoreDictionaryItem(itemID, "启用", "enabled", 10, true)
+	if err != nil {
 		return settingsdomain.Dictionary{}, err
 	}
 	return settingsdomain.RestoreDictionary(1, "status", "状态", []settingsdomain.DictionaryItem{item}, fixedTime(), fixedTime())

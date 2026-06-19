@@ -14,8 +14,11 @@ type Store interface {
 	UpsertConfig(context.Context, domain.SystemConfig) (domain.SystemConfig, error)
 	ListDictionaries(context.Context) ([]domain.Dictionary, error)
 	CreateDictionary(context.Context, domain.Dictionary) (domain.Dictionary, error)
+	UpdateDictionary(context.Context, domain.Dictionary) (domain.Dictionary, error)
+	DeleteDictionary(context.Context, string) error
 	AddDictionaryItem(context.Context, string, domain.DictionaryItem) (domain.Dictionary, error)
 	UpdateDictionaryItem(context.Context, string, domain.DictionaryItem) (domain.Dictionary, error)
+	DeleteDictionaryItem(context.Context, string, int64) (domain.Dictionary, error)
 }
 
 // Usecase coordinates system setting and dictionary rules.
@@ -38,6 +41,12 @@ type ConfigInput struct {
 
 // DictionaryInput carries dictionary creation fields.
 type DictionaryInput struct {
+	Code string
+	Name string
+}
+
+// UpdateDictionaryInput carries mutable dictionary fields.
+type UpdateDictionaryInput struct {
 	Code string
 	Name string
 }

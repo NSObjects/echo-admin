@@ -14,6 +14,8 @@ npm run build
 
 开发服务会把 `/api` 代理到 `ECHO_ADMIN_WEB_API_TARGET`，默认是 `http://127.0.0.1:9322`。后端接口路径以 `/api` 开头，登录后前端会把 JWT 写入 `localStorage`，并通过 `Authorization: Bearer <token>` 发送。生产部署仍按同源 `/api` 访问。
 
+Utoo 的 persistent cache 使用项目级 `.turbopack/lock`。如果本地 dev server 正在运行，构建验证可使用 `ECHO_ADMIN_WEB_DISABLE_UTOOPACK_CACHE=1 npm run build` 禁用 persistent cache，避免停止当前 dev server。若 CI 或沙箱环境不允许 utoopack 创建子进程，可使用 `ECHO_ADMIN_WEB_DISABLE_UTOOPACK=1 npm run build` 走默认 webpack 构建。
+
 登录态中的当前角色由后端 `/api/auth/me` 返回。切换角色时调用 `/api/auth/role`，前端会保存后端重新签发的 token，并按新角色的菜单、按钮权限和默认入口刷新界面。
 
 ## 目录

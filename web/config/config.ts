@@ -8,6 +8,9 @@ import proxy from './proxy';
 import routes from './routes';
 
 const { UMI_ENV = 'dev' } = process.env;
+const disableUtoopack = process.env.ECHO_ADMIN_WEB_DISABLE_UTOOPACK === '1';
+const disableUtoopackPersistentCache =
+  process.env.ECHO_ADMIN_WEB_DISABLE_UTOOPACK_CACHE === '1';
 
 // Compute commit hash: env vars take precedence, fall back to git at build time
 const commitHash =
@@ -43,6 +46,7 @@ export default defineConfig({
    * @doc https://umijs.org/docs/api/config#hash
    */
   hash: true,
+  esbuildMinifyIIFE: true,
 
   publicPath: PUBLIC_PATH,
 
@@ -179,16 +183,25 @@ export default defineConfig({
   tailwindcss: {},
 
   mock: false,
-  utoopack: {
-    module: {
-      rules: {
-        '*.md': {
-          loaders: [{ loader: join(__dirname, 'md-raw-loader.cjs') }],
-          as: '*.js',
+  ...(disableUtoopack
+    ? {}
+    : {
+        utoopack: {
+          // Utoo uses a project-wide persistent cache lock. This opt-in switch
+          // lets CI or a parallel local build run without stopping dev server.
+          ...(disableUtoopackPersistentCache
+            ? { persistentCaching: false }
+            : {}),
+          module: {
+            rules: {
+              '*.md': {
+                loaders: [{ loader: join(__dirname, 'md-raw-loader.cjs') }],
+                as: '*.js',
+              },
+            },
+          },
         },
-      },
-    },
-  },
+      }),
   exportStatic: {},
   define: {
     'process.env.CI': process.env.CI,

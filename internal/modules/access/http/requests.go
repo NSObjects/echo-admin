@@ -19,6 +19,14 @@ type updateRoleRequest struct {
 	Active      *bool    `json:"active"`
 }
 
+type copyRoleRequest struct {
+	ParentID    *int64  `json:"parent_id" validate:"omitempty,gte=0"`
+	Code        string  `json:"code" validate:"required,max=64"`
+	Name        string  `json:"name" validate:"required,max=80"`
+	DefaultPath *string `json:"default_path" validate:"omitempty,max=160"`
+	Active      *bool   `json:"active"`
+}
+
 type menuRequest struct {
 	ParentID   int64  `json:"parent_id" validate:"gte=0"`
 	Name       string `json:"name" validate:"required,max=80"`

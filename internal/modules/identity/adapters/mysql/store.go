@@ -36,7 +36,8 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// SeedDefaultAdmin creates the first administrator when none exists.
+// SeedDefaultAdmin creates or repairs the local bootstrap administrator without
+// resetting an operator-changed password.
 func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -148,6 +149,35 @@ func (s *Store) Update(ctx context.Context, admin domain.Admin) (domain.Admin, e
 		return domain.Admin{}, apperr.NewNotFound("admin")
 	}
 	return model.toDomain()
+}
+
+// Delete removes an administrator row by id.
+func (s *Store) Delete(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result := s.db.WithContext(ctx).Delete(&adminModel{}, "id = ?", id)
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, "delete admin")
+	}
+	if result.RowsAffected == 0 {
+		return apperr.NewNotFound("admin")
+	}
+	return nil
+}
+
+// RoleAssigned reports whether any administrator still carries the role.
+func (s *Store) RoleAssigned(ctx context.Context, roleID int64) (bool, error) {
+	admins, err := s.ListAll(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, admin := range admins {
+		if containsRoleID(admin.RoleIDs, roleID) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type adminModel struct {

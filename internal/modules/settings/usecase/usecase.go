@@ -9,6 +9,11 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
+const (
+	seedStatusDictionaryCode = "status"
+	dictionaryCodeProbeName  = "dictionary"
+)
+
 // ListConfigs returns system configs.
 func (u *Usecase) ListConfigs(ctx context.Context) ([]SystemConfig, error) {
 	if err := u.ready(); err != nil {
@@ -65,16 +70,51 @@ func (u *Usecase) CreateDictionary(ctx context.Context, input DictionaryInput) (
 	return fromDictionary(created), nil
 }
 
+// UpdateDictionary changes a dictionary name while keeping its stable code.
+func (u *Usecase) UpdateDictionary(ctx context.Context, input UpdateDictionaryInput) (Dictionary, error) {
+	if err := u.ready(); err != nil {
+		return Dictionary{}, err
+	}
+	dictionary, err := domain.RestoreDictionary(0, input.Code, input.Name, nil, time.Time{}, time.Time{})
+	if err != nil {
+		return Dictionary{}, mapDomainError(err)
+	}
+	updated, err := u.store.UpdateDictionary(ctx, dictionary)
+	if err != nil {
+		return Dictionary{}, err
+	}
+	return fromDictionary(updated), nil
+}
+
+// DeleteDictionary removes a dictionary and its items unless it is a runtime seed invariant.
+func (u *Usecase) DeleteDictionary(ctx context.Context, code string) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	normalized, err := normalizeDictionaryCode(code)
+	if err != nil {
+		return err
+	}
+	if normalized == seedStatusDictionaryCode {
+		return apperr.NewBadRequest("seed dictionary cannot be deleted")
+	}
+	return u.store.DeleteDictionary(ctx, normalized)
+}
+
 // AddDictionaryItem appends one dictionary item.
 func (u *Usecase) AddDictionaryItem(ctx context.Context, code string, input DictionaryItemInput) (Dictionary, error) {
 	if err := u.ready(); err != nil {
+		return Dictionary{}, err
+	}
+	normalized, err := normalizeDictionaryCode(code)
+	if err != nil {
 		return Dictionary{}, err
 	}
 	item, err := domain.RestoreDictionaryItem(0, input.Label, input.Value, input.Sort, input.Active)
 	if err != nil {
 		return Dictionary{}, mapDomainError(err)
 	}
-	dictionary, err := u.store.AddDictionaryItem(ctx, code, item)
+	dictionary, err := u.store.AddDictionaryItem(ctx, normalized, item)
 	if err != nil {
 		return Dictionary{}, err
 	}
@@ -86,11 +126,34 @@ func (u *Usecase) UpdateDictionaryItem(ctx context.Context, code string, input D
 	if err := u.ready(); err != nil {
 		return Dictionary{}, err
 	}
+	normalized, err := normalizeDictionaryCode(code)
+	if err != nil {
+		return Dictionary{}, err
+	}
 	item, err := domain.RestoreDictionaryItem(input.ID, input.Label, input.Value, input.Sort, input.Active)
 	if err != nil {
 		return Dictionary{}, mapDomainError(err)
 	}
-	dictionary, err := u.store.UpdateDictionaryItem(ctx, code, item)
+	dictionary, err := u.store.UpdateDictionaryItem(ctx, normalized, item)
+	if err != nil {
+		return Dictionary{}, err
+	}
+	return fromDictionary(dictionary), nil
+}
+
+// DeleteDictionaryItem removes one dictionary item under a dictionary.
+func (u *Usecase) DeleteDictionaryItem(ctx context.Context, code string, itemID int64) (Dictionary, error) {
+	if err := u.ready(); err != nil {
+		return Dictionary{}, err
+	}
+	if itemID <= 0 {
+		return Dictionary{}, apperr.NewBadRequest("invalid dictionary item id")
+	}
+	normalized, err := normalizeDictionaryCode(code)
+	if err != nil {
+		return Dictionary{}, err
+	}
+	dictionary, err := u.store.DeleteDictionaryItem(ctx, normalized, itemID)
 	if err != nil {
 		return Dictionary{}, err
 	}
@@ -102,6 +165,14 @@ func (u *Usecase) ready() error {
 		return apperr.New(apperr.ErrInternalServer, "settings store is not configured")
 	}
 	return nil
+}
+
+func normalizeDictionaryCode(code string) (string, error) {
+	dictionary, err := domain.RestoreDictionary(0, code, dictionaryCodeProbeName, nil, time.Time{}, time.Time{})
+	if err != nil {
+		return "", mapDomainError(err)
+	}
+	return dictionary.Code, nil
 }
 
 func mapConfigs(configs []domain.SystemConfig) []SystemConfig {
