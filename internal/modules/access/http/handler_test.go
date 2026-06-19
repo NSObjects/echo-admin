@@ -27,13 +27,13 @@ func TestCreateRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create role status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleManage {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleManage)
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleCreate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleCreate)
 	}
 	if store.createRoleCalls != 1 {
 		t.Fatalf("createRoleCalls = %d, want 1", store.createRoleCalls)
 	}
-	if got := store.createdRole.Code(); got != "operator" {
+	if got := store.createdRole.Code; got != "operator" {
 		t.Fatalf("created role code = %q, want operator", got)
 	}
 	if len(recorder.records) != 1 {
@@ -48,7 +48,7 @@ func TestCreateRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
 }
 
 func TestListMenusRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newAccessEcho(apperr.NewPermissionDenied("menu", "manage"))
+	e, store, recorder, _ := newAccessEcho(apperr.NewPermissionDenied("menu", "read"))
 
 	rec := doJSON(t, e, http.MethodGet, "/api/menus", "", "42")
 	if rec.Code != http.StatusForbidden {
@@ -64,7 +64,7 @@ func TestListMenusRejectsUnauthorizedBeforeStore(t *testing.T) {
 
 func newAccessEcho(authErr error) (*echo.Echo, *accessStore, *operationRecorder, *accessAuthorizer) {
 	store := &accessStore{}
-	uc := accessusecase.New(store)
+	uc := accessusecase.New(store, accessAdminRoleReader{})
 	auth := &accessAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
 	handler := accesshttp.New(uc, auth, recorder)
@@ -83,6 +83,7 @@ func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *http
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	}
 	req = req.WithContext(requestctx.WithUserID(req.Context(), userID))
+	req = req.WithContext(requestctx.WithRoleID(req.Context(), "1"))
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec
@@ -98,11 +99,19 @@ func (s *accessStore) FindRoleByID(context.Context, int64) (accessdomain.Role, e
 	return accessdomain.Role{}, apperr.NewNotFound("role")
 }
 
-func (s *accessStore) ListRoles(ctx context.Context, _ accessusecase.ListFilter) ([]accessdomain.Role, int, error) {
+func (s *accessStore) FindRoleByCode(context.Context, string) (accessdomain.Role, error) {
+	return accessdomain.Role{}, apperr.NewNotFound("role")
+}
+
+func (s *accessStore) ListAllRoles(ctx context.Context) ([]accessdomain.Role, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	return nil, 0, nil
+	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessusecase.AllPermissions(), []int64{1}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
+	if err != nil {
+		return nil, err
+	}
+	return []accessdomain.Role{role}, nil
 }
 
 func (s *accessStore) CreateRole(ctx context.Context, role accessdomain.Role) (accessdomain.Role, error) {
@@ -111,7 +120,7 @@ func (s *accessStore) CreateRole(ctx context.Context, role accessdomain.Role) (a
 	}
 	s.createRoleCalls++
 	s.createdRole = role
-	return accessdomain.RestoreRole(1, role.Code(), role.Name(), role.Permissions(), role.MenuIDs(), role.Active(), fixedTime(), fixedTime())
+	return accessdomain.RestoreRole(1, role.ParentID, role.Code, role.Name, role.Permissions, role.MenuIDs, role.DefaultPath, role.Active, fixedTime(), fixedTime())
 }
 
 func (s *accessStore) UpdateRole(ctx context.Context, role accessdomain.Role) (accessdomain.Role, error) {
@@ -167,6 +176,12 @@ type operationRecorder struct {
 func (r *operationRecorder) RecordOperation(_ context.Context, input auditusecase.OperationInput) (auditusecase.OperationLog, error) {
 	r.records = append(r.records, input)
 	return auditusecase.OperationLog{}, nil
+}
+
+type accessAdminRoleReader struct{}
+
+func (accessAdminRoleReader) AdminRoleState(context.Context, int64) (accessusecase.AdminRoleState, error) {
+	return accessusecase.AdminRoleState{RoleIDs: []int64{1}, ActiveRoleID: 1}, nil
 }
 
 func fixedTime() time.Time {

@@ -1,14 +1,21 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Form, Input, Modal, Space, Switch, Table, Tag, message } from 'antd';
+import { useAccess } from '@umijs/max';
+import {
+  Button,
+  Form,
+  Input,
+  Modal,
+  message,
+  Space,
+  Switch,
+  Table,
+  Tag,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
-import {
-  type SystemConfig,
-  listConfigs,
-  upsertConfig,
-} from '@/services/admin';
+import { listConfigs, type SystemConfig, upsertConfig } from '@/services/admin';
 
 type ConfigFormValues = {
   key: string;
@@ -18,6 +25,7 @@ type ConfigFormValues = {
 };
 
 const Configs: React.FC = () => {
+  const access = useAccess();
   const [configs, setConfigs] = useState<SystemConfig[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -76,11 +84,12 @@ const Configs: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) => (
-        <Button type="link" onClick={() => openEdit(record)}>
-          编辑
-        </Button>
-      ),
+      render: (_, record) =>
+        access.canConfigUpdate ? (
+          <Button type="link" onClick={() => openEdit(record)}>
+            编辑
+          </Button>
+        ) : null,
     },
   ];
 
@@ -94,9 +103,15 @@ const Configs: React.FC = () => {
         pagination={false}
         title={() => (
           <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              新增配置
-            </Button>
+            {access.canConfigUpdate ? (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={openCreate}
+              >
+                新增配置
+              </Button>
+            ) : null}
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
               刷新
             </Button>

@@ -1,14 +1,26 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Form, Input, InputNumber, Modal, Space, Switch, Table, Tag, message } from 'antd';
+import { useAccess } from '@umijs/max';
+import {
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  message,
+  Space,
+  Switch,
+  Table,
+  Tag,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
 import {
-  type Dictionary,
-  type DictionaryItem,
   addDictionaryItem,
   createDictionary,
+  type Dictionary,
+  type DictionaryItem,
   listDictionaries,
   updateDictionaryItem,
 } from '@/services/admin';
@@ -31,6 +43,7 @@ type ItemTarget = {
 };
 
 const Dictionaries: React.FC = () => {
+  const access = useAccess();
   const [dictionaries, setDictionaries] = useState<Dictionary[]>([]);
   const [loading, setLoading] = useState(false);
   const [dictionaryModalOpen, setDictionaryModalOpen] = useState(false);
@@ -103,11 +116,15 @@ const Dictionaries: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, item) => (
-        <Button type="link" onClick={() => openItemModal(itemTarget?.code ?? '', item)}>
-          编辑
-        </Button>
-      ),
+      render: (_, item) =>
+        access.canDictUpdate ? (
+          <Button
+            type="link"
+            onClick={() => openItemModal(itemTarget?.code ?? '', item)}
+          >
+            编辑
+          </Button>
+        ) : null,
     },
   ];
 
@@ -122,11 +139,12 @@ const Dictionaries: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) => (
-        <Button type="link" onClick={() => openItemModal(record.code)}>
-          新增字典项
-        </Button>
-      ),
+      render: (_, record) =>
+        access.canDictCreate ? (
+          <Button type="link" onClick={() => openItemModal(record.code)}>
+            新增字典项
+          </Button>
+        ) : null,
     },
   ];
 
@@ -146,14 +164,15 @@ const Dictionaries: React.FC = () => {
                 column.key === 'actions'
                   ? {
                       ...column,
-                      render: (_, item: DictionaryItem) => (
-                        <Button
-                          type="link"
-                          onClick={() => openItemModal(record.code, item)}
-                        >
-                          编辑
-                        </Button>
-                      ),
+                      render: (_, item: DictionaryItem) =>
+                        access.canDictUpdate ? (
+                          <Button
+                            type="link"
+                            onClick={() => openItemModal(record.code, item)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null,
                     }
                   : column,
               )}
@@ -165,9 +184,15 @@ const Dictionaries: React.FC = () => {
         }}
         title={() => (
           <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openDictionaryModal}>
-              新增字典
-            </Button>
+            {access.canDictCreate ? (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={openDictionaryModal}
+              >
+                新增字典
+              </Button>
+            ) : null}
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
               刷新
             </Button>

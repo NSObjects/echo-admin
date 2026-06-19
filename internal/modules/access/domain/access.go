@@ -7,49 +7,93 @@ import (
 	"time"
 )
 
+const (
+	// RoleCodeSuperAdmin is the seeded root role with every platform grant.
+	RoleCodeSuperAdmin = "super_admin"
+	// DefaultRolePath is used when a role has not chosen a more specific home page.
+	DefaultRolePath = "/dashboard"
+)
+
 // Permission names used by the back-office foundation modules.
 const (
-	PermissionAdminManage  = "admin:manage"
-	PermissionRoleManage   = "role:manage"
-	PermissionMenuManage   = "menu:manage"
-	PermissionConfigManage = "config:manage"
-	PermissionDictManage   = "dict:manage"
-	PermissionFileUpload   = "file:upload"
-	PermissionLogRead      = "log:read"
+	PermissionAdminRead   = "admin:read"
+	PermissionAdminCreate = "admin:create"
+	PermissionAdminUpdate = "admin:update"
+
+	PermissionRoleRead   = "role:read"
+	PermissionRoleCreate = "role:create"
+	PermissionRoleUpdate = "role:update"
+
+	PermissionMenuRead   = "menu:read"
+	PermissionMenuCreate = "menu:create"
+	PermissionMenuUpdate = "menu:update"
+
+	PermissionConfigRead   = "config:read"
+	PermissionConfigUpdate = "config:update"
+
+	PermissionDictRead   = "dict:read"
+	PermissionDictCreate = "dict:create"
+	PermissionDictUpdate = "dict:update"
+
+	PermissionFileRead   = "file:read"
+	PermissionFileUpload = "file:upload"
+
+	PermissionLogRead = "log:read"
 )
+
+// PermissionDefinition describes one grantable action exposed to role managers.
+type PermissionDefinition struct {
+	Token    string
+	Resource string
+	Action   string
+	Name     string
+}
+
+// PermissionCatalog returns the canonical grant list used by seed and UI metadata.
+func PermissionCatalog() []PermissionDefinition {
+	return append([]PermissionDefinition(nil), permissionCatalog...)
+}
 
 // Access validation errors.
 var (
-	ErrInvalidRoleID     = errors.New("invalid role id")
-	ErrInvalidRoleCode   = errors.New("invalid role code")
-	ErrInvalidRoleName   = errors.New("invalid role name")
-	ErrRoleNeedsPerms    = errors.New("role needs at least one permission")
-	ErrInvalidMenuID     = errors.New("invalid menu id")
-	ErrInvalidMenuName   = errors.New("invalid menu name")
-	ErrInvalidMenuPath   = errors.New("invalid menu path")
-	ErrInvalidPermission = errors.New("invalid permission")
+	ErrInvalidRoleID      = errors.New("invalid role id")
+	ErrInvalidRoleParent  = errors.New("invalid role parent")
+	ErrInvalidRoleCode    = errors.New("invalid role code")
+	ErrInvalidRoleName    = errors.New("invalid role name")
+	ErrRoleNeedsPerms     = errors.New("role needs at least one permission")
+	ErrInvalidDefaultPath = errors.New("invalid default path")
+	ErrInvalidMenuID      = errors.New("invalid menu id")
+	ErrInvalidMenuName    = errors.New("invalid menu name")
+	ErrInvalidMenuPath    = errors.New("invalid menu path")
+	ErrInvalidPermission  = errors.New("invalid permission")
 )
 
-// Role groups permissions and menu visibility for administrators.
+// Role groups permissions, menu visibility, and delegation hierarchy for administrators.
 type Role struct {
-	id          int64
-	code        string
-	name        string
-	permissions []string
-	menuIDs     []int64
-	active      bool
-	createdAt   time.Time
-	updatedAt   time.Time
+	ID          int64
+	ParentID    int64
+	Code        string
+	Name        string
+	Permissions []string
+	MenuIDs     []int64
+	DefaultPath string
+	Active      bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // RestoreRole rebuilds a role from a trusted store representation.
-func RestoreRole(id int64, code, name string, permissions []string, menuIDs []int64, active bool, createdAt, updatedAt time.Time) (Role, error) {
+func RestoreRole(id, parentID int64, code, name string, permissions []string, menuIDs []int64, defaultPath string, active bool, createdAt, updatedAt time.Time) (Role, error) {
 	code = normalizeToken(code)
 	name = strings.TrimSpace(name)
+	defaultPath = normalizeDefaultPath(defaultPath)
 	perms, permissionsOK := uniquePermissionTokens(permissions)
 
 	if id < 0 {
 		return Role{}, ErrInvalidRoleID
+	}
+	if parentID < 0 || (id > 0 && parentID == id) {
+		return Role{}, ErrInvalidRoleParent
 	}
 	if code == "" || len(code) > 64 {
 		return Role{}, ErrInvalidRoleCode
@@ -63,54 +107,38 @@ func RestoreRole(id int64, code, name string, permissions []string, menuIDs []in
 	if len(perms) == 0 {
 		return Role{}, ErrRoleNeedsPerms
 	}
+	if !isSafePath(defaultPath) {
+		return Role{}, ErrInvalidDefaultPath
+	}
 	return Role{
-		id:          id,
-		code:        code,
-		name:        name,
-		permissions: perms,
-		menuIDs:     uniquePositiveIDs(menuIDs),
-		active:      active,
-		createdAt:   createdAt,
-		updatedAt:   updatedAt,
+		ID:          id,
+		ParentID:    parentID,
+		Code:        code,
+		Name:        name,
+		Permissions: perms,
+		MenuIDs:     uniquePositiveIDs(menuIDs),
+		DefaultPath: defaultPath,
+		Active:      active,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
 	}, nil
 }
 
-// ID returns the persisted role id.
-func (r Role) ID() int64 { return r.id }
-
-// Code returns the unique role code.
-func (r Role) Code() string { return r.code }
-
-// Name returns the operator-facing role name.
-func (r Role) Name() string { return r.name }
-
-// Permissions returns the permissions granted by the role.
-func (r Role) Permissions() []string { return append([]string(nil), r.permissions...) }
-
-// MenuIDs returns the menu ids visible to the role.
-func (r Role) MenuIDs() []int64 { return append([]int64(nil), r.menuIDs...) }
-
-// Active reports whether the role grants permissions.
-func (r Role) Active() bool { return r.active }
-
-// CreatedAt returns the creation timestamp.
-func (r Role) CreatedAt() time.Time { return r.createdAt }
-
-// UpdatedAt returns the last update timestamp.
-func (r Role) UpdatedAt() time.Time { return r.updatedAt }
+// IsSuperAdmin reports whether the role is the seeded root administrator role.
+func (r Role) IsSuperAdmin() bool { return r.Code == RoleCodeSuperAdmin }
 
 // Menu represents one visible navigation entry in the back-office UI.
 type Menu struct {
-	id         int64
-	parentID   int64
-	name       string
-	path       string
-	icon       string
-	permission string
-	sort       int
-	active     bool
-	createdAt  time.Time
-	updatedAt  time.Time
+	ID         int64
+	ParentID   int64
+	Name       string
+	Path       string
+	Icon       string
+	Permission string
+	Sort       int
+	Active     bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // RestoreMenu rebuilds a menu from a trusted store representation.
@@ -120,61 +148,51 @@ func RestoreMenu(id, parentID int64, name, path, icon, permission string, sort i
 	icon = strings.TrimSpace(icon)
 	permission = normalizeToken(permission)
 
-	if id < 0 || parentID < 0 {
+	if id < 0 || parentID < 0 || (id > 0 && parentID == id) {
 		return Menu{}, ErrInvalidMenuID
 	}
 	if name == "" || len(name) > 80 {
 		return Menu{}, ErrInvalidMenuName
 	}
-	if path == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || len(path) > 160 {
+	if !isSafePath(path) || len(path) > 160 {
 		return Menu{}, ErrInvalidMenuPath
 	}
 	if permission != "" && !isPermissionToken(permission) {
 		return Menu{}, ErrInvalidPermission
 	}
 	return Menu{
-		id:         id,
-		parentID:   parentID,
-		name:       name,
-		path:       path,
-		icon:       icon,
-		permission: permission,
-		sort:       sort,
-		active:     active,
-		createdAt:  createdAt,
-		updatedAt:  updatedAt,
+		ID:         id,
+		ParentID:   parentID,
+		Name:       name,
+		Path:       path,
+		Icon:       icon,
+		Permission: permission,
+		Sort:       sort,
+		Active:     active,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
 	}, nil
 }
 
-// ID returns the persisted menu id.
-func (m Menu) ID() int64 { return m.id }
-
-// ParentID returns the parent menu id, or zero for root menus.
-func (m Menu) ParentID() int64 { return m.parentID }
-
-// Name returns the visible menu name.
-func (m Menu) Name() string { return m.name }
-
-// Path returns the frontend route path.
-func (m Menu) Path() string { return m.path }
-
-// Icon returns the frontend icon token.
-func (m Menu) Icon() string { return m.icon }
-
-// Permission returns the permission required to see the menu.
-func (m Menu) Permission() string { return m.permission }
-
-// Sort returns the menu ordering key.
-func (m Menu) Sort() int { return m.sort }
-
-// Active reports whether the menu is visible when permissions allow it.
-func (m Menu) Active() bool { return m.active }
-
-// CreatedAt returns the creation timestamp.
-func (m Menu) CreatedAt() time.Time { return m.createdAt }
-
-// UpdatedAt returns the last update timestamp.
-func (m Menu) UpdatedAt() time.Time { return m.updatedAt }
+var permissionCatalog = []PermissionDefinition{
+	{Token: PermissionAdminRead, Resource: "管理员", Action: "查看", Name: "查看管理员"},
+	{Token: PermissionAdminCreate, Resource: "管理员", Action: "创建", Name: "创建管理员"},
+	{Token: PermissionAdminUpdate, Resource: "管理员", Action: "更新", Name: "更新管理员"},
+	{Token: PermissionRoleRead, Resource: "角色", Action: "查看", Name: "查看角色"},
+	{Token: PermissionRoleCreate, Resource: "角色", Action: "创建", Name: "创建角色"},
+	{Token: PermissionRoleUpdate, Resource: "角色", Action: "更新", Name: "更新角色"},
+	{Token: PermissionMenuRead, Resource: "菜单", Action: "查看", Name: "查看菜单"},
+	{Token: PermissionMenuCreate, Resource: "菜单", Action: "创建", Name: "创建菜单"},
+	{Token: PermissionMenuUpdate, Resource: "菜单", Action: "更新", Name: "更新菜单"},
+	{Token: PermissionConfigRead, Resource: "系统配置", Action: "查看", Name: "查看系统配置"},
+	{Token: PermissionConfigUpdate, Resource: "系统配置", Action: "更新", Name: "更新系统配置"},
+	{Token: PermissionDictRead, Resource: "数据字典", Action: "查看", Name: "查看数据字典"},
+	{Token: PermissionDictCreate, Resource: "数据字典", Action: "创建", Name: "创建数据字典"},
+	{Token: PermissionDictUpdate, Resource: "数据字典", Action: "更新", Name: "更新数据字典"},
+	{Token: PermissionFileRead, Resource: "文件", Action: "查看", Name: "查看文件"},
+	{Token: PermissionFileUpload, Resource: "文件", Action: "上传", Name: "上传文件"},
+	{Token: PermissionLogRead, Resource: "审计日志", Action: "查看", Name: "查看日志"},
+}
 
 func uniquePermissionTokens(values []string) ([]string, bool) {
 	seen := make(map[string]struct{}, len(values))
@@ -199,6 +217,18 @@ func isPermissionToken(value string) bool {
 	}
 	parts := strings.Split(value, ":")
 	return len(parts) == 2 && parts[0] != "" && parts[1] != ""
+}
+
+func isSafePath(value string) bool {
+	return value != "" && strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "//")
+}
+
+func normalizeDefaultPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DefaultRolePath
+	}
+	return value
 }
 
 func normalizeToken(value string) string {

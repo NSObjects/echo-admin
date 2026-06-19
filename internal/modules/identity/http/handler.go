@@ -49,7 +49,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListAdmins returns administrators.
 func (h *Handler) ListAdmins(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionAdminRead); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -65,7 +65,7 @@ func (h *Handler) ListAdmins(c *echo.Context) error {
 
 // CreateAdmin creates an administrator.
 func (h *Handler) CreateAdmin(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionAdminCreate); err != nil {
 		return err
 	}
 	var req createAdminRequest
@@ -73,12 +73,13 @@ func (h *Handler) CreateAdmin(c *echo.Context) error {
 		return err
 	}
 	admin, err := h.usecase.Create(c.Request().Context(), usecase.AdminInput{
-		Username:    req.Username,
-		DisplayName: req.DisplayName,
-		Email:       req.Email,
-		Password:    req.Password,
-		RoleIDs:     req.RoleIDs,
-		Active:      req.Active,
+		Username:     req.Username,
+		DisplayName:  req.DisplayName,
+		Email:        req.Email,
+		Password:     req.Password,
+		RoleIDs:      req.RoleIDs,
+		ActiveRoleID: req.ActiveRoleID,
+		Active:       req.Active,
 	})
 	if err != nil {
 		return err
@@ -91,7 +92,7 @@ func (h *Handler) CreateAdmin(c *echo.Context) error {
 
 // UpdateAdmin updates an administrator.
 func (h *Handler) UpdateAdmin(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionAdminUpdate); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "admin")
@@ -103,12 +104,13 @@ func (h *Handler) UpdateAdmin(c *echo.Context) error {
 		return bindErr
 	}
 	admin, err := h.usecase.Update(c.Request().Context(), usecase.UpdateAdminInput{
-		ID:          id,
-		DisplayName: req.DisplayName,
-		Email:       req.Email,
-		Password:    req.Password,
-		RoleIDs:     req.RoleIDs,
-		Active:      req.Active,
+		ID:           id,
+		DisplayName:  req.DisplayName,
+		Email:        req.Email,
+		Password:     req.Password,
+		RoleIDs:      req.RoleIDs,
+		ActiveRoleID: req.ActiveRoleID,
+		Active:       req.Active,
 	})
 	if err != nil {
 		return err

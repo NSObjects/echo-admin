@@ -11,7 +11,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/identity/domain"
-	"github.com/NSObjects/echo-admin/internal/modules/identity/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysqljson"
 )
@@ -45,6 +44,16 @@ func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64) error {
 	var existing adminModel
 	err := s.db.WithContext(ctx).Where("username = ?", "admin").First(&existing).Error
 	if err == nil {
+		if existing.ActiveRoleID == 0 || !containsRoleID([]int64(existing.RoleIDs), existing.ActiveRoleID) {
+			existing.ActiveRoleID = roleID
+		}
+		if !containsRoleID([]int64(existing.RoleIDs), roleID) {
+			existing.RoleIDs = append(existing.RoleIDs, roleID)
+		}
+		existing.Active = true
+		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
+			return apperr.WrapDatabase(saveErr, "update seed admin")
+		}
 		return nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -55,7 +64,7 @@ func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64) error {
 		return err
 	}
 	now := time.Now().UTC()
-	admin, err := domain.RestoreAdmin(0, "admin", "系统管理员", "admin@example.com", hash, []int64{roleID}, true, now, now)
+	admin, err := domain.RestoreAdmin(0, "admin", "系统管理员", "admin@example.com", hash, []int64{roleID}, roleID, true, now, now)
 	if err != nil {
 		return err
 	}
@@ -92,30 +101,25 @@ func (s *Store) FindByID(ctx context.Context, id int64) (domain.Admin, error) {
 	return model.toDomain()
 }
 
-// List returns admins ordered by id descending.
-func (s *Store) List(ctx context.Context, filter usecase.ListFilter) ([]domain.Admin, int, error) {
+// ListAll returns admins ordered by id descending.
+func (s *Store) ListAll(ctx context.Context) ([]domain.Admin, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, 0, err
-	}
-	var total int64
-	query := s.db.WithContext(ctx).Model(&adminModel{})
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, apperr.WrapDatabase(err, "count admins")
+		return nil, err
 	}
 	var models []adminModel
-	err := query.Order("id DESC").Offset(filter.Offset).Limit(filter.Limit).Find(&models).Error
+	err := s.db.WithContext(ctx).Order("id DESC").Find(&models).Error
 	if err != nil {
-		return nil, 0, apperr.WrapDatabase(err, "list admins")
+		return nil, apperr.WrapDatabase(err, "list all admins")
 	}
 	admins := make([]domain.Admin, 0, len(models))
 	for _, model := range models {
 		admin, err := model.toDomain()
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		admins = append(admins, admin)
 	}
-	return admins, int(total), nil
+	return admins, nil
 }
 
 // Create inserts an admin.
@@ -153,6 +157,7 @@ type adminModel struct {
 	Email        string           `gorm:"type:varchar(160);not null"`
 	PasswordHash string           `gorm:"type:varchar(100);not null"`
 	RoleIDs      mysqljson.Int64s `gorm:"type:json;not null"`
+	ActiveRoleID int64            `gorm:"not null;index"`
 	Active       bool             `gorm:"not null"`
 	CreatedAt    time.Time        `gorm:"not null"`
 	UpdatedAt    time.Time        `gorm:"not null"`
@@ -164,20 +169,30 @@ func (adminModel) TableName() string {
 
 func adminModelFromDomain(admin domain.Admin) adminModel {
 	return adminModel{
-		ID:           admin.ID(),
-		Username:     admin.Username(),
-		DisplayName:  admin.DisplayName(),
-		Email:        admin.Email(),
-		PasswordHash: string(admin.PasswordHash()),
-		RoleIDs:      mysqljson.Int64s(admin.RoleIDs()),
-		Active:       admin.Active(),
-		CreatedAt:    admin.CreatedAt(),
-		UpdatedAt:    admin.UpdatedAt(),
+		ID:           admin.ID,
+		Username:     admin.Username,
+		DisplayName:  admin.DisplayName,
+		Email:        admin.Email,
+		PasswordHash: string(admin.PasswordHash),
+		RoleIDs:      mysqljson.Int64s(admin.RoleIDs),
+		ActiveRoleID: admin.ActiveRoleID,
+		Active:       admin.Active,
+		CreatedAt:    admin.CreatedAt,
+		UpdatedAt:    admin.UpdatedAt,
 	}
 }
 
 func (m adminModel) toDomain() (domain.Admin, error) {
-	return domain.RestoreAdmin(m.ID, m.Username, m.DisplayName, m.Email, []byte(m.PasswordHash), []int64(m.RoleIDs), m.Active, m.CreatedAt, m.UpdatedAt)
+	return domain.RestoreAdmin(m.ID, m.Username, m.DisplayName, m.Email, []byte(m.PasswordHash), []int64(m.RoleIDs), m.ActiveRoleID, m.Active, m.CreatedAt, m.UpdatedAt)
+}
+
+func containsRoleID(roleIDs []int64, want int64) bool {
+	for _, roleID := range roleIDs {
+		if roleID == want {
+			return true
+		}
+	}
+	return false
 }
 
 func mapReadError(err error, resource, operation string) error {

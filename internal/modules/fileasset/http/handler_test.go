@@ -38,12 +38,12 @@ func TestUploadFileStoresBytesMetadataAndOperation(t *testing.T) {
 	if store.createCalls != 1 {
 		t.Fatalf("createCalls = %d, want 1", store.createCalls)
 	}
-	if store.created.Name() != "hello.txt" {
-		t.Fatalf("created name = %q, want hello.txt", store.created.Name())
+	if store.created.Name != "hello.txt" {
+		t.Fatalf("created name = %q, want hello.txt", store.created.Name)
 	}
-	storedName := strings.TrimPrefix(store.created.URL(), "/api/uploads/")
-	if storedName == store.created.URL() || storedName == "" {
-		t.Fatalf("created URL = %q, want /api/uploads/<file>", store.created.URL())
+	storedName := strings.TrimPrefix(store.created.URL, "/api/uploads/")
+	if storedName == store.created.URL || storedName == "" {
+		t.Fatalf("created URL = %q, want /api/uploads/<file>", store.created.URL)
 	}
 	if _, err := os.Stat(filepath.Join(uploadDir, storedName)); err != nil {
 		t.Fatalf("stat uploaded file: %v", err)
@@ -121,7 +121,7 @@ func (s *fileStore) CreateFile(ctx context.Context, file filedomain.FileObject) 
 	}
 	s.createCalls++
 	s.created = file
-	return filedomain.RestoreFileObject(1, file.Name(), file.URL(), file.Size(), file.ContentType(), time.Unix(1_800_000_000, 0).UTC())
+	return filedomain.RestoreFileObject(1, file.Name, file.URL, file.Size, file.ContentType, time.Unix(1_800_000_000, 0).UTC())
 }
 
 func (s *fileStore) ListFiles(ctx context.Context, _ fileusecase.ListFilter) ([]filedomain.FileObject, int, error) {

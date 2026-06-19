@@ -64,6 +64,8 @@ username: admin
 password: admin123
 ```
 
+`super_admin` 是根角色，默认拥有全部权限、全部基础菜单和默认入口 `/dashboard`。管理员可以拥有多个角色，JWT 会携带当前生效的 `role_id`；切换角色后后端会重新签发只包含该角色权限的新 token，前端菜单和按钮权限也会随之刷新。
+
 前端：
 
 ```bash
@@ -133,7 +135,9 @@ internal/modules/audit/          # 操作日志和登录日志
 
 运行期只使用 MySQL adapter。各模块的 usecase 定义自己的 store interface，`internal/boot` 从已配置的 `*gorm.DB` 创建 concrete store，并负责跨模块装配，例如 auth 通过自己的小接口读取 identity/access，并通过 boot bridge 写入 audit。
 
-授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。Casbin 负责 `RequirePermission` 和当前用户隐式权限推导；业务模块继续负责管理员、角色、菜单和审计数据的 MySQL 持久化。
+授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。当前生效角色决定本次请求的权限集合，已分配但未激活的其他角色不会参与授权。
+
+`access` 模块提供权限目录、角色树和菜单管理。角色通过 `parent_id` 形成委派树：`super_admin` 可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限或菜单。菜单项通过 `permission` token 控制可见性，前端静态路由只注册页面，最终菜单显示以后端 `/api/auth/me` 返回的菜单为准。
 
 HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase、统一响应。核心业务规则放在 `domain` 和 `usecase`。
 
@@ -153,6 +157,7 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | Method | Path | 用途 |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | 管理员登录 |
+| `POST` | `/api/auth/role` | 切换当前生效角色并重新签发 token |
 | `POST` | `/api/auth/logout` | 客户端退出登录 |
 | `GET` | `/api/auth/me` | 当前管理员 |
 | `GET` | `/api/admins` | 管理员列表 |
@@ -161,6 +166,7 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | `GET` | `/api/roles` | 角色列表 |
 | `POST` | `/api/roles` | 创建角色 |
 | `PATCH` | `/api/roles/:id` | 更新角色 |
+| `GET` | `/api/permissions` | 权限目录元数据 |
 | `GET` | `/api/menus` | 菜单列表 |
 | `POST` | `/api/menus` | 创建菜单 |
 | `PATCH` | `/api/menus/:id` | 更新菜单 |

@@ -22,6 +22,7 @@ type Info struct {
 	SpanID    string
 	RequestID string
 	UserID    string
+	RoleID    string
 	StartTime time.Time
 }
 
@@ -71,6 +72,13 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 	return WithInfo(ctx, info)
 }
 
+// WithRoleID returns a child context carrying the active authenticated role.
+func WithRoleID(ctx context.Context, roleID string) context.Context {
+	info, _ := FromContext(ctx)
+	info.RoleID = roleID
+	return WithInfo(ctx, info)
+}
+
 // FromContext returns request metadata from ctx.
 func FromContext(ctx context.Context) (Info, bool) {
 	if ctx == nil {
@@ -105,6 +113,15 @@ func GetUserID(ctx context.Context) string {
 		return ""
 	}
 	return info.UserID
+}
+
+// GetRoleID returns the active role ID stored in ctx.
+func GetRoleID(ctx context.Context) string {
+	info, ok := FromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return info.RoleID
 }
 
 // GetStartTime returns the request start time stored in ctx.

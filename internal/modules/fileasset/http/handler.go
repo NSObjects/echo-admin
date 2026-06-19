@@ -62,7 +62,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListFiles returns uploaded file records.
 func (h *Handler) ListFiles(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileUpload); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionFileRead); err != nil {
 		return err
 	}
 	input, err := listInput(c)

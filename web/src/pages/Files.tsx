@@ -1,20 +1,22 @@
 import { ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Space, Table, Upload, message } from 'antd';
+import { useAccess } from '@umijs/max';
+import { Button, message, Space, Table, Upload } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
 import {
   type FileObject,
   type ListParams,
-  type PageMeta,
   listFiles,
+  type PageMeta,
   uploadFile,
 } from '@/services/admin';
 
 const formatDate = (value: string) => new Date(value).toLocaleString();
 
 const Files: React.FC = () => {
+  const access = useAccess();
   const [files, setFiles] = useState<FileObject[]>([]);
   const [page, setPage] = useState<PageMeta>();
   const [loading, setLoading] = useState(false);
@@ -70,20 +72,25 @@ const Files: React.FC = () => {
         }
         title={() => (
           <Space>
-            <Upload
-              maxCount={1}
-              showUploadList={false}
-              beforeUpload={async (file) => {
-                await uploadFile(file);
-                message.success('文件已上传');
-                await loadData({ page: page?.page, page_size: page?.page_size });
-                return Upload.LIST_IGNORE;
-              }}
-            >
-              <Button type="primary" icon={<UploadOutlined />}>
-                上传文件
-              </Button>
-            </Upload>
+            {access.canFileUpload ? (
+              <Upload
+                maxCount={1}
+                showUploadList={false}
+                beforeUpload={async (file) => {
+                  await uploadFile(file);
+                  message.success('文件已上传');
+                  await loadData({
+                    page: page?.page,
+                    page_size: page?.page_size,
+                  });
+                  return Upload.LIST_IGNORE;
+                }}
+              >
+                <Button type="primary" icon={<UploadOutlined />}>
+                  上传文件
+                </Button>
+              </Upload>
+            ) : null}
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
               刷新
             </Button>

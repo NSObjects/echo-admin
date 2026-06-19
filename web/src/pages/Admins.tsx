@@ -1,17 +1,29 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, message } from 'antd';
+import { useAccess } from '@umijs/max';
+import {
+  Button,
+  Form,
+  Input,
+  Modal,
+  message,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tag,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
 import {
   type AdminUser,
-  type ListParams,
-  type PageMeta,
-  type Role,
   createAdmin,
+  type ListParams,
   listAdmins,
   listRoles,
+  type PageMeta,
+  type Role,
   updateAdmin,
 } from '@/services/admin';
 
@@ -21,12 +33,14 @@ type AdminFormValues = {
   email?: string;
   password?: string;
   role_ids: number[];
+  active_role_id?: number;
   active: boolean;
 };
 
 const formatDate = (value: string) => new Date(value).toLocaleString();
 
 const Admins: React.FC = () => {
+  const access = useAccess();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [page, setPage] = useState<PageMeta>();
@@ -34,6 +48,7 @@ const Admins: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser>();
   const [form] = Form.useForm<AdminFormValues>();
+  const selectedRoleIDs = Form.useWatch('role_ids', form) ?? [];
 
   const loadData = async (params: ListParams = {}) => {
     setLoading(true);
@@ -57,7 +72,11 @@ const Admins: React.FC = () => {
   const openCreate = () => {
     setEditing(undefined);
     form.resetFields();
-    form.setFieldsValue({ active: true, role_ids: [] });
+    form.setFieldsValue({
+      active: true,
+      role_ids: [],
+      active_role_id: undefined,
+    });
     setModalOpen(true);
   };
 
@@ -68,10 +87,22 @@ const Admins: React.FC = () => {
       display_name: record.display_name,
       email: record.email,
       role_ids: record.role_ids,
+      active_role_id: record.active_role_id,
       active: record.active,
     });
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    const activeRoleID = form.getFieldValue('active_role_id');
+    if (selectedRoleIDs.length === 0) {
+      form.setFieldValue('active_role_id', undefined);
+      return;
+    }
+    if (!selectedRoleIDs.includes(activeRoleID)) {
+      form.setFieldValue('active_role_id', selectedRoleIDs[0]);
+    }
+  }, [form, selectedRoleIDs]);
 
   const submit = async () => {
     const values = await form.validateFields();
@@ -81,6 +112,7 @@ const Admins: React.FC = () => {
         display_name: values.display_name,
         email: values.email,
         role_ids: values.role_ids,
+        active_role_id: values.active_role_id,
         active: values.active,
         ...(password ? { password } : {}),
       });
@@ -92,6 +124,7 @@ const Admins: React.FC = () => {
         email: values.email,
         password: values.password ?? '',
         role_ids: values.role_ids,
+        active_role_id: values.active_role_id,
         active: values.active,
       });
       message.success('管理员已创建');
@@ -106,7 +139,11 @@ const Admins: React.FC = () => {
   const columns: ColumnsType<AdminUser> = [
     { title: '用户名', dataIndex: 'username' },
     { title: '显示名', dataIndex: 'display_name' },
-    { title: '邮箱', dataIndex: 'email', render: (value?: string) => value || '-' },
+    {
+      title: '邮箱',
+      dataIndex: 'email',
+      render: (value?: string) => value || '-',
+    },
     {
       title: '角色',
       dataIndex: 'role_ids',
@@ -117,6 +154,11 @@ const Admins: React.FC = () => {
           ))}
         </Space>
       ),
+    },
+    {
+      title: '当前角色',
+      dataIndex: 'active_role_id',
+      render: (roleID: number) => <Tag color="blue">{roleName(roleID)}</Tag>,
     },
     {
       title: '状态',
@@ -131,13 +173,22 @@ const Admins: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) => (
-        <Button type="link" onClick={() => openEdit(record)}>
-          编辑
-        </Button>
-      ),
+      render: (_, record) =>
+        access.canAdminUpdate ? (
+          <Button type="link" onClick={() => openEdit(record)}>
+            编辑
+          </Button>
+        ) : null,
     },
   ];
+
+  const roleOptions = roles.map((role) => ({
+    label: role.name,
+    value: role.id,
+  }));
+  const activeRoleOptions = roleOptions.filter((option) =>
+    selectedRoleIDs.includes(option.value),
+  );
 
   return (
     <PageContainer title="管理员管理">
@@ -160,9 +211,15 @@ const Admins: React.FC = () => {
         }
         title={() => (
           <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              新增管理员
-            </Button>
+            {access.canAdminCreate ? (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={openCreate}
+              >
+                新增管理员
+              </Button>
+            ) : null}
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
               刷新
             </Button>
@@ -206,12 +263,16 @@ const Admins: React.FC = () => {
             name="role_ids"
             rules={[{ required: true, message: '请选择角色' }]}
           >
+            <Select mode="multiple" options={roleOptions} />
+          </Form.Item>
+          <Form.Item
+            label="当前角色"
+            name="active_role_id"
+            rules={[{ required: true, message: '请选择当前角色' }]}
+          >
             <Select
-              mode="multiple"
-              options={roles.map((role) => ({
-                label: role.name,
-                value: role.id,
-              }))}
+              disabled={selectedRoleIDs.length === 0}
+              options={activeRoleOptions}
             />
           </Form.Item>
           <Form.Item label="启用" name="active" valuePropName="checked">

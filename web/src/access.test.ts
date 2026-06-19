@@ -6,6 +6,9 @@ const baseUser = {
   username: 'admin',
   display_name: '系统管理员',
   email: '',
+  active_role_id: 1,
+  active_role: {} as never,
+  default_path: '/dashboard',
   roles: [],
   menus: [],
 };
@@ -15,26 +18,26 @@ describe('access', () => {
     const result = access({
       currentUser: {
         ...baseUser,
-        permissions: ['admin:manage'],
+        permissions: ['admin:read'],
       },
     });
 
-    expect(result.canAdminManage).toBe(true);
+    expect(result.canAdminRead).toBe(true);
   });
 
   it('denies admin management without the permission', () => {
     const result = access({
       currentUser: {
         ...baseUser,
-        permissions: ['role:manage'],
+        permissions: ['role:read'],
       },
     });
 
-    expect(result.canAdminManage).toBe(false);
-    expect(result.canRoleManage).toBe(true);
+    expect(result.canAdminRead).toBe(false);
+    expect(result.canRoleRead).toBe(true);
   });
 
   it('denies admin management without a current user', () => {
-    expect(access(undefined).canAdminManage).toBe(false);
+    expect(access(undefined).canAdminRead).toBe(false);
   });
 });

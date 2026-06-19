@@ -11,11 +11,21 @@ export default function access(
     currentUser?.permissions.includes(permission) ?? false;
 
   return {
-    canAdminManage: can('admin:manage'),
-    canRoleManage: can('role:manage'),
-    canMenuManage: can('menu:manage'),
-    canConfigManage: can('config:manage'),
-    canDictManage: can('dict:manage'),
+    canAdminRead: can('admin:read'),
+    canAdminCreate: can('admin:create'),
+    canAdminUpdate: can('admin:update'),
+    canRoleRead: can('role:read'),
+    canRoleCreate: can('role:create'),
+    canRoleUpdate: can('role:update'),
+    canMenuRead: can('menu:read'),
+    canMenuCreate: can('menu:create'),
+    canMenuUpdate: can('menu:update'),
+    canConfigRead: can('config:read'),
+    canConfigUpdate: can('config:update'),
+    canDictRead: can('dict:read'),
+    canDictCreate: can('dict:create'),
+    canDictUpdate: can('dict:update'),
+    canFileRead: can('file:read'),
     canFileUpload: can('file:upload'),
     canLogRead: can('log:read'),
   };

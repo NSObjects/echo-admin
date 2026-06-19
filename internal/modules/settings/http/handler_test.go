@@ -28,13 +28,13 @@ func TestUpsertConfigRequiresPermissionAndRecordsOperation(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("upsert config status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionConfigManage {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionConfigManage)
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionConfigUpdate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionConfigUpdate)
 	}
 	if store.upsertCalls != 1 {
 		t.Fatalf("upsertCalls = %d, want 1", store.upsertCalls)
 	}
-	if got := store.config.Key(); got != "site_name" {
+	if got := store.config.Key; got != "site_name" {
 		t.Fatalf("config key = %q, want site_name", got)
 	}
 	if len(recorder.records) != 1 {
@@ -46,7 +46,7 @@ func TestUpsertConfigRequiresPermissionAndRecordsOperation(t *testing.T) {
 }
 
 func TestListDictionariesRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newSettingsEcho(apperr.NewPermissionDenied("dict", "manage"))
+	e, store, recorder, _ := newSettingsEcho(apperr.NewPermissionDenied("dict", "read"))
 
 	rec := doJSON(t, e, http.MethodGet, "/api/dictionaries", "", "42")
 	if rec.Code != http.StatusForbidden {
@@ -105,7 +105,7 @@ func (s *settingsStore) UpsertConfig(ctx context.Context, config settingsdomain.
 	}
 	s.upsertCalls++
 	s.config = config
-	return settingsdomain.RestoreSystemConfig(config.Key(), config.Name(), config.Value(), config.Public(), fixedTime())
+	return settingsdomain.RestoreSystemConfig(config.Key, config.Name, config.Value, config.Public, fixedTime())
 }
 
 func (s *settingsStore) ListDictionaries(ctx context.Context) ([]settingsdomain.Dictionary, error) {

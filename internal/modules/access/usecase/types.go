@@ -16,7 +16,8 @@ const (
 // Store persists roles and menus for the access usecase.
 type Store interface {
 	FindRoleByID(context.Context, int64) (domain.Role, error)
-	ListRoles(context.Context, ListFilter) ([]domain.Role, int, error)
+	FindRoleByCode(context.Context, string) (domain.Role, error)
+	ListAllRoles(context.Context) ([]domain.Role, error)
 	CreateRole(context.Context, domain.Role) (domain.Role, error)
 	UpdateRole(context.Context, domain.Role) (domain.Role, error)
 	FindMenuByID(context.Context, int64) (domain.Menu, error)
@@ -25,31 +26,47 @@ type Store interface {
 	UpdateMenu(context.Context, domain.Menu) (domain.Menu, error)
 }
 
+// AdminRoleReader reads the current administrator role assignment without exposing identity storage.
+type AdminRoleReader interface {
+	AdminRoleState(context.Context, int64) (AdminRoleState, error)
+}
+
+// AdminRoleState is the minimal identity snapshot needed for scoped role delegation.
+type AdminRoleState struct {
+	RoleIDs      []int64
+	ActiveRoleID int64
+}
+
 // Usecase coordinates role and menu rules.
 type Usecase struct {
-	store Store
+	store  Store
+	admins AdminRoleReader
 }
 
 // New creates an access usecase.
-func New(store Store) *Usecase {
-	return &Usecase{store: store}
+func New(store Store, admins AdminRoleReader) *Usecase {
+	return &Usecase{store: store, admins: admins}
 }
 
 // RoleInput carries mutable role fields.
 type RoleInput struct {
+	ParentID    int64
 	Code        string
 	Name        string
 	Permissions []string
 	MenuIDs     []int64
+	DefaultPath string
 	Active      bool
 }
 
 // UpdateRoleInput carries partial role updates.
 type UpdateRoleInput struct {
 	ID          int64
+	ParentID    *int64
 	Name        *string
 	Permissions []string
 	MenuIDs     []int64
+	DefaultPath *string
 	Active      *bool
 }
 
@@ -101,10 +118,12 @@ type RoleListOutput struct {
 // Role is the adapter-facing role DTO.
 type Role struct {
 	ID          int64     `json:"id"`
+	ParentID    int64     `json:"parent_id"`
 	Code        string    `json:"code"`
 	Name        string    `json:"name"`
 	Permissions []string  `json:"permissions"`
 	MenuIDs     []int64   `json:"menu_ids"`
+	DefaultPath string    `json:"default_path"`
 	Active      bool      `json:"active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -122,4 +141,12 @@ type Menu struct {
 	Active     bool      `json:"active"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// PermissionDefinition is the adapter-facing permission metadata DTO.
+type PermissionDefinition struct {
+	Token    string `json:"token"`
+	Resource string `json:"resource"`
+	Action   string `json:"action"`
+	Name     string `json:"name"`
 }

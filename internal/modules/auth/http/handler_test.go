@@ -71,15 +71,15 @@ func newAuthStore(t *testing.T) *authStore {
 		t.Fatalf("GenerateFromPassword() error = %v", err)
 	}
 	now := time.Unix(1_800_000_000, 0).UTC()
-	admin, err := identitydomain.RestoreAdmin(1, "admin", "系统管理员", "admin@example.com", hash, []int64{1}, true, now, now)
+	admin, err := identitydomain.RestoreAdmin(1, "admin", "系统管理员", "admin@example.com", hash, []int64{1}, 1, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAdmin() error = %v", err)
 	}
-	role, err := accessdomain.RestoreRole(1, "super_admin", "超级管理员", []string{accessdomain.PermissionAdminManage}, []int64{1}, true, now, now)
+	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", []string{accessdomain.PermissionAdminRead}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole() error = %v", err)
 	}
-	menu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", accessdomain.PermissionAdminManage, 10, true, now, now)
+	menu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", accessdomain.PermissionAdminRead, 10, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreMenu() error = %v", err)
 	}
@@ -110,6 +110,11 @@ func (s *authStore) FindByUsername(context.Context, string) (identitydomain.Admi
 
 func (s *authStore) FindByID(context.Context, int64) (identitydomain.Admin, error) {
 	return s.admin, nil
+}
+
+func (s *authStore) Update(_ context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
+	s.admin = admin
+	return admin, nil
 }
 
 func (s *authStore) FindRoleByID(context.Context, int64) (accessdomain.Role, error) {

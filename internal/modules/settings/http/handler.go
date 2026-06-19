@@ -50,7 +50,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListConfigs returns system configs.
 func (h *Handler) ListConfigs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionConfigManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionConfigRead); err != nil {
 		return err
 	}
 	configs, err := h.usecase.ListConfigs(c.Request().Context())
@@ -62,7 +62,7 @@ func (h *Handler) ListConfigs(c *echo.Context) error {
 
 // UpsertConfig creates or updates a system config.
 func (h *Handler) UpsertConfig(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionConfigManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionConfigUpdate); err != nil {
 		return err
 	}
 	var req configRequest
@@ -87,7 +87,7 @@ func (h *Handler) UpsertConfig(c *echo.Context) error {
 
 // ListDictionaries returns dictionaries.
 func (h *Handler) ListDictionaries(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionDictRead); err != nil {
 		return err
 	}
 	dictionaries, err := h.usecase.ListDictionaries(c.Request().Context())
@@ -99,7 +99,7 @@ func (h *Handler) ListDictionaries(c *echo.Context) error {
 
 // CreateDictionary creates a dictionary.
 func (h *Handler) CreateDictionary(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionDictCreate); err != nil {
 		return err
 	}
 	var req dictionaryRequest
@@ -121,7 +121,7 @@ func (h *Handler) CreateDictionary(c *echo.Context) error {
 
 // AddDictionaryItem appends one dictionary item.
 func (h *Handler) AddDictionaryItem(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionDictCreate); err != nil {
 		return err
 	}
 	var req dictionaryItemRequest
@@ -145,7 +145,7 @@ func (h *Handler) AddDictionaryItem(c *echo.Context) error {
 
 // UpdateDictionaryItem updates one dictionary item.
 func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionDictUpdate); err != nil {
 		return err
 	}
 	itemID, err := httpreq.PathID(c, "item_id", "dictionary item")

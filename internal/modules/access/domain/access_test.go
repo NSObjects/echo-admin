@@ -7,7 +7,7 @@ import (
 )
 
 func TestRestoreRoleRejectsInvalidPermissionToken(t *testing.T) {
-	_, err := RestoreRole(1, "operator", "Operator", []string{"admin"}, []int64{1}, true, time.Now(), time.Now())
+	_, err := RestoreRole(1, 0, "operator", "Operator", []string{"admin"}, []int64{1}, DefaultRolePath, true, time.Now(), time.Now())
 	if !errors.Is(err, ErrInvalidPermission) {
 		t.Fatalf("RestoreRole() error = %v, want %v", err, ErrInvalidPermission)
 	}

@@ -13,6 +13,7 @@ import (
 type AdminReader interface {
 	FindByUsername(context.Context, string) (identitydomain.Admin, error)
 	FindByID(context.Context, int64) (identitydomain.Admin, error)
+	Update(context.Context, identitydomain.Admin) (identitydomain.Admin, error)
 }
 
 // RoleReader reads roles needed to build authorization grants.
@@ -80,8 +81,19 @@ type LoginInput struct {
 
 // LoginOutput is returned after successful authentication.
 type LoginOutput struct {
-	Token string `json:"token"`
-	User  Admin  `json:"user"`
+	Token string      `json:"token"`
+	User  CurrentUser `json:"user"`
+}
+
+// RoleSwitchInput carries the requested active role.
+type RoleSwitchInput struct {
+	RoleID int64
+}
+
+// RoleSwitchOutput is returned after the active role changes.
+type RoleSwitchOutput struct {
+	Token string      `json:"token"`
+	User  CurrentUser `json:"user"`
 }
 
 // LoginRecord carries a safe sign-in audit event.
@@ -96,34 +108,40 @@ type LoginRecord struct {
 
 // Admin is the current-user administrator DTO.
 type Admin struct {
-	ID          int64     `json:"id"`
-	Username    string    `json:"username"`
-	DisplayName string    `json:"display_name"`
-	Email       string    `json:"email"`
-	RoleIDs     []int64   `json:"role_ids"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	DisplayName  string    `json:"display_name"`
+	Email        string    `json:"email"`
+	RoleIDs      []int64   `json:"role_ids"`
+	ActiveRoleID int64     `json:"active_role_id"`
+	Active       bool      `json:"active"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // CurrentUser is the adapter-facing current-user snapshot.
 type CurrentUser struct {
-	ID          int64    `json:"id"`
-	Username    string   `json:"username"`
-	DisplayName string   `json:"display_name"`
-	Email       string   `json:"email"`
-	Roles       []Role   `json:"roles"`
-	Permissions []string `json:"permissions"`
-	Menus       []Menu   `json:"menus"`
+	ID           int64    `json:"id"`
+	Username     string   `json:"username"`
+	DisplayName  string   `json:"display_name"`
+	Email        string   `json:"email"`
+	ActiveRoleID int64    `json:"active_role_id"`
+	ActiveRole   Role     `json:"active_role"`
+	DefaultPath  string   `json:"default_path"`
+	Roles        []Role   `json:"roles"`
+	Permissions  []string `json:"permissions"`
+	Menus        []Menu   `json:"menus"`
 }
 
 // Role is the current-user role DTO.
 type Role struct {
 	ID          int64     `json:"id"`
+	ParentID    int64     `json:"parent_id"`
 	Code        string    `json:"code"`
 	Name        string    `json:"name"`
 	Permissions []string  `json:"permissions"`
 	MenuIDs     []int64   `json:"menu_ids"`
+	DefaultPath string    `json:"default_path"`
 	Active      bool      `json:"active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

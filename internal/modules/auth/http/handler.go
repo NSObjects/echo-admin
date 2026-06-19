@@ -24,6 +24,7 @@ func New(uc *usecase.Usecase) *Handler {
 func Register(group *echo.Group, handler *Handler) {
 	group.POST("/auth/login", handler.Login)
 	group.POST("/auth/logout", handler.Logout)
+	group.POST("/auth/role", handler.SwitchRole)
 	group.GET("/auth/me", handler.Me)
 }
 
@@ -51,6 +52,22 @@ func (h *Handler) Login(c *echo.Context) error {
 // Logout handles client-side token disposal.
 func (h *Handler) Logout(c *echo.Context) error {
 	return httpresp.OK(c, map[string]bool{"ok": true})
+}
+
+// SwitchRole changes the active role for the current administrator.
+func (h *Handler) SwitchRole(c *echo.Context) error {
+	if err := h.ready(); err != nil {
+		return err
+	}
+	var req switchRoleRequest
+	if err := httpreq.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+	output, err := h.usecase.SwitchRole(c.Request().Context(), usecase.RoleSwitchInput{RoleID: req.RoleID})
+	if err != nil {
+		return err
+	}
+	return httpresp.OK(c, output)
 }
 
 // Me returns the authenticated administrator profile.

@@ -1,13 +1,28 @@
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, message } from 'antd';
+import { useAccess } from '@umijs/max';
+import {
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  message,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tag,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
 import {
-  type Menu,
   createMenu,
   listMenus,
+  listPermissions,
+  type Menu,
+  type PermissionDefinition,
   updateMenu,
 } from '@/services/admin';
 
@@ -21,18 +36,10 @@ type MenuFormValues = {
   active: boolean;
 };
 
-const permissionOptions = [
-  { label: '管理员管理', value: 'admin:manage' },
-  { label: '角色权限', value: 'role:manage' },
-  { label: '菜单管理', value: 'menu:manage' },
-  { label: '系统配置', value: 'config:manage' },
-  { label: '数据字典', value: 'dict:manage' },
-  { label: '文件上传', value: 'file:upload' },
-  { label: '日志查看', value: 'log:read' },
-];
-
 const Menus: React.FC = () => {
+  const access = useAccess();
   const [menus, setMenus] = useState<Menu[]>([]);
+  const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Menu>();
@@ -41,7 +48,12 @@ const Menus: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      setMenus(await listMenus());
+      const [menuResponse, permissionResponse] = await Promise.all([
+        listMenus(),
+        listPermissions(),
+      ]);
+      setMenus(menuResponse);
+      setPermissions(permissionResponse);
     } finally {
       setLoading(false);
     }
@@ -95,9 +107,14 @@ const Menus: React.FC = () => {
       render: (parentID: number) =>
         parentID === 0
           ? '顶级菜单'
-          : menus.find((menu) => menu.id === parentID)?.name ?? `#${parentID}`,
+          : (menus.find((menu) => menu.id === parentID)?.name ??
+            `#${parentID}`),
     },
-    { title: '权限', dataIndex: 'permission', render: (value?: string) => value || '-' },
+    {
+      title: '权限',
+      dataIndex: 'permission',
+      render: (value?: string) => value || '-',
+    },
     { title: '排序', dataIndex: 'sort', width: 88 },
     {
       title: '状态',
@@ -111,13 +128,19 @@ const Menus: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) => (
-        <Button type="link" onClick={() => openEdit(record)}>
-          编辑
-        </Button>
-      ),
+      render: (_, record) =>
+        access.canMenuUpdate ? (
+          <Button type="link" onClick={() => openEdit(record)}>
+            编辑
+          </Button>
+        ) : null,
     },
   ];
+
+  const permissionOptions = permissions.map((permission) => ({
+    label: `${permission.name} (${permission.token})`,
+    value: permission.token,
+  }));
 
   return (
     <PageContainer title="菜单管理">
@@ -129,9 +152,15 @@ const Menus: React.FC = () => {
         pagination={false}
         title={() => (
           <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              新增菜单
-            </Button>
+            {access.canMenuCreate ? (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={openCreate}
+              >
+                新增菜单
+              </Button>
+            ) : null}
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
               刷新
             </Button>

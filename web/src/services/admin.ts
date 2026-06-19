@@ -23,7 +23,7 @@ export type ListParams = {
 
 export type LoginResult = {
   token: string;
-  user: AdminUser;
+  user: CurrentUser;
 };
 
 export type AdminUser = {
@@ -32,6 +32,7 @@ export type AdminUser = {
   display_name: string;
   email: string;
   role_ids: number[];
+  active_role_id: number;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -42,6 +43,9 @@ export type CurrentUser = {
   username: string;
   display_name: string;
   email: string;
+  active_role_id: number;
+  active_role: Role;
+  default_path: string;
   roles: Role[];
   permissions: string[];
   menus: Menu[];
@@ -49,13 +53,22 @@ export type CurrentUser = {
 
 export type Role = {
   id: number;
+  parent_id: number;
   code: string;
   name: string;
   permissions: string[];
   menu_ids: number[];
+  default_path: string;
   active: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type PermissionDefinition = {
+  token: string;
+  resource: string;
+  action: string;
+  name: string;
 };
 
 export type Menu = {
@@ -131,6 +144,7 @@ export type AdminCreateInput = {
   email?: string;
   password: string;
   role_ids: number[];
+  active_role_id?: number;
   active: boolean;
 };
 
@@ -139,21 +153,26 @@ export type AdminUpdateInput = {
   email?: string;
   password?: string;
   role_ids?: number[];
+  active_role_id?: number;
   active?: boolean;
 };
 
 export type RoleCreateInput = {
+  parent_id: number;
   code: string;
   name: string;
   permissions: string[];
   menu_ids?: number[];
+  default_path?: string;
   active: boolean;
 };
 
 export type RoleUpdateInput = {
+  parent_id?: number;
   name?: string;
   permissions?: string[];
   menu_ids?: number[];
+  default_path?: string;
   active?: boolean;
 };
 
@@ -208,6 +227,15 @@ export async function currentUser(): Promise<CurrentUser> {
   return response.data;
 }
 
+export async function switchRole(roleID: number): Promise<LoginResult> {
+  const response = await request<Envelope<LoginResult>>('/api/auth/role', {
+    method: 'POST',
+    data: { role_id: roleID },
+  });
+  setAuthToken(response.data.token);
+  return response.data;
+}
+
 export async function listAdmins(
   params?: ListParams,
 ): Promise<Envelope<AdminUser[]>> {
@@ -229,6 +257,12 @@ export async function listRoles(
   params?: ListParams,
 ): Promise<Envelope<Role[]>> {
   return request<Envelope<Role[]>>('/api/roles', { params });
+}
+
+export async function listPermissions(): Promise<PermissionDefinition[]> {
+  const response =
+    await request<Envelope<PermissionDefinition[]>>('/api/permissions');
+  return response.data;
 }
 
 export async function createRole(body: RoleCreateInput): Promise<void> {

@@ -63,7 +63,7 @@ func (s *Store) UpsertConfig(ctx context.Context, config domain.SystemConfig) (d
 		return domain.SystemConfig{}, err
 	}
 	var model configModel
-	err := s.db.WithContext(ctx).First(&model, "`key` = ?", config.Key()).Error
+	err := s.db.WithContext(ctx).First(&model, "`key` = ?", config.Key).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return domain.SystemConfig{}, apperr.WrapDatabase(err, "find config")
 	}
@@ -75,9 +75,9 @@ func (s *Store) UpsertConfig(ctx context.Context, config domain.SystemConfig) (d
 		}
 		return model.toDomain()
 	}
-	model.Name = config.Name()
-	model.Value = config.Value()
-	model.Public = config.Public()
+	model.Name = config.Name
+	model.Value = config.Value
+	model.Public = config.Public
 	model.UpdatedAt = now
 	if saveErr := s.db.WithContext(ctx).Save(&model).Error; saveErr != nil {
 		return domain.SystemConfig{}, mapWriteError(saveErr, "config key already exists", "update config")
@@ -149,7 +149,7 @@ func (s *Store) UpdateDictionaryItem(ctx context.Context, code string, item doma
 	}
 	model := dictionaryItemModelFromDomain(dictionary.ID, item)
 	result := s.db.WithContext(ctx).Model(&dictionaryItemModel{}).
-		Where("id = ? AND dictionary_id = ?", item.ID(), dictionary.ID).
+		Where("id = ? AND dictionary_id = ?", item.ID, dictionary.ID).
 		Updates(map[string]interface{}{
 			"label":  model.Label,
 			"value":  model.Value,
@@ -230,10 +230,10 @@ func (configModel) TableName() string {
 
 func configModelFromDomain(config domain.SystemConfig, updatedAt time.Time) configModel {
 	return configModel{
-		Key:       config.Key(),
-		Name:      config.Name(),
-		Value:     config.Value(),
-		Public:    config.Public(),
+		Key:       config.Key,
+		Name:      config.Name,
+		Value:     config.Value,
+		Public:    config.Public,
 		UpdatedAt: updatedAt,
 	}
 }
@@ -256,18 +256,18 @@ func (dictionaryModel) TableName() string {
 }
 
 func dictionaryModelFromDomain(dictionary domain.Dictionary, now time.Time) dictionaryModel {
-	items := dictionary.Items()
+	items := dictionary.Items
 	modelItems := make([]dictionaryItemModel, 0, len(items))
 	for _, item := range items {
 		modelItems = append(modelItems, dictionaryItemModelFromDomain(0, item))
 	}
 	return dictionaryModel{
-		ID:        dictionary.ID(),
-		Code:      dictionary.Code(),
-		Name:      dictionary.Name(),
+		ID:        dictionary.ID,
+		Code:      dictionary.Code,
+		Name:      dictionary.Name,
 		Items:     modelItems,
-		CreatedAt: coalesceTime(dictionary.CreatedAt(), now),
-		UpdatedAt: coalesceTime(dictionary.UpdatedAt(), now),
+		CreatedAt: coalesceTime(dictionary.CreatedAt, now),
+		UpdatedAt: coalesceTime(dictionary.UpdatedAt, now),
 	}
 }
 
@@ -281,10 +281,10 @@ func (m dictionaryModel) toDomain() (domain.Dictionary, error) {
 		items = append(items, item)
 	}
 	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].Sort() == items[j].Sort() {
-			return items[i].ID() < items[j].ID()
+		if items[i].Sort == items[j].Sort {
+			return items[i].ID < items[j].ID
 		}
-		return items[i].Sort() < items[j].Sort()
+		return items[i].Sort < items[j].Sort
 	})
 	return domain.RestoreDictionary(m.ID, m.Code, m.Name, items, m.CreatedAt, m.UpdatedAt)
 }
@@ -304,12 +304,12 @@ func (dictionaryItemModel) TableName() string {
 
 func dictionaryItemModelFromDomain(dictionaryID int64, item domain.DictionaryItem) dictionaryItemModel {
 	return dictionaryItemModel{
-		ID:           item.ID(),
+		ID:           item.ID,
 		DictionaryID: dictionaryID,
-		Label:        item.Label(),
-		Value:        item.Value(),
-		Sort:         item.Sort(),
-		Active:       item.Active(),
+		Label:        item.Label,
+		Value:        item.Value,
+		Sort:         item.Sort,
+		Active:       item.Active,
 	}
 }
 

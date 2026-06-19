@@ -28,13 +28,13 @@ func TestCreateAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create admin status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAdminManage {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAdminManage)
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAdminCreate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAdminCreate)
 	}
 	if store.createCalls != 1 {
 		t.Fatalf("createCalls = %d, want 1", store.createCalls)
 	}
-	if got := store.created.Username(); got != "operator" {
+	if got := store.created.Username; got != "operator" {
 		t.Fatalf("created username = %q, want operator", got)
 	}
 	if len(recorder.records) != 1 {
@@ -49,7 +49,7 @@ func TestCreateAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
 }
 
 func TestListAdminsRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newIdentityEcho(apperr.NewPermissionDenied("admin", "manage"))
+	e, store, recorder, _ := newIdentityEcho(apperr.NewPermissionDenied("admin", "read"))
 
 	rec := doJSON(t, e, http.MethodGet, "/api/admins", "", "42")
 	if rec.Code != http.StatusForbidden {
@@ -65,7 +65,7 @@ func TestListAdminsRejectsUnauthorizedBeforeStore(t *testing.T) {
 
 func newIdentityEcho(authErr error) (*echo.Echo, *identityStore, *operationRecorder, *identityAuthorizer) {
 	store := &identityStore{}
-	uc := identityusecase.New(store)
+	uc := identityusecase.New(store, identityRoleScope{})
 	auth := &identityAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
 	handler := identityhttp.New(uc, auth, recorder)
@@ -103,12 +103,12 @@ func (s *identityStore) FindByID(context.Context, int64) (identitydomain.Admin, 
 	return identitydomain.Admin{}, apperr.NewNotFound("admin")
 }
 
-func (s *identityStore) List(ctx context.Context, _ identityusecase.ListFilter) ([]identitydomain.Admin, int, error) {
+func (s *identityStore) ListAll(ctx context.Context) ([]identitydomain.Admin, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	s.listCalls++
-	return nil, 0, nil
+	return nil, nil
 }
 
 func (s *identityStore) Create(ctx context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
@@ -117,7 +117,7 @@ func (s *identityStore) Create(ctx context.Context, admin identitydomain.Admin) 
 	}
 	s.createCalls++
 	s.created = admin
-	return identitydomain.RestoreAdmin(1, admin.Username(), admin.DisplayName(), admin.Email(), admin.PasswordHash(), admin.RoleIDs(), admin.Active(), fixedTime(), fixedTime())
+	return identitydomain.RestoreAdmin(1, admin.Username, admin.DisplayName, admin.Email, admin.PasswordHash, admin.RoleIDs, admin.ActiveRoleID, admin.Active, fixedTime(), fixedTime())
 }
 
 func (s *identityStore) Update(ctx context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
@@ -144,6 +144,16 @@ type operationRecorder struct {
 func (r *operationRecorder) RecordOperation(_ context.Context, input auditusecase.OperationInput) (auditusecase.OperationLog, error) {
 	r.records = append(r.records, input)
 	return auditusecase.OperationLog{}, nil
+}
+
+type identityRoleScope struct{}
+
+func (identityRoleScope) AssignableRoleIDs(context.Context) ([]int64, error) {
+	return []int64{1}, nil
+}
+
+func (identityRoleScope) EnsureAssignableRoles(_ context.Context, _ []int64) error {
+	return nil
 }
 
 func fixedTime() time.Time {

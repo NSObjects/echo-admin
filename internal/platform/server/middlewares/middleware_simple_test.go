@@ -228,11 +228,12 @@ func TestRequestLoggerOmitsTraceMetadataWithoutActiveSpan(t *testing.T) {
 	}
 }
 
-func TestJWTStoresSubjectAsAuthenticatedUserID(t *testing.T) {
+func TestJWTStoresSubjectAndRoleAsAuthenticatedContext(t *testing.T) {
 	const secret = "test-secret"
 
-	signedToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		Subject: "user-123",
+	signedToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":     "user-123",
+		"role_id": "role-456",
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
@@ -249,6 +250,9 @@ func TestJWTStoresSubjectAsAuthenticatedUserID(t *testing.T) {
 	e.GET("/me", func(c *echo.Context) error {
 		if got := requestctx.GetUserID(c.Request().Context()); got != "user-123" {
 			t.Fatalf("GetUserID() = %q, want user-123", got)
+		}
+		if got := requestctx.GetRoleID(c.Request().Context()); got != "role-456" {
+			t.Fatalf("GetRoleID() = %q, want role-456", got)
 		}
 		return c.NoContent(http.StatusNoContent)
 	})

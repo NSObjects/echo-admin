@@ -54,69 +54,90 @@ func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, err
 		}
 		return LoginOutput{}, apperr.New(apperr.ErrUnauthorized, "invalid username or password")
 	}
-	if !admin.Active() {
-		if recordErr := u.recordLogin(ctx, loginRecordFromInput(admin.ID(), username, input, false, "account disabled")); recordErr != nil {
+	if !admin.Active {
+		if recordErr := u.recordLogin(ctx, loginRecordFromInput(admin.ID, username, input, false, "account disabled")); recordErr != nil {
 			return LoginOutput{}, recordErr
 		}
 		return LoginOutput{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
 	}
-	if compareErr := bcrypt.CompareHashAndPassword(admin.PasswordHash(), []byte(input.Password)); compareErr != nil {
-		if recordErr := u.recordLogin(ctx, loginRecordFromInput(admin.ID(), username, input, false, "invalid credentials")); recordErr != nil {
+	if compareErr := bcrypt.CompareHashAndPassword(admin.PasswordHash, []byte(input.Password)); compareErr != nil {
+		if recordErr := u.recordLogin(ctx, loginRecordFromInput(admin.ID, username, input, false, "invalid credentials")); recordErr != nil {
 			return LoginOutput{}, recordErr
 		}
 		return LoginOutput{}, apperr.New(apperr.ErrUnauthorized, "invalid username or password")
 	}
 
-	user, err := u.userSnapshot(ctx, admin)
+	user, err := u.userSnapshot(ctx, admin, admin.ActiveRoleID)
 	if err != nil {
 		return LoginOutput{}, err
 	}
-	token, err := u.issueToken(admin.ID(), admin.Username(), user.Permissions)
+	token, err := u.issueToken(admin.ID, admin.Username, user.ActiveRoleID, user.Permissions)
 	if err != nil {
 		return LoginOutput{}, err
 	}
-	if err := u.recordLogin(ctx, loginRecordFromInput(admin.ID(), username, input, true, "login succeeded")); err != nil {
+	if err := u.recordLogin(ctx, loginRecordFromInput(admin.ID, username, input, true, "login succeeded")); err != nil {
 		return LoginOutput{}, err
 	}
-	return LoginOutput{Token: token, User: fromAdmin(admin)}, nil
+	return LoginOutput{Token: token, User: user}, nil
 }
 
-// CurrentUser returns the authenticated administrator profile and grants.
+// CurrentUser returns the authenticated administrator profile and active-role grants.
 func (u *Usecase) CurrentUser(ctx context.Context) (CurrentUser, error) {
 	if err := u.ready(); err != nil {
 		return CurrentUser{}, err
 	}
-	adminID, err := currentAdminID(ctx)
+	admin, activeRoleID, err := u.currentAdminAndRole(ctx)
 	if err != nil {
 		return CurrentUser{}, err
+	}
+	return u.userSnapshot(ctx, admin, activeRoleID)
+}
+
+// SwitchRole persists a new active role and returns a token scoped to that role.
+func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSwitchOutput, error) {
+	if err := u.ready(); err != nil {
+		return RoleSwitchOutput{}, err
+	}
+	adminID, err := currentAdminID(ctx)
+	if err != nil {
+		return RoleSwitchOutput{}, err
 	}
 	admin, err := u.admins.FindByID(ctx, adminID)
 	if err != nil {
-		return CurrentUser{}, err
+		return RoleSwitchOutput{}, err
 	}
-	if !admin.Active() {
-		return CurrentUser{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+	if !admin.Active {
+		return RoleSwitchOutput{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
 	}
-	return u.userSnapshot(ctx, admin)
+	switched, err := admin.SwitchActiveRole(input.RoleID)
+	if err != nil {
+		return RoleSwitchOutput{}, apperr.NewBadRequest("active role is not assigned")
+	}
+	saved, err := u.admins.Update(ctx, switched)
+	if err != nil {
+		return RoleSwitchOutput{}, err
+	}
+	user, err := u.userSnapshot(ctx, saved, input.RoleID)
+	if err != nil {
+		return RoleSwitchOutput{}, err
+	}
+	token, err := u.issueToken(saved.ID, saved.Username, user.ActiveRoleID, user.Permissions)
+	if err != nil {
+		return RoleSwitchOutput{}, err
+	}
+	return RoleSwitchOutput{Token: token, User: user}, nil
 }
 
-// RequirePermission verifies that the current admin has permission.
+// RequirePermission verifies that the current admin has permission through the active role.
 func (u *Usecase) RequirePermission(ctx context.Context, permission string) error {
 	if err := u.ready(); err != nil {
 		return err
 	}
-	adminID, err := currentAdminID(ctx)
+	admin, activeRoleID, err := u.currentAdminAndRole(ctx)
 	if err != nil {
 		return err
 	}
-	admin, err := u.admins.FindByID(ctx, adminID)
-	if err != nil {
-		return err
-	}
-	if !admin.Active() {
-		return apperr.New(apperr.ErrAccountDisabled, "account disabled")
-	}
-	snapshot, err := u.casbinSnapshot(ctx, admin)
+	snapshot, err := u.casbinSnapshot(ctx, admin, activeRoleID)
 	if err != nil {
 		return err
 	}
@@ -140,8 +161,30 @@ func (u *Usecase) ready() error {
 	return nil
 }
 
-func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin) (CurrentUser, error) {
-	snapshot, err := u.casbinSnapshot(ctx, admin)
+func (u *Usecase) currentAdminAndRole(ctx context.Context) (identitydomain.Admin, int64, error) {
+	adminID, err := currentAdminID(ctx)
+	if err != nil {
+		return identitydomain.Admin{}, 0, err
+	}
+	admin, err := u.admins.FindByID(ctx, adminID)
+	if err != nil {
+		return identitydomain.Admin{}, 0, err
+	}
+	if !admin.Active {
+		return identitydomain.Admin{}, 0, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+	}
+	activeRoleID := admin.ActiveRoleID
+	if roleID, parseErr := currentRoleID(ctx); parseErr == nil && roleID > 0 {
+		activeRoleID = roleID
+	}
+	if !admin.HasRole(activeRoleID) {
+		return identitydomain.Admin{}, 0, apperr.NewUnauthorized()
+	}
+	return admin, activeRoleID, nil
+}
+
+func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin, activeRoleID int64) (CurrentUser, error) {
+	snapshot, err := u.casbinSnapshot(ctx, admin, activeRoleID)
 	if err != nil {
 		return CurrentUser{}, err
 	}
@@ -150,56 +193,79 @@ func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin) 
 		return CurrentUser{}, err
 	}
 	return CurrentUser{
-		ID:          admin.ID(),
-		Username:    admin.Username(),
-		DisplayName: admin.DisplayName(),
-		Email:       admin.Email(),
-		Roles:       snapshot.roles,
-		Permissions: snapshot.permissions,
-		Menus:       menus,
+		ID:           admin.ID,
+		Username:     admin.Username,
+		DisplayName:  admin.DisplayName,
+		Email:        admin.Email,
+		ActiveRoleID: snapshot.activeRole.ID,
+		ActiveRole:   snapshot.activeRole,
+		DefaultPath:  snapshot.activeRole.DefaultPath,
+		Roles:        snapshot.roles,
+		Permissions:  snapshot.permissions,
+		Menus:        menus,
 	}, nil
 }
 
-func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin) (rbacSnapshot, error) {
-	roleIDs := admin.RoleIDs()
+func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin, activeRoleID int64) (rbacSnapshot, error) {
+	roleIDs := admin.RoleIDs
 	roles := make([]Role, 0, len(roleIDs))
-	menuIDSet := map[int64]struct{}{}
+	var menuIDSet map[int64]struct{}
 	enforcer, err := newCasbinEnforcer()
 	if err != nil {
 		return rbacSnapshot{}, err
 	}
-	user := userSubject(admin.ID())
+	user := userSubject(admin.ID)
+	var activeRole Role
+	activeFound := false
 	for _, roleID := range roleIDs {
 		role, findErr := u.roles.FindRoleByID(ctx, roleID)
 		if findErr != nil {
 			return rbacSnapshot{}, findErr
 		}
-		if !role.Active() {
+		if !role.Active {
 			continue
 		}
-		roles = append(roles, fromRole(role))
-		roleName := roleSubject(role.Code())
-		if _, addRoleErr := enforcer.AddRoleForUser(user, roleName); addRoleErr != nil {
-			return rbacSnapshot{}, fmt.Errorf("add casbin role: %w", addRoleErr)
+		dto := fromRole(role)
+		roles = append(roles, dto)
+		if role.ID != activeRoleID {
+			continue
 		}
-		for _, permission := range role.Permissions() {
-			obj, act, splitErr := splitPermission(permission)
-			if splitErr != nil {
-				return rbacSnapshot{}, splitErr
-			}
-			if _, addPolicyErr := enforcer.AddPolicy(roleName, obj, act); addPolicyErr != nil {
-				return rbacSnapshot{}, fmt.Errorf("add casbin policy: %w", addPolicyErr)
-			}
+		activeFound = true
+		activeRole = dto
+		menuIDSet, err = addActiveRoleGrants(enforcer, user, role)
+		if err != nil {
+			return rbacSnapshot{}, err
 		}
-		for _, menuID := range role.MenuIDs() {
-			menuIDSet[menuID] = struct{}{}
-		}
+	}
+	if !activeFound {
+		return rbacSnapshot{}, apperr.NewPermissionDenied("role", strconv.FormatInt(activeRoleID, 10))
 	}
 	permissions, err := implicitPermissions(enforcer, user)
 	if err != nil {
 		return rbacSnapshot{}, err
 	}
-	return rbacSnapshot{enforcer: enforcer, user: user, roles: roles, permissions: permissions, menuIDSet: menuIDSet}, nil
+	return rbacSnapshot{enforcer: enforcer, user: user, activeRole: activeRole, roles: roles, permissions: permissions, menuIDSet: menuIDSet}, nil
+}
+
+func addActiveRoleGrants(enforcer *casbin.Enforcer, user string, role accessdomain.Role) (map[int64]struct{}, error) {
+	roleName := roleSubject(role.Code)
+	if _, err := enforcer.AddRoleForUser(user, roleName); err != nil {
+		return nil, fmt.Errorf("add casbin role: %w", err)
+	}
+	for _, permission := range role.Permissions {
+		obj, act, splitErr := splitPermission(permission)
+		if splitErr != nil {
+			return nil, splitErr
+		}
+		if _, err := enforcer.AddPolicy(roleName, obj, act); err != nil {
+			return nil, fmt.Errorf("add casbin policy: %w", err)
+		}
+	}
+	menuIDSet := make(map[int64]struct{}, len(role.MenuIDs))
+	for _, menuID := range role.MenuIDs {
+		menuIDSet[menuID] = struct{}{}
+	}
+	return menuIDSet, nil
 }
 
 func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Menu, error) {
@@ -209,13 +275,13 @@ func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Me
 	}
 	out := make([]Menu, 0, len(menus))
 	for _, menu := range menus {
-		if !menu.Active() {
+		if !menu.Active {
 			continue
 		}
-		if _, ok := snapshot.menuIDSet[menu.ID()]; !ok {
+		if _, ok := snapshot.menuIDSet[menu.ID]; !ok {
 			continue
 		}
-		if permission := menu.Permission(); permission != "" {
+		if permission := menu.Permission; permission != "" {
 			allowed, err := enforcePermission(snapshot.enforcer, snapshot.user, permission)
 			if err != nil {
 				return nil, err
@@ -229,11 +295,12 @@ func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Me
 	return out, nil
 }
 
-func (u *Usecase) issueToken(adminID int64, username string, permissions []string) (string, error) {
+func (u *Usecase) issueToken(adminID int64, username string, activeRoleID int64, permissions []string) (string, error) {
 	now := u.now()
 	claims := jwt.MapClaims{
 		"sub":         strconv.FormatInt(adminID, 10),
 		"username":    username,
+		"role_id":     strconv.FormatInt(activeRoleID, 10),
 		"permissions": permissions,
 		"iat":         now.Unix(),
 		"exp":         now.Add(tokenTTL).Unix(),
@@ -259,44 +326,45 @@ func currentAdminID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func fromAdmin(admin identitydomain.Admin) Admin {
-	return Admin{
-		ID:          admin.ID(),
-		Username:    admin.Username(),
-		DisplayName: admin.DisplayName(),
-		Email:       admin.Email(),
-		RoleIDs:     admin.RoleIDs(),
-		Active:      admin.Active(),
-		CreatedAt:   admin.CreatedAt(),
-		UpdatedAt:   admin.UpdatedAt(),
+func currentRoleID(ctx context.Context) (int64, error) {
+	raw := requestctx.GetRoleID(ctx)
+	if raw == "" {
+		return 0, apperr.NewUnauthorized()
 	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, apperr.NewUnauthorized()
+	}
+	return id, nil
 }
 
 func fromRole(role accessdomain.Role) Role {
 	return Role{
-		ID:          role.ID(),
-		Code:        role.Code(),
-		Name:        role.Name(),
-		Permissions: role.Permissions(),
-		MenuIDs:     role.MenuIDs(),
-		Active:      role.Active(),
-		CreatedAt:   role.CreatedAt(),
-		UpdatedAt:   role.UpdatedAt(),
+		ID:          role.ID,
+		ParentID:    role.ParentID,
+		Code:        role.Code,
+		Name:        role.Name,
+		Permissions: role.Permissions,
+		MenuIDs:     role.MenuIDs,
+		DefaultPath: role.DefaultPath,
+		Active:      role.Active,
+		CreatedAt:   role.CreatedAt,
+		UpdatedAt:   role.UpdatedAt,
 	}
 }
 
 func fromMenu(menu accessdomain.Menu) Menu {
 	return Menu{
-		ID:         menu.ID(),
-		ParentID:   menu.ParentID(),
-		Name:       menu.Name(),
-		Path:       menu.Path(),
-		Icon:       menu.Icon(),
-		Permission: menu.Permission(),
-		Sort:       menu.Sort(),
-		Active:     menu.Active(),
-		CreatedAt:  menu.CreatedAt(),
-		UpdatedAt:  menu.UpdatedAt(),
+		ID:         menu.ID,
+		ParentID:   menu.ParentID,
+		Name:       menu.Name,
+		Path:       menu.Path,
+		Icon:       menu.Icon,
+		Permission: menu.Permission,
+		Sort:       menu.Sort,
+		Active:     menu.Active,
+		CreatedAt:  menu.CreatedAt,
+		UpdatedAt:  menu.UpdatedAt,
 	}
 }
 
@@ -326,6 +394,7 @@ func loginRecordFromInput(adminID int64, username string, input LoginInput, succ
 type rbacSnapshot struct {
 	enforcer    *casbin.Enforcer
 	user        string
+	activeRole  Role
 	roles       []Role
 	permissions []string
 	menuIDSet   map[int64]struct{}

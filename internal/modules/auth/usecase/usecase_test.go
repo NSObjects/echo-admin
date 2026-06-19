@@ -25,6 +25,9 @@ func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
 	if output.Token == "" {
 		t.Fatal("Login() token is empty, want signed token")
 	}
+	if output.User.ActiveRoleID != 1 {
+		t.Fatalf("Login().User.ActiveRoleID = %d, want 1", output.User.ActiveRoleID)
+	}
 	if len(recorder.records) != 1 || !recorder.records[0].Success {
 		t.Fatalf("login records = %#v, want one success record", recorder.records)
 	}
@@ -37,8 +40,8 @@ func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
 	if current.Username != "admin" {
 		t.Fatalf("CurrentUser().Username = %q, want admin", current.Username)
 	}
-	if !contains(current.Permissions, accessdomain.PermissionAdminManage) {
-		t.Fatalf("permissions = %v, want %s", current.Permissions, accessdomain.PermissionAdminManage)
+	if !contains(current.Permissions, accessdomain.PermissionAdminRead) {
+		t.Fatalf("permissions = %v, want %s", current.Permissions, accessdomain.PermissionAdminRead)
 	}
 	if len(current.Menus) == 0 {
 		t.Fatal("CurrentUser().Menus is empty, want visible menus")
@@ -66,11 +69,41 @@ func TestRequirePermissionUsesCasbinRBAC(t *testing.T) {
 	uc, _ := newUsecase(t)
 	ctx := requestctx.WithUserID(context.Background(), "1")
 
-	if err := uc.RequirePermission(ctx, accessdomain.PermissionAdminManage); err != nil {
+	if err := uc.RequirePermission(ctx, accessdomain.PermissionAdminRead); err != nil {
 		t.Fatalf("RequirePermission(allowed) error = %v", err)
 	}
-	if err := uc.RequirePermission(ctx, accessdomain.PermissionRoleManage); err == nil {
+	if err := uc.RequirePermission(ctx, accessdomain.PermissionRoleRead); err == nil {
 		t.Fatal("RequirePermission(denied) error = nil, want permission denied")
+	}
+}
+
+func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
+	uc, _ := newUsecase(t)
+	ctx := requestctx.WithUserID(context.Background(), "1")
+
+	output, err := uc.SwitchRole(ctx, authusecase.RoleSwitchInput{RoleID: 2})
+	if err != nil {
+		t.Fatalf("SwitchRole() error = %v", err)
+	}
+	if output.Token == "" {
+		t.Fatal("SwitchRole() token is empty, want signed token")
+	}
+	if output.User.ActiveRoleID != 2 {
+		t.Fatalf("SwitchRole().User.ActiveRoleID = %d, want 2", output.User.ActiveRoleID)
+	}
+	if !contains(output.User.Permissions, accessdomain.PermissionRoleRead) {
+		t.Fatalf("permissions = %v, want %s", output.User.Permissions, accessdomain.PermissionRoleRead)
+	}
+	if contains(output.User.Permissions, accessdomain.PermissionAdminRead) {
+		t.Fatalf("permissions = %v, want active role only", output.User.Permissions)
+	}
+
+	switchedCtx := requestctx.WithRoleID(ctx, "2")
+	if err := uc.RequirePermission(switchedCtx, accessdomain.PermissionRoleRead); err != nil {
+		t.Fatalf("RequirePermission(switched allowed) error = %v", err)
+	}
+	if err := uc.RequirePermission(switchedCtx, accessdomain.PermissionAdminRead); err == nil {
+		t.Fatal("RequirePermission(old role permission) error = nil, want permission denied")
 	}
 }
 
@@ -81,19 +114,34 @@ func newUsecase(t *testing.T) (*authusecase.Usecase, *loginRecorder) {
 		t.Fatalf("GenerateFromPassword() error = %v", err)
 	}
 	now := time.Unix(1_800_000_000, 0).UTC()
-	admin, err := identitydomain.RestoreAdmin(1, "admin", "系统管理员", "admin@example.com", hash, []int64{1}, true, now, now)
+	admin, err := identitydomain.RestoreAdmin(1, "admin", "系统管理员", "admin@example.com", hash, []int64{1, 2}, 1, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAdmin() error = %v", err)
 	}
-	role, err := accessdomain.RestoreRole(1, "super_admin", "超级管理员", []string{accessdomain.PermissionAdminManage}, []int64{1}, true, now, now)
+	superRole, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", []string{accessdomain.PermissionAdminRead}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole() error = %v", err)
 	}
-	menu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", accessdomain.PermissionAdminManage, 10, true, now, now)
+	operatorRole, err := accessdomain.RestoreRole(2, 1, "operator", "运营", []string{accessdomain.PermissionRoleRead}, []int64{2}, "/roles", true, now, now)
+	if err != nil {
+		t.Fatalf("RestoreRole(operator) error = %v", err)
+	}
+	adminMenu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", accessdomain.PermissionAdminRead, 10, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreMenu() error = %v", err)
 	}
-	store := &authStore{admin: admin, role: role, menu: menu}
+	roleMenu, err := accessdomain.RestoreMenu(2, 0, "角色权限", "/roles", "safety", accessdomain.PermissionRoleRead, 20, true, now, now)
+	if err != nil {
+		t.Fatalf("RestoreMenu(role) error = %v", err)
+	}
+	store := &authStore{
+		admin: admin,
+		roles: map[int64]accessdomain.Role{
+			1: superRole,
+			2: operatorRole,
+		},
+		menus: []accessdomain.Menu{adminMenu, roleMenu},
+	}
 	recorder := &loginRecorder{}
 	uc := authusecase.New(store, store, store, recorder, "test-secret", authusecase.WithClock(func() time.Time {
 		return now
@@ -103,8 +151,8 @@ func newUsecase(t *testing.T) (*authusecase.Usecase, *loginRecorder) {
 
 type authStore struct {
 	admin identitydomain.Admin
-	role  accessdomain.Role
-	menu  accessdomain.Menu
+	roles map[int64]accessdomain.Role
+	menus []accessdomain.Menu
 }
 
 func (s *authStore) FindByUsername(context.Context, string) (identitydomain.Admin, error) {
@@ -115,12 +163,21 @@ func (s *authStore) FindByID(context.Context, int64) (identitydomain.Admin, erro
 	return s.admin, nil
 }
 
-func (s *authStore) FindRoleByID(context.Context, int64) (accessdomain.Role, error) {
-	return s.role, nil
+func (s *authStore) Update(_ context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
+	s.admin = admin
+	return admin, nil
+}
+
+func (s *authStore) FindRoleByID(_ context.Context, id int64) (accessdomain.Role, error) {
+	role, ok := s.roles[id]
+	if !ok {
+		return accessdomain.Role{}, accessdomain.ErrInvalidRoleID
+	}
+	return role, nil
 }
 
 func (s *authStore) ListMenus(context.Context) ([]accessdomain.Menu, error) {
-	return []accessdomain.Menu{s.menu}, nil
+	return s.menus, nil
 }
 
 type loginRecorder struct {

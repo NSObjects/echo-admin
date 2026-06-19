@@ -11,6 +11,7 @@ const (
 	requestIDForTest = "req-789"
 	traceIDForTest   = "trace-123"
 	userIDForTest    = "user-001"
+	roleIDForTest    = "role-001"
 )
 
 func TestWithInfoStoresRequestMetadata(t *testing.T) {
@@ -20,6 +21,7 @@ func TestWithInfoStoresRequestMetadata(t *testing.T) {
 		SpanID:    "span-456",
 		RequestID: requestIDForTest,
 		UserID:    userIDForTest,
+		RoleID:    roleIDForTest,
 		StartTime: start,
 	})
 
@@ -38,6 +40,9 @@ func TestWithInfoStoresRequestMetadata(t *testing.T) {
 	}
 	if info.UserID != userIDForTest {
 		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+	}
+	if info.RoleID != roleIDForTest {
+		t.Fatalf("RoleID = %q, want %s", info.RoleID, roleIDForTest)
 	}
 	if !info.StartTime.Equal(start) {
 		t.Fatalf("StartTime = %v, want %v", info.StartTime, start)
@@ -65,7 +70,7 @@ func TestFromContextWithoutMetadata(t *testing.T) {
 	}
 }
 
-func TestWithTraceInfoSupportsGetters(t *testing.T) {
+func TestWithTraceInfoSupportsAccessors(t *testing.T) {
 	ctx := WithTraceInfo(context.Background(), traceIDForTest, "span-456", requestIDForTest)
 
 	if got := GetTraceID(ctx); got != traceIDForTest {
@@ -152,7 +157,36 @@ func TestWithUserIDAddsAuthenticatedIdentity(t *testing.T) {
 	}
 }
 
-func TestGettersHandleNilContext(t *testing.T) {
+func TestWithRoleIDAddsActiveAuthenticatedRole(t *testing.T) {
+	start := time.Now()
+	ctx := WithInfo(context.Background(), Info{
+		TraceID:   traceIDForTest,
+		RequestID: requestIDForTest,
+		UserID:    userIDForTest,
+		StartTime: start,
+	})
+
+	ctx = WithRoleID(ctx, roleIDForTest)
+
+	info, ok := FromContext(ctx)
+	if !ok {
+		t.Fatal("FromContext() ok = false, want true")
+	}
+	if info.UserID != userIDForTest {
+		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+	}
+	if info.RoleID != roleIDForTest {
+		t.Fatalf("RoleID = %q, want %s", info.RoleID, roleIDForTest)
+	}
+	if got := GetRoleID(ctx); got != roleIDForTest {
+		t.Fatalf("GetRoleID() = %q, want %s", got, roleIDForTest)
+	}
+	if !info.StartTime.Equal(start) {
+		t.Fatalf("StartTime = %v, want %v", info.StartTime, start)
+	}
+}
+
+func TestContextAccessorsHandleNilContext(t *testing.T) {
 	var ctx context.Context
 	if got := GetTraceID(ctx); got != "" {
 		t.Fatalf("GetTraceID(nil) = %q, want empty", got)
@@ -162,6 +196,9 @@ func TestGettersHandleNilContext(t *testing.T) {
 	}
 	if got := GetUserID(ctx); got != "" {
 		t.Fatalf("GetUserID(nil) = %q, want empty", got)
+	}
+	if got := GetRoleID(ctx); got != "" {
+		t.Fatalf("GetRoleID(nil) = %q, want empty", got)
 	}
 	if got := GetStartTime(ctx); !got.IsZero() {
 		t.Fatalf("GetStartTime(nil) = %v, want zero", got)

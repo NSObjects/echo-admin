@@ -124,31 +124,31 @@ func mapLoginLogs(logs []domain.LoginLog) []LoginLog {
 
 func fromOperationLog(log domain.OperationLog) OperationLog {
 	return OperationLog{
-		ID:         log.ID(),
-		ActorID:    log.ActorID(),
-		Action:     log.Action(),
-		Resource:   log.Resource(),
-		ResourceID: log.ResourceID(),
-		Method:     log.Method(),
-		Path:       log.Path(),
-		IP:         log.IP(),
-		UserAgent:  log.UserAgent(),
-		Success:    log.Success(),
-		Message:    log.Message(),
-		CreatedAt:  log.CreatedAt(),
+		ID:         log.ID,
+		ActorID:    log.ActorID,
+		Action:     log.Action,
+		Resource:   log.Resource,
+		ResourceID: log.ResourceID,
+		Method:     log.Method,
+		Path:       log.Path,
+		IP:         log.IP,
+		UserAgent:  log.UserAgent,
+		Success:    log.Success,
+		Message:    log.Message,
+		CreatedAt:  log.CreatedAt,
 	}
 }
 
 func fromLoginLog(log domain.LoginLog) LoginLog {
 	return LoginLog{
-		ID:        log.ID(),
-		AdminID:   log.AdminID(),
-		Username:  log.Username(),
-		IP:        log.IP(),
-		UserAgent: log.UserAgent(),
-		Success:   log.Success(),
-		Reason:    log.Reason(),
-		CreatedAt: log.CreatedAt(),
+		ID:        log.ID,
+		AdminID:   log.AdminID,
+		Username:  log.Username,
+		IP:        log.IP,
+		UserAgent: log.UserAgent,
+		Success:   log.Success,
+		Reason:    log.Reason,
+		CreatedAt: log.CreatedAt,
 	}
 }
 

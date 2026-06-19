@@ -64,30 +64,25 @@ func (s *Store) FindRoleByCode(ctx context.Context, code string) (domain.Role, e
 	return model.toDomain()
 }
 
-// ListRoles returns roles ordered by id descending.
-func (s *Store) ListRoles(ctx context.Context, filter usecase.ListFilter) ([]domain.Role, int, error) {
+// ListAllRoles returns all roles ordered for scoped delegation checks.
+func (s *Store) ListAllRoles(ctx context.Context) ([]domain.Role, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, 0, err
-	}
-	var total int64
-	query := s.db.WithContext(ctx).Model(&roleModel{})
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, apperr.WrapDatabase(err, "count roles")
+		return nil, err
 	}
 	var models []roleModel
-	err := query.Order("id DESC").Offset(filter.Offset).Limit(filter.Limit).Find(&models).Error
+	err := s.db.WithContext(ctx).Order("id DESC").Find(&models).Error
 	if err != nil {
-		return nil, 0, apperr.WrapDatabase(err, "list roles")
+		return nil, apperr.WrapDatabase(err, "list all roles")
 	}
 	roles := make([]domain.Role, 0, len(models))
 	for _, model := range models {
 		role, err := model.toDomain()
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		roles = append(roles, role)
 	}
-	return roles, int(total), nil
+	return roles, nil
 }
 
 // CreateRole inserts a role.
@@ -191,12 +186,12 @@ func (s *Store) seed(ctx context.Context) error {
 func (s *Store) seedMenus(ctx context.Context) ([]int64, error) {
 	seeds := []menuSeed{
 		{name: "工作台", path: "/dashboard", icon: "dashboard", sort: 10},
-		{name: "管理员管理", path: "/admins", icon: "user", permission: domain.PermissionAdminManage, sort: 20},
-		{name: "角色权限", path: "/roles", icon: "safety", permission: domain.PermissionRoleManage, sort: 30},
-		{name: "菜单管理", path: "/menus", icon: "menu", permission: domain.PermissionMenuManage, sort: 40},
-		{name: "系统配置", path: "/configs", icon: "setting", permission: domain.PermissionConfigManage, sort: 50},
-		{name: "数据字典", path: "/dictionaries", icon: "profile", permission: domain.PermissionDictManage, sort: 60},
-		{name: "文件上传", path: "/files", icon: "upload", permission: domain.PermissionFileUpload, sort: 70},
+		{name: "管理员管理", path: "/admins", icon: "user", permission: domain.PermissionAdminRead, sort: 20},
+		{name: "角色权限", path: "/roles", icon: "safety", permission: domain.PermissionRoleRead, sort: 30},
+		{name: "菜单管理", path: "/menus", icon: "menu", permission: domain.PermissionMenuRead, sort: 40},
+		{name: "系统配置", path: "/configs", icon: "setting", permission: domain.PermissionConfigRead, sort: 50},
+		{name: "数据字典", path: "/dictionaries", icon: "profile", permission: domain.PermissionDictRead, sort: 60},
+		{name: "文件上传", path: "/files", icon: "upload", permission: domain.PermissionFileRead, sort: 70},
 		{name: "审计日志", path: "/logs", icon: "fileSearch", permission: domain.PermissionLogRead, sort: 80},
 	}
 	menuIDs := make([]int64, 0, len(seeds))
@@ -214,6 +209,14 @@ func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, error) {
 	var existing menuModel
 	err := s.db.WithContext(ctx).Where("path = ?", seed.path).First(&existing).Error
 	if err == nil {
+		existing.Name = seed.name
+		existing.Icon = seed.icon
+		existing.Permission = seed.permission
+		existing.Sort = seed.sort
+		existing.Active = true
+		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
+			return 0, apperr.WrapDatabase(saveErr, "update seed menu")
+		}
 		return existing.ID, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -233,15 +236,24 @@ func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, error) {
 
 func (s *Store) seedSuperAdminRole(ctx context.Context, menuIDs []int64) error {
 	var existing roleModel
-	err := s.db.WithContext(ctx).Where("code = ?", "super_admin").First(&existing).Error
+	err := s.db.WithContext(ctx).Where("code = ?", domain.RoleCodeSuperAdmin).First(&existing).Error
 	if err == nil {
+		existing.ParentID = 0
+		existing.Name = "超级管理员"
+		existing.Permissions = mysqljson.Strings(usecase.AllPermissions())
+		existing.MenuIDs = mysqljson.Int64s(menuIDs)
+		existing.DefaultPath = domain.DefaultRolePath
+		existing.Active = true
+		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
+			return apperr.WrapDatabase(saveErr, "update seed role")
+		}
 		return nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return apperr.WrapDatabase(err, "find seed role")
 	}
 	now := time.Now().UTC()
-	role, err := domain.RestoreRole(0, "super_admin", "超级管理员", usecase.AllPermissions(), menuIDs, true, now, now)
+	role, err := domain.RestoreRole(0, 0, domain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), menuIDs, domain.DefaultRolePath, true, now, now)
 	if err != nil {
 		return err
 	}
@@ -262,10 +274,12 @@ type menuSeed struct {
 
 type roleModel struct {
 	ID          int64             `gorm:"primaryKey"`
+	ParentID    int64             `gorm:"not null;index"`
 	Code        string            `gorm:"type:varchar(64);not null;uniqueIndex"`
 	Name        string            `gorm:"type:varchar(80);not null"`
 	Permissions mysqljson.Strings `gorm:"type:json;not null"`
 	MenuIDs     mysqljson.Int64s  `gorm:"type:json;not null"`
+	DefaultPath string            `gorm:"type:varchar(160);not null"`
 	Active      bool              `gorm:"not null"`
 	CreatedAt   time.Time         `gorm:"not null"`
 	UpdatedAt   time.Time         `gorm:"not null"`
@@ -277,19 +291,21 @@ func (roleModel) TableName() string {
 
 func roleModelFromDomain(role domain.Role) roleModel {
 	return roleModel{
-		ID:          role.ID(),
-		Code:        role.Code(),
-		Name:        role.Name(),
-		Permissions: mysqljson.Strings(role.Permissions()),
-		MenuIDs:     mysqljson.Int64s(role.MenuIDs()),
-		Active:      role.Active(),
-		CreatedAt:   role.CreatedAt(),
-		UpdatedAt:   role.UpdatedAt(),
+		ID:          role.ID,
+		ParentID:    role.ParentID,
+		Code:        role.Code,
+		Name:        role.Name,
+		Permissions: mysqljson.Strings(role.Permissions),
+		MenuIDs:     mysqljson.Int64s(role.MenuIDs),
+		DefaultPath: role.DefaultPath,
+		Active:      role.Active,
+		CreatedAt:   role.CreatedAt,
+		UpdatedAt:   role.UpdatedAt,
 	}
 }
 
 func (m roleModel) toDomain() (domain.Role, error) {
-	return domain.RestoreRole(m.ID, m.Code, m.Name, []string(m.Permissions), []int64(m.MenuIDs), m.Active, m.CreatedAt, m.UpdatedAt)
+	return domain.RestoreRole(m.ID, m.ParentID, m.Code, m.Name, []string(m.Permissions), []int64(m.MenuIDs), m.DefaultPath, m.Active, m.CreatedAt, m.UpdatedAt)
 }
 
 type menuModel struct {
@@ -311,16 +327,16 @@ func (menuModel) TableName() string {
 
 func menuModelFromDomain(menu domain.Menu) menuModel {
 	return menuModel{
-		ID:         menu.ID(),
-		ParentID:   menu.ParentID(),
-		Name:       menu.Name(),
-		Path:       menu.Path(),
-		Icon:       menu.Icon(),
-		Permission: menu.Permission(),
-		Sort:       menu.Sort(),
-		Active:     menu.Active(),
-		CreatedAt:  menu.CreatedAt(),
-		UpdatedAt:  menu.UpdatedAt(),
+		ID:         menu.ID,
+		ParentID:   menu.ParentID,
+		Name:       menu.Name,
+		Path:       menu.Path,
+		Icon:       menu.Icon,
+		Permission: menu.Permission,
+		Sort:       menu.Sort,
+		Active:     menu.Active,
+		CreatedAt:  menu.CreatedAt,
+		UpdatedAt:  menu.UpdatedAt,
 	}
 }
 

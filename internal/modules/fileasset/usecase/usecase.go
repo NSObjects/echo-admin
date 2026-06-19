@@ -75,12 +75,12 @@ func mapFiles(files []domain.FileObject) []FileObject {
 
 func fromFile(file domain.FileObject) FileObject {
 	return FileObject{
-		ID:          file.ID(),
-		Name:        file.Name(),
-		URL:         file.URL(),
-		Size:        file.Size(),
-		ContentType: file.ContentType(),
-		CreatedAt:   file.CreatedAt(),
+		ID:          file.ID,
+		Name:        file.Name,
+		URL:         file.URL,
+		Size:        file.Size,
+		ContentType: file.ContentType,
+		CreatedAt:   file.CreatedAt,
 	}
 }
 

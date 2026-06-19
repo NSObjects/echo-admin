@@ -130,32 +130,32 @@ func mapDictionaryItems(items []domain.DictionaryItem) []DictionaryItem {
 
 func fromConfig(config domain.SystemConfig) SystemConfig {
 	return SystemConfig{
-		Key:       config.Key(),
-		Name:      config.Name(),
-		Value:     config.Value(),
-		Public:    config.Public(),
-		UpdatedAt: config.UpdatedAt(),
+		Key:       config.Key,
+		Name:      config.Name,
+		Value:     config.Value,
+		Public:    config.Public,
+		UpdatedAt: config.UpdatedAt,
 	}
 }
 
 func fromDictionary(dictionary domain.Dictionary) Dictionary {
 	return Dictionary{
-		ID:        dictionary.ID(),
-		Code:      dictionary.Code(),
-		Name:      dictionary.Name(),
-		Items:     mapDictionaryItems(dictionary.Items()),
-		CreatedAt: dictionary.CreatedAt(),
-		UpdatedAt: dictionary.UpdatedAt(),
+		ID:        dictionary.ID,
+		Code:      dictionary.Code,
+		Name:      dictionary.Name,
+		Items:     mapDictionaryItems(dictionary.Items),
+		CreatedAt: dictionary.CreatedAt,
+		UpdatedAt: dictionary.UpdatedAt,
 	}
 }
 
 func fromDictionaryItem(item domain.DictionaryItem) DictionaryItem {
 	return DictionaryItem{
-		ID:     item.ID(),
-		Label:  item.Label(),
-		Value:  item.Value(),
-		Sort:   item.Sort(),
-		Active: item.Active(),
+		ID:     item.ID,
+		Label:  item.Label,
+		Value:  item.Value,
+		Sort:   item.Sort,
+		Active: item.Active,
 	}
 }
 

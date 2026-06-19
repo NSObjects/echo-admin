@@ -16,14 +16,14 @@ var (
 	ErrInvalidContentType = errors.New("invalid content type")
 )
 
-// FileObject describes a file uploaded through the back office.
+// FileObject is validated metadata for a file uploaded through the back office.
 type FileObject struct {
-	id          int64
-	name        string
-	url         string
-	size        int64
-	contentType string
-	createdAt   time.Time
+	ID          int64
+	Name        string
+	URL         string
+	Size        int64
+	ContentType string
+	CreatedAt   time.Time
 }
 
 // RestoreFileObject rebuilds an uploaded file record from a trusted store representation.
@@ -46,23 +46,5 @@ func RestoreFileObject(id int64, name, url string, size int64, contentType strin
 	if contentType == "" || len(contentType) > 120 {
 		return FileObject{}, ErrInvalidContentType
 	}
-	return FileObject{id: id, name: name, url: url, size: size, contentType: contentType, createdAt: createdAt}, nil
+	return FileObject{ID: id, Name: name, URL: url, Size: size, ContentType: contentType, CreatedAt: createdAt}, nil
 }
-
-// ID returns the persisted file id.
-func (f FileObject) ID() int64 { return f.id }
-
-// Name returns the original sanitized file name.
-func (f FileObject) Name() string { return f.name }
-
-// URL returns the local URL used to retrieve the file.
-func (f FileObject) URL() string { return f.url }
-
-// Size returns the uploaded byte size.
-func (f FileObject) Size() int64 { return f.size }
-
-// ContentType returns the detected or supplied MIME type.
-func (f FileObject) ContentType() string { return f.contentType }
-
-// CreatedAt returns the upload timestamp.
-func (f FileObject) CreatedAt() time.Time { return f.createdAt }

@@ -42,6 +42,7 @@ func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder) *Han
 
 // Register mounts role and menu routes on group.
 func Register(group *echo.Group, handler *Handler) {
+	group.GET("/permissions", handler.ListPermissions)
 	group.GET("/roles", handler.ListRoles)
 	group.POST("/roles", handler.CreateRole)
 	group.PATCH("/roles/:id", handler.UpdateRole)
@@ -50,9 +51,23 @@ func Register(group *echo.Group, handler *Handler) {
 	group.PATCH("/menus/:id", handler.UpdateMenu)
 }
 
+// ListPermissions returns grant metadata.
+func (h *Handler) ListPermissions(c *echo.Context) error {
+	if err := h.ready(); err != nil {
+		return err
+	}
+	// The catalog is non-secret metadata used by role and menu editors. JWT still
+	// protects the route; reading the catalog never grants a permission.
+	permissions, err := h.usecase.ListPermissions(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return httpresp.OK(c, permissions)
+}
+
 // ListRoles returns roles.
 func (h *Handler) ListRoles(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionRoleRead); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -68,20 +83,14 @@ func (h *Handler) ListRoles(c *echo.Context) error {
 
 // CreateRole creates a role.
 func (h *Handler) CreateRole(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionRoleCreate); err != nil {
 		return err
 	}
 	var req createRoleRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	role, err := h.usecase.CreateRole(c.Request().Context(), usecase.RoleInput{
-		Code:        req.Code,
-		Name:        req.Name,
-		Permissions: req.Permissions,
-		MenuIDs:     req.MenuIDs,
-		Active:      req.Active,
-	})
+	role, err := h.usecase.CreateRole(c.Request().Context(), roleInputFromRequest(req))
 	if err != nil {
 		return err
 	}
@@ -93,7 +102,7 @@ func (h *Handler) CreateRole(c *echo.Context) error {
 
 // UpdateRole updates a role.
 func (h *Handler) UpdateRole(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionRoleUpdate); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "role")
@@ -106,9 +115,11 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 	}
 	role, err := h.usecase.UpdateRole(c.Request().Context(), usecase.UpdateRoleInput{
 		ID:          id,
+		ParentID:    req.ParentID,
 		Name:        req.Name,
 		Permissions: req.Permissions,
 		MenuIDs:     req.MenuIDs,
+		DefaultPath: req.DefaultPath,
 		Active:      req.Active,
 	})
 	if err != nil {
@@ -122,7 +133,7 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 
 // ListMenus returns menus.
 func (h *Handler) ListMenus(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionMenuRead); err != nil {
 		return err
 	}
 	menus, err := h.usecase.ListMenus(c.Request().Context())
@@ -134,22 +145,14 @@ func (h *Handler) ListMenus(c *echo.Context) error {
 
 // CreateMenu creates a menu.
 func (h *Handler) CreateMenu(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionMenuCreate); err != nil {
 		return err
 	}
 	var req menuRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	menu, err := h.usecase.CreateMenu(c.Request().Context(), usecase.MenuInput{
-		ParentID:   req.ParentID,
-		Name:       req.Name,
-		Path:       req.Path,
-		Icon:       req.Icon,
-		Permission: req.Permission,
-		Sort:       req.Sort,
-		Active:     req.Active,
-	})
+	menu, err := h.usecase.CreateMenu(c.Request().Context(), menuInputFromRequest(req))
 	if err != nil {
 		return err
 	}
@@ -161,7 +164,7 @@ func (h *Handler) CreateMenu(c *echo.Context) error {
 
 // UpdateMenu updates a menu.
 func (h *Handler) UpdateMenu(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuManage); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionMenuUpdate); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "menu")
@@ -231,6 +234,30 @@ func listInput(c *echo.Context) (usecase.ListInput, error) {
 		return usecase.ListInput{}, err
 	}
 	return usecase.ListInput{Page: page, PageSize: pageSize}, nil
+}
+
+func roleInputFromRequest(req createRoleRequest) usecase.RoleInput {
+	return usecase.RoleInput{
+		ParentID:    req.ParentID,
+		Code:        req.Code,
+		Name:        req.Name,
+		Permissions: req.Permissions,
+		MenuIDs:     req.MenuIDs,
+		DefaultPath: req.DefaultPath,
+		Active:      req.Active,
+	}
+}
+
+func menuInputFromRequest(req menuRequest) usecase.MenuInput {
+	return usecase.MenuInput{
+		ParentID:   req.ParentID,
+		Name:       req.Name,
+		Path:       req.Path,
+		Icon:       req.Icon,
+		Permission: req.Permission,
+		Sort:       req.Sort,
+		Active:     req.Active,
+	}
 }
 
 func paginated(c *echo.Context, items interface{}, page, pageSize, total int) error {

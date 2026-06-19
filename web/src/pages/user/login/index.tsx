@@ -31,14 +31,14 @@ const useStyles = createStyles(({ token }) => ({
 
 const loginPath = '/user/login';
 
-const safeRedirect = (redirect: string | null): string => {
-  if (!redirect?.startsWith('/') || redirect.startsWith('//')) return '/';
+const safeRedirect = (redirect: string | null, fallback: string): string => {
+  if (!redirect?.startsWith('/') || redirect.startsWith('//')) return fallback;
   try {
     const parsed = new URL(redirect, window.location.origin);
-    if (parsed.origin !== window.location.origin) return '/';
+    if (parsed.origin !== window.location.origin) return fallback;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
-    return '/';
+    return fallback;
   }
 };
 
@@ -68,8 +68,16 @@ const Login: React.FC = () => {
                 setInitialState((state) => ({ ...state, currentUser }));
               });
               message.success('登录成功');
-              const redirect = new URL(window.location.href).searchParams.get('redirect');
-              history.replace(safeRedirect(redirect === loginPath ? '/' : redirect));
+              const redirect = new URL(window.location.href).searchParams.get(
+                'redirect',
+              );
+              const fallbackPath = currentUser?.default_path || '/dashboard';
+              history.replace(
+                safeRedirect(
+                  redirect === loginPath ? null : redirect,
+                  fallbackPath,
+                ),
+              );
             }}
           >
             <ProFormText

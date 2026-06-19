@@ -85,12 +85,12 @@ func (fileModel) TableName() string {
 
 func fileModelFromDomain(file domain.FileObject, createdAt time.Time) fileModel {
 	return fileModel{
-		ID:          file.ID(),
-		Name:        file.Name(),
-		URL:         file.URL(),
-		Size:        file.Size(),
-		ContentType: file.ContentType(),
-		CreatedAt:   coalesceTime(file.CreatedAt(), createdAt),
+		ID:          file.ID,
+		Name:        file.Name,
+		URL:         file.URL,
+		Size:        file.Size,
+		ContentType: file.ContentType,
+		CreatedAt:   coalesceTime(file.CreatedAt, createdAt),
 	}
 }
 

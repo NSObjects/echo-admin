@@ -93,18 +93,18 @@ func (operationLogModel) TableName() string {
 
 func operationLogModelFromDomain(log domain.OperationLog, createdAt time.Time) operationLogModel {
 	return operationLogModel{
-		ID:         log.ID(),
-		ActorID:    log.ActorID(),
-		Action:     log.Action(),
-		Resource:   log.Resource(),
-		ResourceID: log.ResourceID(),
-		Method:     log.Method(),
-		Path:       log.Path(),
-		IP:         log.IP(),
-		UserAgent:  log.UserAgent(),
-		Success:    log.Success(),
-		Message:    log.Message(),
-		CreatedAt:  coalesceTime(log.CreatedAt(), createdAt),
+		ID:         log.ID,
+		ActorID:    log.ActorID,
+		Action:     log.Action,
+		Resource:   log.Resource,
+		ResourceID: log.ResourceID,
+		Method:     log.Method,
+		Path:       log.Path,
+		IP:         log.IP,
+		UserAgent:  log.UserAgent,
+		Success:    log.Success,
+		Message:    log.Message,
+		CreatedAt:  coalesceTime(log.CreatedAt, createdAt),
 	}
 }
 
@@ -129,14 +129,14 @@ func (loginLogModel) TableName() string {
 
 func loginLogModelFromDomain(log domain.LoginLog, createdAt time.Time) loginLogModel {
 	return loginLogModel{
-		ID:        log.ID(),
-		AdminID:   log.AdminID(),
-		Username:  log.Username(),
-		IP:        log.IP(),
-		UserAgent: log.UserAgent(),
-		Success:   log.Success(),
-		Reason:    log.Reason(),
-		CreatedAt: coalesceTime(log.CreatedAt(), createdAt),
+		ID:        log.ID,
+		AdminID:   log.AdminID,
+		Username:  log.Username,
+		IP:        log.IP,
+		UserAgent: log.UserAgent,
+		Success:   log.Success,
+		Reason:    log.Reason,
+		CreatedAt: coalesceTime(log.CreatedAt, createdAt),
 	}
 }
 

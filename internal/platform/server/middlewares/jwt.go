@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -88,13 +89,39 @@ func storeJWTSubject(c *echo.Context) error {
 	if err != nil || subject == "" {
 		return nil
 	}
+	roleID := jwtClaimString(token.Claims, "role_id")
 
 	request := c.Request()
 	if request == nil {
 		return nil
 	}
 	ctx := requestctx.WithUserID(request.Context(), subject)
-	logger := logging.FromContext(ctx).With().Str("user_id", subject).Logger()
+	if roleID != "" {
+		ctx = requestctx.WithRoleID(ctx, roleID)
+	}
+	logger := logging.FromContext(ctx).With().Str("user_id", subject).Str("role_id", roleID).Logger()
 	c.SetRequest(request.WithContext(logger.WithContext(ctx)))
 	return nil
+}
+
+func jwtClaimString(claims jwt.Claims, name string) string {
+	mapClaims, ok := claims.(jwt.MapClaims)
+	if !ok {
+		return ""
+	}
+	value, ok := mapClaims[name]
+	if !ok {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case float64:
+		if typed <= 0 || typed != float64(int64(typed)) {
+			return ""
+		}
+		return fmt.Sprintf("%.0f", typed)
+	default:
+		return ""
+	}
 }

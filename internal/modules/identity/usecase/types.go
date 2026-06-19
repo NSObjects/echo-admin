@@ -17,39 +17,48 @@ const (
 type Store interface {
 	FindByUsername(context.Context, string) (domain.Admin, error)
 	FindByID(context.Context, int64) (domain.Admin, error)
-	List(context.Context, ListFilter) ([]domain.Admin, int, error)
+	ListAll(context.Context) ([]domain.Admin, error)
 	Create(context.Context, domain.Admin) (domain.Admin, error)
 	Update(context.Context, domain.Admin) (domain.Admin, error)
+}
+
+// RoleScope authorizes role assignments without exposing access storage details.
+type RoleScope interface {
+	AssignableRoleIDs(context.Context) ([]int64, error)
+	EnsureAssignableRoles(context.Context, []int64) error
 }
 
 // Usecase coordinates administrator management rules.
 type Usecase struct {
 	store Store
+	roles RoleScope
 }
 
 // New creates an identity usecase.
-func New(store Store) *Usecase {
-	return &Usecase{store: store}
+func New(store Store, roles RoleScope) *Usecase {
+	return &Usecase{store: store, roles: roles}
 }
 
 // AdminInput carries mutable administrator fields.
 type AdminInput struct {
-	Username    string
-	DisplayName string
-	Email       string
-	Password    string
-	RoleIDs     []int64
-	Active      bool
+	Username     string
+	DisplayName  string
+	Email        string
+	Password     string
+	RoleIDs      []int64
+	ActiveRoleID int64
+	Active       bool
 }
 
 // UpdateAdminInput carries partial administrator updates.
 type UpdateAdminInput struct {
-	ID          int64
-	DisplayName *string
-	Email       *string
-	Password    *string
-	RoleIDs     []int64
-	Active      *bool
+	ID           int64
+	DisplayName  *string
+	Email        *string
+	Password     *string
+	RoleIDs      []int64
+	ActiveRoleID *int64
+	Active       *bool
 }
 
 // ListInput carries pagination for administrator lists.
@@ -76,12 +85,13 @@ type ListOutput struct {
 
 // Admin is the adapter-facing administrator DTO.
 type Admin struct {
-	ID          int64     `json:"id"`
-	Username    string    `json:"username"`
-	DisplayName string    `json:"display_name"`
-	Email       string    `json:"email"`
-	RoleIDs     []int64   `json:"role_ids"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	DisplayName  string    `json:"display_name"`
+	Email        string    `json:"email"`
+	RoleIDs      []int64   `json:"role_ids"`
+	ActiveRoleID int64     `json:"active_role_id"`
+	Active       bool      `json:"active"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }

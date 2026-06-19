@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	accessmysql "github.com/NSObjects/echo-admin/internal/modules/access/adapters/mysql"
+	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	accesshttp "github.com/NSObjects/echo-admin/internal/modules/access/http"
 	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	auditmysql "github.com/NSObjects/echo-admin/internal/modules/audit/adapters/mysql"
@@ -104,7 +105,11 @@ func newAccessUsecase(i do.Injector) (*accessusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return accessusecase.New(store), nil
+	identityStore, err := do.Invoke[*identitymysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	return accessusecase.New(store, accessAdminRoleReader{store: identityStore}), nil
 }
 
 func newAccessHandler(i do.Injector) (*accesshttp.Handler, error) {
@@ -128,7 +133,11 @@ func newIdentityUsecase(i do.Injector) (*identityusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return identityusecase.New(store), nil
+	roles, err := do.Invoke[*accessusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return identityusecase.New(store, roles), nil
 }
 
 func newIdentityHandler(i do.Injector) (*identityhttp.Handler, error) {
@@ -188,11 +197,11 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	role, err := accessStore.FindRoleByCode(ctx, "super_admin")
+	role, err := accessStore.FindRoleByCode(ctx, accessdomain.RoleCodeSuperAdmin)
 	if err != nil {
 		return nil, err
 	}
-	if seedErr := identityStore.SeedDefaultAdmin(ctx, role.ID()); seedErr != nil {
+	if seedErr := identityStore.SeedDefaultAdmin(ctx, role.ID); seedErr != nil {
 		return nil, seedErr
 	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
@@ -312,6 +321,21 @@ func accessHandlerDeps(i do.Injector) (*accessusecase.Usecase, *authusecase.Usec
 
 type authLoginRecorder struct {
 	audit *auditusecase.Usecase
+}
+
+type accessAdminRoleReader struct {
+	store *identitymysql.Store
+}
+
+func (r accessAdminRoleReader) AdminRoleState(ctx context.Context, adminID int64) (accessusecase.AdminRoleState, error) {
+	admin, err := r.store.FindByID(ctx, adminID)
+	if err != nil {
+		return accessusecase.AdminRoleState{}, err
+	}
+	return accessusecase.AdminRoleState{
+		RoleIDs:      admin.RoleIDs,
+		ActiveRoleID: admin.ActiveRoleID,
+	}, nil
 }
 
 func (r authLoginRecorder) RecordLogin(ctx context.Context, record authusecase.LoginRecord) error {
