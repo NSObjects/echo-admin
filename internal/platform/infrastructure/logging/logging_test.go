@@ -7,7 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
 func TestFromAppConfigDerivesDefaultsFromSystemLevel(t *testing.T) {

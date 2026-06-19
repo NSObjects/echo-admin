@@ -10,8 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/server"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
 
 func TestInjectorProvidesFrameworkRuntimeAndKeepsResourceClientsLazy(t *testing.T) {

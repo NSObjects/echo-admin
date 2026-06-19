@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/resources"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
 )
 
 func TestOpenDisabledRedisDoesNotConnect(t *testing.T) {

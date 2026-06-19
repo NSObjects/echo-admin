@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NSObjects/go-template/internal/boot"
+	"github.com/NSObjects/echo-admin/internal/boot"
 )
 
 // Run starts the application and exits the process when startup fails.

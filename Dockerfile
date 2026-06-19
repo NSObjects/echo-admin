@@ -21,8 +21,8 @@ RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} go build -tri
 FROM scratch AS final
 
 ENV LANG=en_US.UTF-8
-ENV GO_TEMPLATE_SYSTEM_LEVEL=2 \
-    GO_TEMPLATE_LOG_FORMAT=json
+ENV ECHO_ADMIN_SYSTEM_LEVEL=2 \
+    ECHO_ADMIN_LOG_FORMAT=json
 
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

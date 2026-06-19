@@ -14,16 +14,19 @@ const (
 
 const (
 	// DefaultAppName is returned by /api/info when config omits app.name.
-	DefaultAppName = "go-template"
+	DefaultAppName = "echo-admin"
 
 	// EnvPrefix is the environment variable prefix used for config overrides.
-	EnvPrefix = "GO_TEMPLATE"
+	EnvPrefix = "ECHO_ADMIN"
 
 	// DefaultAppVersion is returned by /api/info when config omits app.version.
 	DefaultAppVersion = "dev"
 
 	// DefaultPort is the HTTP port used when config omits system.port.
 	DefaultPort = ":9322"
+
+	// DefaultUploadDir stores local back-office uploads for development.
+	DefaultUploadDir = "uploads"
 
 	// LogFormatConsole writes human-readable zerolog console output.
 	LogFormatConsole = "console"
@@ -67,10 +70,16 @@ type Config struct {
 	Log     LogConfig     `mapstructure:"log"`
 	HTTP    HTTPConfig    `mapstructure:"http"`
 	JWT     JWTConfig     `mapstructure:"jwt"`
+	Admin   AdminConfig   `mapstructure:"admin"`
 	MySQL   MySQLConfig   `mapstructure:"mysql"`
 	Redis   RedisConfig   `mapstructure:"redis"`
 	MongoDB MongoDBConfig `mapstructure:"mongodb"`
 	Tracing TracingConfig `mapstructure:"tracing"`
+}
+
+// AdminConfig controls back-office foundation behavior.
+type AdminConfig struct {
+	UploadDir string `mapstructure:"upload_dir"`
 }
 
 // AppConfig controls process identity exposed by system routes.

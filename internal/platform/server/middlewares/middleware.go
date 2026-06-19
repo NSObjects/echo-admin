@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/NSObjects/go-template/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
 // Validator adapts go-playground validator to Echo's validation interface.

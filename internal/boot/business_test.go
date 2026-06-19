@@ -2,42 +2,38 @@ package boot
 
 import (
 	"context"
-	"net/http"
+	"strings"
 	"testing"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
-func TestBusinessModulesRegisterRoutes(t *testing.T) {
-	app, err := NewApp(configs.Config{}, WithModules(BusinessModules()...))
-	if err != nil {
-		t.Fatalf("NewApp() error = %v", err)
+func TestBusinessModulesAreSplitByFoundationCapability(t *testing.T) {
+	modules := BusinessModules()
+	want := []string{"access", "identity", "audit", "auth", "settings", "fileasset"}
+	if len(modules) != len(want) {
+		t.Fatalf("BusinessModules() length = %d, want %d", len(modules), len(want))
 	}
-	t.Cleanup(func() {
-		if err := app.close(context.Background()); err != nil {
-			t.Fatalf("close() error = %v", err)
+	for i := range want {
+		if modules[i].Name() != want[i] {
+			t.Fatalf("BusinessModules()[%d].Name() = %q, want %q", i, modules[i].Name(), want[i])
 		}
-	})
-
-	assertRoute(t, app, http.MethodPost, "/api/customers")
-	assertRoute(t, app, http.MethodGet, "/api/customers")
-	assertRoute(t, app, http.MethodGet, "/api/customers/:id")
-	assertRoute(t, app, http.MethodPatch, "/api/customers/:id")
-	assertRoute(t, app, http.MethodPost, "/api/products")
-	assertRoute(t, app, http.MethodGet, "/api/products")
-	assertRoute(t, app, http.MethodGet, "/api/products/:id")
-	assertRoute(t, app, http.MethodPatch, "/api/products/:id")
-	assertRoute(t, app, http.MethodPost, "/api/sales-orders")
-	assertRoute(t, app, http.MethodGet, "/api/sales-orders")
-	assertRoute(t, app, http.MethodGet, "/api/sales-orders/:id")
+	}
 }
 
-func assertRoute(t *testing.T, app *App, method, path string) {
-	t.Helper()
-	for _, route := range app.Server().Echo().Router().Routes() {
-		if route.Method == method && route.Path == path {
-			return
+func TestBusinessModulesRequireMySQLStorage(t *testing.T) {
+	app, err := NewApp(configs.Config{
+		JWT: configs.JWTConfig{Secret: "test-secret"},
+	}, WithModules(BusinessModules()...))
+	if err == nil {
+		t.Fatal("NewApp() error = nil, want disabled MySQL storage error")
+	}
+	if app != nil {
+		if closeErr := app.close(context.Background()); closeErr != nil {
+			t.Fatalf("close() error = %v", closeErr)
 		}
 	}
-	t.Fatalf("route %s %s not registered", method, path)
+	if !strings.Contains(err.Error(), "mysql") {
+		t.Fatalf("NewApp() error = %q, want mysql capability", err)
+	}
 }

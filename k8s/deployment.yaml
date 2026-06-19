@@ -1,55 +1,56 @@
-# Kubernetes runtime overrides use GO_TEMPLATE_* environment variables so the
+# Kubernetes runtime overrides use ECHO_ADMIN_* environment variables so the
 # image-owned /configs/config.toml remains the single static config baseline.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: go-template-runtime
+  name: echo-admin-runtime
   labels:
-    app.kubernetes.io/name: go-template
+    app.kubernetes.io/name: echo-admin
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: go-template
+    app.kubernetes.io/part-of: echo-admin
 data:
-  GO_TEMPLATE_APP_NAME: "go-template"
-  GO_TEMPLATE_APP_VERSION: "dev"
-  GO_TEMPLATE_SYSTEM_PORT: ":9322"
-  GO_TEMPLATE_SYSTEM_LEVEL: "2"
-  GO_TEMPLATE_LOG_FORMAT: "json"
-  GO_TEMPLATE_LOG_OUTPUT: "stdout"
-  GO_TEMPLATE_LOG_CALLER: "false"
-  GO_TEMPLATE_HTTP_RECOVERY_DISABLED: "false"
-  GO_TEMPLATE_HTTP_REQUEST_CONTEXT_DISABLED: "false"
-  GO_TEMPLATE_HTTP_REQUEST_LOG_DISABLED: "false"
-  GO_TEMPLATE_HTTP_GZIP_DISABLED: "false"
-  GO_TEMPLATE_HTTP_CORS_ENABLED: "false"
-  GO_TEMPLATE_JWT_ENABLED: "false"
-  GO_TEMPLATE_MYSQL_ENABLED: "false"
-  GO_TEMPLATE_REDIS_ENABLED: "false"
-  GO_TEMPLATE_MONGODB_ENABLED: "false"
-  GO_TEMPLATE_TRACING_ENABLED: "false"
-  GO_TEMPLATE_TRACING_PROTOCOL: "grpc"
-  GO_TEMPLATE_TRACING_INSECURE: "true"
+  ECHO_ADMIN_APP_NAME: "echo-admin"
+  ECHO_ADMIN_APP_VERSION: "dev"
+  ECHO_ADMIN_SYSTEM_PORT: ":9322"
+  ECHO_ADMIN_SYSTEM_LEVEL: "2"
+  ECHO_ADMIN_LOG_FORMAT: "json"
+  ECHO_ADMIN_LOG_OUTPUT: "stdout"
+  ECHO_ADMIN_LOG_CALLER: "false"
+  ECHO_ADMIN_HTTP_RECOVERY_DISABLED: "false"
+  ECHO_ADMIN_HTTP_REQUEST_CONTEXT_DISABLED: "false"
+  ECHO_ADMIN_HTTP_REQUEST_LOG_DISABLED: "false"
+  ECHO_ADMIN_HTTP_GZIP_DISABLED: "false"
+  ECHO_ADMIN_HTTP_CORS_ENABLED: "false"
+  ECHO_ADMIN_JWT_ENABLED: "true"
+  ECHO_ADMIN_ADMIN_UPLOAD_DIR: "/uploads"
+  ECHO_ADMIN_MYSQL_ENABLED: "true"
+  ECHO_ADMIN_REDIS_ENABLED: "false"
+  ECHO_ADMIN_MONGODB_ENABLED: "false"
+  ECHO_ADMIN_TRACING_ENABLED: "false"
+  ECHO_ADMIN_TRACING_PROTOCOL: "grpc"
+  ECHO_ADMIN_TRACING_INSECURE: "true"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: go-template-api
+  name: echo-admin-api
   labels:
-    app.kubernetes.io/name: go-template
+    app.kubernetes.io/name: echo-admin
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: go-template
+    app.kubernetes.io/part-of: echo-admin
 spec:
   replicas: 2
   revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app.kubernetes.io/name: go-template
+      app.kubernetes.io/name: echo-admin
       app.kubernetes.io/component: api
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: go-template
+        app.kubernetes.io/name: echo-admin
         app.kubernetes.io/component: api
-        app.kubernetes.io/part-of: go-template
+        app.kubernetes.io/part-of: echo-admin
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -58,40 +59,43 @@ spec:
         runAsGroup: 10001
       containers:
         - name: api
-          image: go-template:latest
+          image: echo-admin:latest
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: go-template-runtime
+                name: echo-admin-runtime
           env:
-            - name: GO_TEMPLATE_JWT_SECRET
+            - name: ECHO_ADMIN_JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: go-template-secrets
+                  name: echo-admin-secrets
                   key: jwt-secret
-                  optional: true
-            - name: GO_TEMPLATE_MYSQL_DSN
+                  optional: false
+            - name: ECHO_ADMIN_MYSQL_DSN
               valueFrom:
                 secretKeyRef:
-                  name: go-template-secrets
+                  name: echo-admin-secrets
                   key: mysql-dsn
-                  optional: true
-            - name: GO_TEMPLATE_REDIS_PASSWORD
+                  optional: false
+            - name: ECHO_ADMIN_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: go-template-secrets
+                  name: echo-admin-secrets
                   key: redis-password
                   optional: true
-            - name: GO_TEMPLATE_MONGODB_URI
+            - name: ECHO_ADMIN_MONGODB_URI
               valueFrom:
                 secretKeyRef:
-                  name: go-template-secrets
+                  name: echo-admin-secrets
                   key: mongodb-uri
                   optional: true
           ports:
             - name: http
               containerPort: 9322
               protocol: TCP
+          volumeMounts:
+            - name: uploads
+              mountPath: /uploads
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -123,19 +127,22 @@ spec:
               path: /api/ready
               port: http
             periodSeconds: 5
+      volumes:
+        - name: uploads
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: go-template-api
+  name: echo-admin-api
   labels:
-    app.kubernetes.io/name: go-template
+    app.kubernetes.io/name: echo-admin
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: go-template
+    app.kubernetes.io/part-of: echo-admin
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: go-template
+    app.kubernetes.io/name: echo-admin
     app.kubernetes.io/component: api
   ports:
     - name: http

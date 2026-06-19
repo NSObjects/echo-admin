@@ -7,8 +7,8 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/samber/do/v2"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/server"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
 
 // Module is one installable business capability in the application runtime.

@@ -6,13 +6,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	stdlog "log"
+	"os"
 	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/resources"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
 )
 
 // Resource wraps an optional GORM MySQL connection and its lifecycle.
@@ -34,7 +38,7 @@ func Open(ctx context.Context, cfg configs.MySQLConfig) (*Resource, error) {
 		return nil, resources.NewCapabilityError(resources.CapabilityMySQL, "configure", err)
 	}
 
-	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{Logger: newGORMLogger(os.Stdout, true)})
 	if err != nil {
 		return nil, resources.NewCapabilityError(resources.CapabilityMySQL, "open", err)
 	}
@@ -113,4 +117,15 @@ func configurePool(db *sql.DB, cfg configs.MySQLConfig) {
 	if cfg.ConnMaxLifetimeSeconds > 0 {
 		db.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSeconds) * time.Second)
 	}
+}
+
+func newGORMLogger(writer io.Writer, colorful bool) logger.Interface {
+	// Seed logic intentionally uses ErrRecordNotFound as an existence check; keep
+	// real database warnings visible without printing those expected misses.
+	return logger.New(stdlog.New(writer, "\r\n", stdlog.LstdFlags), logger.Config{
+		SlowThreshold:             time.Second,
+		LogLevel:                  logger.Warn,
+		IgnoreRecordNotFoundError: true,
+		Colorful:                  colorful,
+	})
 }

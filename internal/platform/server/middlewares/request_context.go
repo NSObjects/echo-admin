@@ -4,7 +4,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
-	"github.com/NSObjects/go-template/internal/platform/requestctx"
+	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
 const (

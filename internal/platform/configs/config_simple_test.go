@@ -20,7 +20,9 @@ func TestConfigDefaults(t *testing.T) {
 
 	assert.False(t, cfg.JWT.Enabled)
 	assert.Equal(t, "", cfg.JWT.Secret)
-	assert.Equal(t, []string{"/api/health", "/api/info", "/api/ready"}, cfg.JWT.SkipPaths)
+	assert.Equal(t, []string{"/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"}, cfg.JWT.SkipPaths)
+
+	assert.Equal(t, DefaultUploadDir, cfg.Admin.UploadDir)
 
 	assert.False(t, cfg.MySQL.Enabled)
 	assert.Equal(t, "", cfg.MySQL.DSN)
@@ -134,7 +136,7 @@ func TestValidateRejectsBlankAppIdentity(t *testing.T) {
 
 	err = Validate(Config{
 		App: AppConfig{
-			Name:    "go-template",
+			Name:    "echo-admin",
 			Version: " ",
 		},
 	})

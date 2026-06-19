@@ -1,7 +1,7 @@
-// Package main starts the go-template application.
+// Package main starts the echo-admin application.
 package main
 
-import "github.com/NSObjects/go-template/cmd"
+import "github.com/NSObjects/echo-admin/cmd"
 
 func main() {
 	cmd.Execute()

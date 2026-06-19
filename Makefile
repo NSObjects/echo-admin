@@ -173,8 +173,8 @@ clean-all: clean
 # 构建Docker镜像
 docker-build:
 	@echo "$(BLUE)[INFO]$(NC) Building Docker image..."
-	@docker build -t go-template:latest .
-	@echo "$(GREEN)[SUCCESS]$(NC) Docker image built: go-template:latest"
+	@docker build -t echo-admin:latest .
+	@echo "$(GREEN)[SUCCESS]$(NC) Docker image built: echo-admin:latest"
 
 # 运行Docker容器
 docker-run:
@@ -202,8 +202,8 @@ verify:
 # 清理Docker资源
 docker-clean: docker-stop
 	@echo "$(BLUE)[INFO]$(NC) Cleaning Docker resources..."
-	@if docker image inspect go-template:latest >/dev/null 2>&1; then \
-		docker image rm go-template:latest; \
+	@if docker image inspect echo-admin:latest >/dev/null 2>&1; then \
+		docker image rm echo-admin:latest; \
 	fi
 	@echo "$(GREEN)[SUCCESS]$(NC) Docker resources cleaned"
 

@@ -1,0 +1,15 @@
+export default {
+  'menu.login': 'Login',
+  'menu.dashboard': 'Dashboard',
+  'menu.admins': 'Administrators',
+  'menu.roles': 'Roles',
+  'menu.menus': 'Menus',
+  'menu.configs': 'System Configs',
+  'menu.dictionaries': 'Dictionaries',
+  'menu.files': 'Files',
+  'menu.logs': 'Logs',
+  'menu.exception.403': '403',
+  'menu.exception.404': '404',
+  'menu.exception.500': '500',
+  'menu.account.logout': 'Logout',
+};

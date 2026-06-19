@@ -11,8 +11,8 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/samber/do/v2"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/resources"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
 )
 
 func TestRunReturnsConfigLoadError(t *testing.T) {

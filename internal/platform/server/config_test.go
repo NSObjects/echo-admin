@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
 func TestDefaultConfig(t *testing.T) {

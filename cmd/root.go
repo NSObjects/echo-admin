@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
 var cfgFile string

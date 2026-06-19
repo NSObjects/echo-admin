@@ -1,0 +1,15 @@
+export default {
+  'menu.login': '登录',
+  'menu.dashboard': '工作台',
+  'menu.admins': '管理员管理',
+  'menu.roles': '角色权限',
+  'menu.menus': '菜单管理',
+  'menu.configs': '系统配置',
+  'menu.dictionaries': '数据字典',
+  'menu.files': '文件上传',
+  'menu.logs': '系统日志',
+  'menu.exception.403': '403',
+  'menu.exception.404': '404',
+  'menu.exception.500': '500',
+  'menu.account.logout': '退出登录',
+};

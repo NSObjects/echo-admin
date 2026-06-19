@@ -1,0 +1,226 @@
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PageContainer } from '@ant-design/pro-components';
+import { Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, message } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import React, { useEffect, useState } from 'react';
+
+import {
+  type AdminUser,
+  type ListParams,
+  type PageMeta,
+  type Role,
+  createAdmin,
+  listAdmins,
+  listRoles,
+  updateAdmin,
+} from '@/services/admin';
+
+type AdminFormValues = {
+  username: string;
+  display_name: string;
+  email?: string;
+  password?: string;
+  role_ids: number[];
+  active: boolean;
+};
+
+const formatDate = (value: string) => new Date(value).toLocaleString();
+
+const Admins: React.FC = () => {
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [page, setPage] = useState<PageMeta>();
+  const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<AdminUser>();
+  const [form] = Form.useForm<AdminFormValues>();
+
+  const loadData = async (params: ListParams = {}) => {
+    setLoading(true);
+    try {
+      const [adminResponse, roleResponse] = await Promise.all([
+        listAdmins(params),
+        listRoles({ page_size: 100 }),
+      ]);
+      setAdmins(adminResponse.data);
+      setPage(adminResponse.page);
+      setRoles(roleResponse.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const openCreate = () => {
+    setEditing(undefined);
+    form.resetFields();
+    form.setFieldsValue({ active: true, role_ids: [] });
+    setModalOpen(true);
+  };
+
+  const openEdit = (record: AdminUser) => {
+    setEditing(record);
+    form.setFieldsValue({
+      username: record.username,
+      display_name: record.display_name,
+      email: record.email,
+      role_ids: record.role_ids,
+      active: record.active,
+    });
+    setModalOpen(true);
+  };
+
+  const submit = async () => {
+    const values = await form.validateFields();
+    if (editing) {
+      const password = values.password?.trim();
+      await updateAdmin(editing.id, {
+        display_name: values.display_name,
+        email: values.email,
+        role_ids: values.role_ids,
+        active: values.active,
+        ...(password ? { password } : {}),
+      });
+      message.success('管理员已更新');
+    } else {
+      await createAdmin({
+        username: values.username,
+        display_name: values.display_name,
+        email: values.email,
+        password: values.password ?? '',
+        role_ids: values.role_ids,
+        active: values.active,
+      });
+      message.success('管理员已创建');
+    }
+    setModalOpen(false);
+    await loadData({ page: page?.page, page_size: page?.page_size });
+  };
+
+  const roleName = (roleID: number) =>
+    roles.find((role) => role.id === roleID)?.name ?? `#${roleID}`;
+
+  const columns: ColumnsType<AdminUser> = [
+    { title: '用户名', dataIndex: 'username' },
+    { title: '显示名', dataIndex: 'display_name' },
+    { title: '邮箱', dataIndex: 'email', render: (value?: string) => value || '-' },
+    {
+      title: '角色',
+      dataIndex: 'role_ids',
+      render: (roleIDs: number[]) => (
+        <Space wrap>
+          {roleIDs.map((roleID) => (
+            <Tag key={roleID}>{roleName(roleID)}</Tag>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'active',
+      render: (active: boolean) => (
+        <Tag color={active ? 'green' : 'default'}>
+          {active ? '启用' : '停用'}
+        </Tag>
+      ),
+    },
+    { title: '更新时间', dataIndex: 'updated_at', render: formatDate },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_, record) => (
+        <Button type="link" onClick={() => openEdit(record)}>
+          编辑
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <PageContainer title="管理员管理">
+      <Table<AdminUser>
+        rowKey="id"
+        columns={columns}
+        dataSource={admins}
+        loading={loading}
+        pagination={{
+          current: page?.page,
+          pageSize: page?.page_size,
+          total: page?.total,
+          showSizeChanger: true,
+        }}
+        onChange={(pagination) =>
+          void loadData({
+            page: pagination.current,
+            page_size: pagination.pageSize,
+          })
+        }
+        title={() => (
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              新增管理员
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
+              刷新
+            </Button>
+          </Space>
+        )}
+      />
+      <Modal
+        title={editing ? '编辑管理员' : '新增管理员'}
+        open={modalOpen}
+        onOk={() => void submit()}
+        onCancel={() => setModalOpen(false)}
+        destroyOnHidden
+      >
+        <Form<AdminFormValues> form={form} layout="vertical">
+          <Form.Item
+            label="用户名"
+            name="username"
+            rules={[{ required: !editing, message: '请输入用户名' }]}
+          >
+            <Input disabled={Boolean(editing)} maxLength={64} />
+          </Form.Item>
+          <Form.Item
+            label="显示名"
+            name="display_name"
+            rules={[{ required: true, message: '请输入显示名' }]}
+          >
+            <Input maxLength={80} />
+          </Form.Item>
+          <Form.Item label="邮箱" name="email" rules={[{ type: 'email' }]}>
+            <Input maxLength={160} />
+          </Form.Item>
+          <Form.Item
+            label={editing ? '新密码' : '密码'}
+            name="password"
+            rules={[{ required: !editing, min: 8, message: '密码至少 8 位' }]}
+          >
+            <Input.Password maxLength={72} />
+          </Form.Item>
+          <Form.Item
+            label="角色"
+            name="role_ids"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select
+              mode="multiple"
+              options={roles.map((role) => ({
+                label: role.name,
+                value: role.id,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item label="启用" name="active" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </PageContainer>
+  );
+};
+
+export default Admins;

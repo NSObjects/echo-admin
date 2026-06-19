@@ -8,9 +8,9 @@ import (
 	echojwt "github.com/labstack/echo-jwt/v5"
 	"github.com/labstack/echo/v5"
 
-	"github.com/NSObjects/go-template/internal/platform/apperr"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/logging"
-	"github.com/NSObjects/go-template/internal/platform/requestctx"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
+	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
 const jwtContextKey = "user"

@@ -13,12 +13,12 @@ const (
 )
 
 func TestDecodeConfigWithEnvKeepsFileSourceOverrides(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_SYSTEM_PORT", envOnlyPort)
-	t.Setenv("GO_TEMPLATE_APP_NAME", "payments-api")
+	t.Setenv("ECHO_ADMIN_SYSTEM_PORT", envOnlyPort)
+	t.Setenv("ECHO_ADMIN_APP_NAME", "payments-api")
 
 	cfg, err := decodeConfigWithEnv([]byte(`
 [app]
-name = "go-template"
+name = "echo-admin"
 
 [system]
 port = ":9322"
@@ -36,8 +36,8 @@ port = ":9322"
 }
 
 func TestDecodeConfigWithEnvAppliesJWTOverride(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_JWT_ENABLED", "true")
-	t.Setenv("GO_TEMPLATE_JWT_SECRET", envOnlyJWTSecret)
+	t.Setenv("ECHO_ADMIN_JWT_ENABLED", "true")
+	t.Setenv("ECHO_ADMIN_JWT_SECRET", envOnlyJWTSecret)
 
 	cfg, err := decodeConfigWithEnv([]byte(`
 	[jwt]
@@ -57,13 +57,13 @@ func TestDecodeConfigWithEnvAppliesJWTOverride(t *testing.T) {
 }
 
 func TestDecodeConfigWithEnvAppliesEnvOnlyValues(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_SYSTEM_PORT", envOnlyPort)
-	t.Setenv("GO_TEMPLATE_LOG_FORMAT", "console")
-	t.Setenv("GO_TEMPLATE_LOG_OUTPUT", "stderr")
-	t.Setenv("GO_TEMPLATE_LOG_CALLER", "true")
-	t.Setenv("GO_TEMPLATE_HTTP_GZIP_DISABLED", "true")
-	t.Setenv("GO_TEMPLATE_JWT_ENABLED", "true")
-	t.Setenv("GO_TEMPLATE_JWT_SECRET", envOnlyJWTSecret)
+	t.Setenv("ECHO_ADMIN_SYSTEM_PORT", envOnlyPort)
+	t.Setenv("ECHO_ADMIN_LOG_FORMAT", "console")
+	t.Setenv("ECHO_ADMIN_LOG_OUTPUT", "stderr")
+	t.Setenv("ECHO_ADMIN_LOG_CALLER", "true")
+	t.Setenv("ECHO_ADMIN_HTTP_GZIP_DISABLED", "true")
+	t.Setenv("ECHO_ADMIN_JWT_ENABLED", "true")
+	t.Setenv("ECHO_ADMIN_JWT_SECRET", envOnlyJWTSecret)
 
 	cfg, err := decodeConfigWithEnv([]byte(``), "toml", true)
 	if err != nil {
@@ -94,12 +94,12 @@ func TestDecodeConfigWithEnvAppliesEnvOnlyValues(t *testing.T) {
 }
 
 func TestDecodeConfigWithEnvAppliesCapabilityOverrides(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_MYSQL_ENABLED", "true")
-	t.Setenv("GO_TEMPLATE_MYSQL_DSN", "user:pass@tcp(localhost:3306)/app?parseTime=true")
-	t.Setenv("GO_TEMPLATE_REDIS_ENABLED", "true")
-	t.Setenv("GO_TEMPLATE_REDIS_ADDRESS", "localhost:6379")
-	t.Setenv("GO_TEMPLATE_MONGODB_ENABLED", "false")
-	t.Setenv("GO_TEMPLATE_TRACING_ENABLED", "false")
+	t.Setenv("ECHO_ADMIN_MYSQL_ENABLED", "true")
+	t.Setenv("ECHO_ADMIN_MYSQL_DSN", "user:pass@tcp(localhost:3306)/app?parseTime=true")
+	t.Setenv("ECHO_ADMIN_REDIS_ENABLED", "true")
+	t.Setenv("ECHO_ADMIN_REDIS_ADDRESS", "localhost:6379")
+	t.Setenv("ECHO_ADMIN_MONGODB_ENABLED", "false")
+	t.Setenv("ECHO_ADMIN_TRACING_ENABLED", "false")
 
 	cfg, err := decodeConfigWithEnv([]byte(`
 [mysql]
@@ -141,7 +141,7 @@ enabled = false
 }
 
 func TestDecodeConfigWithEnvAppliesEnvOnlyJWTSecret(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_JWT_SECRET", envOnlyJWTSecret)
+	t.Setenv("ECHO_ADMIN_JWT_SECRET", envOnlyJWTSecret)
 
 	cfg, err := decodeConfigWithEnv([]byte(`
 [jwt]
@@ -201,12 +201,12 @@ max_age_seconds = 600
 }
 
 func TestDecodeConfigWithEnvAppliesListOverrides(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_JWT_SKIP_PATHS", "/api/health,/api/info,/api/public")
-	t.Setenv("GO_TEMPLATE_HTTP_CORS_ENABLED", "true")
-	t.Setenv("GO_TEMPLATE_HTTP_CORS_ALLOW_ORIGINS", "https://app.example.com, https://admin.example.com")
-	t.Setenv("GO_TEMPLATE_HTTP_CORS_ALLOW_METHODS", "GET,POST")
-	t.Setenv("GO_TEMPLATE_HTTP_CORS_ALLOW_HEADERS", "Authorization,Content-Type")
-	t.Setenv("GO_TEMPLATE_HTTP_CORS_EXPOSE_HEADERS", "X-Request-ID")
+	t.Setenv("ECHO_ADMIN_JWT_SKIP_PATHS", "/api/health,/api/info,/api/public")
+	t.Setenv("ECHO_ADMIN_HTTP_CORS_ENABLED", "true")
+	t.Setenv("ECHO_ADMIN_HTTP_CORS_ALLOW_ORIGINS", "https://app.example.com, https://admin.example.com")
+	t.Setenv("ECHO_ADMIN_HTTP_CORS_ALLOW_METHODS", "GET,POST")
+	t.Setenv("ECHO_ADMIN_HTTP_CORS_ALLOW_HEADERS", "Authorization,Content-Type")
+	t.Setenv("ECHO_ADMIN_HTTP_CORS_EXPOSE_HEADERS", "X-Request-ID")
 
 	cfg, err := decodeConfigWithEnv([]byte(``), "toml", true)
 	if err != nil {
@@ -267,7 +267,7 @@ func assertStringSlice(t *testing.T, got, want []string) {
 }
 
 func TestLoadReadsFileAndAppliesEnvOverrides(t *testing.T) {
-	t.Setenv("GO_TEMPLATE_SYSTEM_PORT", envOnlyPort)
+	t.Setenv("ECHO_ADMIN_SYSTEM_PORT", envOnlyPort)
 
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`

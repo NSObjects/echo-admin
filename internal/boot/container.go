@@ -10,10 +10,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/logging"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/resources"
-	"github.com/NSObjects/go-template/internal/platform/server"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
+	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
 
 type loggingReady struct{}
@@ -23,12 +23,21 @@ func newInjector(ctx context.Context, cfg configs.Config) do.Injector {
 		ctx = context.Background()
 	}
 	return do.New(
+		provideStartupContext(ctx),
 		provideConfig(cfg),
 		provideLogging,
 		provideResources(ctx),
 		provideResourceClients,
 		provideServer,
 	)
+}
+
+func provideStartupContext(ctx context.Context) func(do.Injector) {
+	return func(i do.Injector) {
+		do.Provide(i, func(do.Injector) (context.Context, error) {
+			return ctx, nil
+		})
+	}
 }
 
 func provideConfig(cfg configs.Config) func(do.Injector) {

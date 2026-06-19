@@ -12,8 +12,8 @@ import (
 	"github.com/labstack/echo/v5/middleware"
 	zlog "github.com/rs/zerolog/log"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
-	"github.com/NSObjects/go-template/internal/platform/server/middlewares"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 const apiPrefix = "/api"

@@ -49,6 +49,7 @@ func Normalize(cfg Config) Config {
 	cfg = normalizeAppDefaults(cfg)
 	cfg = normalizeLogDefaults(cfg)
 	cfg = normalizeJWTDefaults(cfg)
+	cfg = normalizeAdminDefaults(cfg)
 	cfg = normalizeResourceDefaults(cfg)
 	return normalizeTracingDefaults(cfg)
 }
@@ -89,7 +90,14 @@ func normalizeLogDefaults(cfg Config) Config {
 
 func normalizeJWTDefaults(cfg Config) Config {
 	if cfg.JWT.SkipPaths == nil {
-		cfg.JWT.SkipPaths = []string{"/api/health", "/api/info", "/api/ready"}
+		cfg.JWT.SkipPaths = []string{"/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"}
+	}
+	return cfg
+}
+
+func normalizeAdminDefaults(cfg Config) Config {
+	if strings.TrimSpace(cfg.Admin.UploadDir) == "" {
+		cfg.Admin.UploadDir = DefaultUploadDir
 	}
 	return cfg
 }
@@ -154,6 +162,9 @@ func Validate(cfg Config) error {
 		return err
 	}
 	if err := validateJWTConfig(cfg.JWT); err != nil {
+		return err
+	}
+	if err := validateAdminConfig(cfg.Admin); err != nil {
 		return err
 	}
 	return validateConfiguredResources(cfg)
@@ -231,6 +242,13 @@ func validateLogConfig(cfg LogConfig) error {
 func validateJWTConfig(cfg JWTConfig) error {
 	if cfg.Enabled && strings.TrimSpace(cfg.Secret) == "" {
 		return errors.New("jwt secret is required when jwt is enabled")
+	}
+	return nil
+}
+
+func validateAdminConfig(cfg AdminConfig) error {
+	if strings.TrimSpace(cfg.UploadDir) == "" {
+		return errors.New("admin upload_dir is required")
 	}
 	return nil
 }
@@ -371,6 +389,7 @@ func bindConfigEnv(v *viper.Viper) error {
 func configEnvKeys() []string {
 	keys := append([]string{}, coreEnvKeys()...)
 	keys = append(keys, httpEnvKeys()...)
+	keys = append(keys, adminEnvKeys()...)
 	keys = append(keys, resourceEnvKeys()...)
 	keys = append(keys, tracingEnvKeys()...)
 	return keys
@@ -388,6 +407,12 @@ func coreEnvKeys() []string {
 		"jwt::enabled",
 		"jwt::secret",
 		"jwt::skip_paths",
+	}
+}
+
+func adminEnvKeys() []string {
+	return []string{
+		"admin::upload_dir",
 	}
 }
 

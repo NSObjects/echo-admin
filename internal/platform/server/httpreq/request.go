@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	"github.com/NSObjects/go-template/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
 // BindAndValidate binds a JSON request body and runs the server validator.

@@ -58,7 +58,7 @@
 
 业务路由只能在 `internal/boot` 中通过 `NewModule`、`Provide`、`Route` 显式装配。不要在 `internal/platform/server` 中手写业务路由。
 
-跨模块依赖禁止直接 import 对方 store 或 adapter。由消费方 usecase 定义小 interface，再在 `internal/boot` 写 adapter bridge。参考 `salesorder` 对 `product` 的 `ProductLookup`。
+跨模块依赖禁止直接 import 对方 store 或 adapter。由消费方 usecase 定义小 interface，再在 `internal/boot` 写 adapter bridge。lookup interface 要表达消费方真正需要的语义，不要把重要状态压成裸 `bool`。
 
 通用基础设施必须放在 `internal/platform/infrastructure` 或明确的 platform package。不要把通用能力命名成某个业务域，例如不要新增类似 `userstorage` 的平台抽象。
 

@@ -7,9 +7,9 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	"github.com/NSObjects/go-template/internal/platform/apperr"
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/logging"
-	"github.com/NSObjects/go-template/internal/platform/server/httpresp"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
+	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
 // ErrorHandler 增强的错误处理器

@@ -4,7 +4,7 @@ package server
 import (
 	"time"
 
-	"github.com/NSObjects/go-template/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
 const (

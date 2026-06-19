@@ -13,8 +13,8 @@ import (
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/NSObjects/go-template/internal/platform/infrastructure/logging"
-	"github.com/NSObjects/go-template/internal/platform/requestctx"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
+	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
 // MiddlewareConfig controls server-owned HTTP middleware.
