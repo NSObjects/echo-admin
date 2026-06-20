@@ -87,6 +87,42 @@ func TestDeleteAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
+func TestListRoleAdminsRequiresPermission(t *testing.T) {
+	e, store, _, auth := newIdentityEcho(nil)
+	store.admins = map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}
+
+	rec := doJSON(t, e, http.MethodGet, "/api/roles/1/admins", "", "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get role admins status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleRead)
+	}
+}
+
+func TestSetRoleAdminsRequiresPermissionAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth := newIdentityEcho(nil)
+	store.admins = map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}
+
+	rec := doJSON(t, e, http.MethodPut, "/api/roles/1/admins", `{"admin_ids":[7]}`, "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set role admins status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleUpdate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleUpdate)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if got := recorder.records[0].Action; got != "set_admins" {
+		t.Fatalf("operation action = %q, want set_admins", got)
+	}
+}
+
 func newIdentityEcho(authErr error) (*echo.Echo, *identityStore, *operationRecorder, *identityAuthorizer) {
 	store := &identityStore{}
 	uc := identityusecase.New(store, identityRoleScope{})
@@ -138,7 +174,11 @@ func (s *identityStore) ListAll(ctx context.Context) ([]identitydomain.Admin, er
 		return nil, err
 	}
 	s.listCalls++
-	return nil, nil
+	admins := make([]identitydomain.Admin, 0, len(s.admins))
+	for _, admin := range s.admins {
+		admins = append(admins, admin)
+	}
+	return admins, nil
 }
 
 func (s *identityStore) Create(ctx context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
@@ -154,6 +194,9 @@ func (s *identityStore) Update(ctx context.Context, admin identitydomain.Admin) 
 	if err := ctx.Err(); err != nil {
 		return identitydomain.Admin{}, err
 	}
+	if s.admins != nil {
+		s.admins[admin.ID] = admin
+	}
 	return admin, nil
 }
 
@@ -167,7 +210,7 @@ type identityAuthorizer struct {
 	permissions []string
 }
 
-func (a *identityAuthorizer) RequirePermission(_ context.Context, permission string) error {
+func (a *identityAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
 	a.permissions = append(a.permissions, permission)
 	return a.err
 }
@@ -184,6 +227,10 @@ func (r *operationRecorder) RecordOperation(_ context.Context, input auditusecas
 type identityRoleScope struct{}
 
 func (identityRoleScope) AssignableRoleIDs(context.Context) ([]int64, error) {
+	return []int64{1}, nil
+}
+
+func (identityRoleScope) VisibleRoleIDs(context.Context) ([]int64, error) {
 	return []int64{1}, nil
 }
 

@@ -2,6 +2,8 @@ package boot
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/samber/do/v2"
 	"gorm.io/gorm"
@@ -10,9 +12,13 @@ import (
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	accesshttp "github.com/NSObjects/echo-admin/internal/modules/access/http"
 	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
+	apitokenmysql "github.com/NSObjects/echo-admin/internal/modules/apitoken/adapters/mysql"
+	apitokenhttp "github.com/NSObjects/echo-admin/internal/modules/apitoken/http"
+	apitokenusecase "github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
 	auditmysql "github.com/NSObjects/echo-admin/internal/modules/audit/adapters/mysql"
 	audithttp "github.com/NSObjects/echo-admin/internal/modules/audit/http"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
+	authmysql "github.com/NSObjects/echo-admin/internal/modules/auth/adapters/mysql"
 	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	filemysql "github.com/NSObjects/echo-admin/internal/modules/fileasset/adapters/mysql"
@@ -24,7 +30,9 @@ import (
 	settingsmysql "github.com/NSObjects/echo-admin/internal/modules/settings/adapters/mysql"
 	settingshttp "github.com/NSObjects/echo-admin/internal/modules/settings/http"
 	settingsusecase "github.com/NSObjects/echo-admin/internal/modules/settings/usecase"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
 
 // BusinessModules returns the business modules installed by the default runtime.
@@ -33,6 +41,7 @@ func BusinessModules() []Module {
 		accessModule(),
 		identityModule(),
 		auditModule(),
+		apiTokenModule(),
 		authModule(),
 		settingsModule(),
 		fileModule(),
@@ -45,6 +54,16 @@ func accessModule() Module {
 		Provide(newAccessUsecase),
 		Provide(newAccessHandler),
 		Route(accesshttp.Register),
+	)
+}
+
+func apiTokenModule() Module {
+	return NewModule("apitoken",
+		Provide(newAPITokenStore),
+		Provide(newAPITokenUsecase),
+		Provide(newAPIKeyVerifier),
+		Provide(newAPITokenHandler),
+		Route(apitokenhttp.Register),
 	)
 }
 
@@ -61,6 +80,7 @@ func auditModule() Module {
 	return NewModule("audit",
 		Provide(newAuditStore),
 		Provide(newAuditUsecase),
+		Provide(newSystemErrorRecorder),
 		Provide(newAuditHandler),
 		Route(audithttp.Register),
 	)
@@ -68,7 +88,9 @@ func auditModule() Module {
 
 func authModule() Module {
 	return NewModule("auth",
+		Provide(newAuthStore),
 		Provide(newAuthUsecase),
+		Provide(newJWTBlocklistChecker),
 		Provide(newAuthHandler),
 		Route(authhttp.Register),
 	)
@@ -187,6 +209,14 @@ func newAuditUsecase(i do.Injector) (*auditusecase.Usecase, error) {
 	return auditusecase.New(store), nil
 }
 
+func newSystemErrorRecorder(i do.Injector) (server.SystemErrorRecorder, error) {
+	audit, err := do.Invoke[*auditusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return systemErrorRecorder{audit: audit}, nil
+}
+
 func newAuditHandler(i do.Injector) (*audithttp.Handler, error) {
 	uc, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
@@ -199,7 +229,63 @@ func newAuditHandler(i do.Injector) (*audithttp.Handler, error) {
 	return audithttp.New(uc, auth), nil
 }
 
+func newAPITokenStore(i do.Injector) (*apitokenmysql.Store, error) {
+	ctx, db, err := startupMySQL(i)
+	if err != nil {
+		return nil, err
+	}
+	return apitokenmysql.NewStore(ctx, db)
+}
+
+func newAPITokenUsecase(i do.Injector) (*apitokenusecase.Usecase, error) {
+	store, err := do.Invoke[*apitokenmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	identityStore, err := do.Invoke[*identitymysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	accessStore, err := do.Invoke[*accessmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	return apitokenusecase.New(
+		store,
+		apiTokenAdminReader{store: identityStore},
+		apiTokenRolePolicy{store: accessStore},
+	), nil
+}
+
+func newAPIKeyVerifier(i do.Injector) (server.APIKeyVerifier, error) {
+	uc, err := do.Invoke[*apitokenusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return apiKeyVerifier{tokens: uc}, nil
+}
+
+func newAPITokenHandler(i do.Injector) (*apitokenhttp.Handler, error) {
+	uc, err := do.Invoke[*apitokenusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	auth, err := do.Invoke[*authusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	audit, err := do.Invoke[*auditusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return apitokenhttp.New(uc, auth, audit), nil
+}
+
 func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
+	authStore, err := do.Invoke[*authmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
 	identityStore, err := do.Invoke[*identitymysql.Store](i)
 	if err != nil {
 		return nil, err
@@ -216,7 +302,61 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return authusecase.New(identityStore, accessStore, accessStore, authLoginRecorder{audit: audit}, cfg.JWT.Secret), nil
+	return authusecase.New(identityStore, accessStore, accessStore, accessStore, authStore, authLoginRecorder{audit: audit}, cfg.JWT.Secret), nil
+}
+
+func newAuthStore(i do.Injector) (*authmysql.Store, error) {
+	ctx, db, err := startupMySQL(i)
+	if err != nil {
+		return nil, err
+	}
+	return authmysql.NewStore(ctx, db)
+}
+
+func newJWTBlocklistChecker(i do.Injector) (server.JWTBlocklistChecker, error) {
+	uc, err := do.Invoke[*authusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return uc, nil
+}
+
+type apiKeyVerifier struct {
+	tokens *apitokenusecase.Usecase
+}
+
+func (v apiKeyVerifier) VerifyAPIKey(ctx context.Context, secret string) (server.APIKeyIdentity, error) {
+	identity, err := v.tokens.Authenticate(ctx, secret)
+	if err != nil {
+		return server.APIKeyIdentity{}, err
+	}
+	return server.APIKeyIdentity{
+		UserID: formatID(identity.AdminID),
+		RoleID: formatID(identity.RoleID),
+	}, nil
+}
+
+func formatID(id int64) string {
+	return strconv.FormatInt(id, 10)
+}
+
+type systemErrorRecorder struct {
+	audit *auditusecase.Usecase
+}
+
+func (r systemErrorRecorder) RecordSystemError(ctx context.Context, input server.SystemErrorInput) error {
+	_, err := r.audit.RecordSystemError(ctx, auditusecase.SystemErrorInput{
+		Code:      input.Code,
+		Message:   input.Message,
+		Detail:    input.Detail,
+		Method:    input.Method,
+		Path:      input.Path,
+		IP:        input.IP,
+		UserAgent: input.UserAgent,
+		RequestID: input.RequestID,
+		UserID:    input.UserID,
+	})
+	return err
 }
 
 func newAuthHandler(i do.Injector) (*authhttp.Handler, error) {
@@ -240,7 +380,18 @@ func newSettingsUsecase(i do.Injector) (*settingsusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settingsusecase.New(store), nil
+	accessStore, err := do.Invoke[*accessmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	accessUC, err := do.Invoke[*accessusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return settingsusecase.New(store, settingsusecase.WithVersionCatalog(settingsVersionCatalog{
+		accessStore: accessStore,
+		access:      accessUC,
+	})), nil
 }
 
 func newSettingsHandler(i do.Injector) (*settingshttp.Handler, error) {
@@ -329,6 +480,330 @@ type authLoginRecorder struct {
 
 type accessAdminRoleReader struct {
 	store *identitymysql.Store
+}
+
+type apiTokenAdminReader struct {
+	store *identitymysql.Store
+}
+
+func (r apiTokenAdminReader) AdminSnapshot(ctx context.Context, adminID int64) (apitokenusecase.AdminSnapshot, error) {
+	admin, err := r.store.FindByID(ctx, adminID)
+	if err != nil {
+		return apitokenusecase.AdminSnapshot{}, err
+	}
+	return apitokenusecase.AdminSnapshot{
+		RoleIDs: admin.RoleIDs,
+		Active:  admin.Active,
+	}, nil
+}
+
+type apiTokenRolePolicy struct {
+	store *accessmysql.Store
+}
+
+type settingsVersionCatalog struct {
+	accessStore *accessmysql.Store
+	access      *accessusecase.Usecase
+}
+
+// ExportVersionMenus implements settingsusecase.VersionCatalog for access menus.
+func (c settingsVersionCatalog) ExportVersionMenus(ctx context.Context, ids []int64) ([]settingsusecase.VersionMenu, error) {
+	menus, err := c.accessStore.ListMenus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	selected := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		selected[id] = struct{}{}
+	}
+	byID := make(map[int64]accessdomain.Menu, len(menus))
+	for _, menu := range menus {
+		byID[menu.ID] = menu
+	}
+	for _, id := range ids {
+		if _, ok := byID[id]; !ok {
+			return nil, apperr.NewNotFound("menu")
+		}
+	}
+	return versionMenuTree(menus, selected, 0), nil
+}
+
+// ExportVersionAPIs implements settingsusecase.VersionCatalog for access APIs.
+func (c settingsVersionCatalog) ExportVersionAPIs(ctx context.Context, ids []int64) ([]settingsusecase.VersionAPI, error) {
+	apis, err := c.accessStore.ListAPIs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]accessdomain.API, len(apis))
+	for _, api := range apis {
+		byID[api.ID] = api
+	}
+	out := make([]settingsusecase.VersionAPI, 0, len(ids))
+	for _, id := range ids {
+		api, ok := byID[id]
+		if !ok {
+			return nil, apperr.NewNotFound("api")
+		}
+		out = append(out, versionAPIFromDomain(api))
+	}
+	return out, nil
+}
+
+// ImportVersionMenus implements settingsusecase.VersionCatalog for access menus.
+func (c settingsVersionCatalog) ImportVersionMenus(ctx context.Context, menus []settingsusecase.VersionMenu) error {
+	existing, err := c.accessStore.ListMenus(ctx)
+	if err != nil {
+		return err
+	}
+	for _, menu := range menus {
+		if err := c.importVersionMenu(ctx, menu, 0, &existing); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c settingsVersionCatalog) importVersionMenu(ctx context.Context, menu settingsusecase.VersionMenu, parentID int64, existing *[]accessdomain.Menu) error {
+	input := accessusecase.MenuInput{
+		ParentID:   parentID,
+		Name:       menu.Name,
+		Path:       menu.Path,
+		Icon:       menu.Icon,
+		Hidden:     menu.Hidden,
+		Component:  menu.Component,
+		Meta:       accessMenuMetaInput(menu.Meta),
+		Permission: menu.Permission,
+		Sort:       menu.Sort,
+		Active:     menu.Active,
+		Buttons:    versionMenuButtons(menu.Buttons),
+	}
+	current, ok := findMenuByPath(*existing, menu.Path)
+	var saved accessusecase.Menu
+	var err error
+	if ok {
+		saved, err = c.access.UpdateMenu(ctx, accessusecase.UpdateMenuInput{
+			ID:         current.ID,
+			ParentID:   parentID,
+			Name:       input.Name,
+			Path:       input.Path,
+			Icon:       input.Icon,
+			Hidden:     input.Hidden,
+			Component:  input.Component,
+			Meta:       input.Meta,
+			Permission: input.Permission,
+			Sort:       input.Sort,
+			Active:     input.Active,
+			Buttons:    input.Buttons,
+		})
+	} else {
+		saved, err = c.access.CreateMenu(ctx, input)
+	}
+	if err != nil {
+		return err
+	}
+	*existing = replaceImportedMenu(*existing, saved)
+	for _, child := range menu.Children {
+		if err := c.importVersionMenu(ctx, child, saved.ID, existing); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ImportVersionAPIs implements settingsusecase.VersionCatalog for access APIs.
+func (c settingsVersionCatalog) ImportVersionAPIs(ctx context.Context, apis []settingsusecase.VersionAPI) error {
+	existing, err := c.accessStore.ListAPIs(ctx)
+	if err != nil {
+		return err
+	}
+	for _, api := range apis {
+		input := accessusecase.APIInput{
+			Method:      api.Method,
+			Path:        api.Path,
+			Description: api.Description,
+			Group:       api.Group,
+			Permission:  api.Permission,
+			Public:      api.Public,
+		}
+		current, ok := findAPIByIdentity(existing, input.Method, input.Path)
+		if ok {
+			updated, err := c.access.UpdateAPI(ctx, accessusecase.UpdateAPIInput{
+				ID:          current.ID,
+				Method:      input.Method,
+				Path:        input.Path,
+				Description: input.Description,
+				Group:       input.Group,
+				Permission:  input.Permission,
+				Public:      input.Public,
+			})
+			if err != nil {
+				return err
+			}
+			existing = replaceImportedAPI(existing, updated)
+			continue
+		}
+		created, err := c.access.CreateAPI(ctx, input)
+		if err != nil {
+			return err
+		}
+		existing = replaceImportedAPI(existing, created)
+	}
+	return nil
+}
+
+func versionMenuTree(menus []accessdomain.Menu, selected map[int64]struct{}, parentID int64) []settingsusecase.VersionMenu {
+	out := make([]settingsusecase.VersionMenu, 0)
+	for _, menu := range menus {
+		if menu.ParentID != parentID {
+			continue
+		}
+		if _, ok := selected[menu.ID]; !ok {
+			out = append(out, versionMenuTree(menus, selected, menu.ID)...)
+			continue
+		}
+		item := versionMenuFromDomain(menu)
+		item.Children = versionMenuTree(menus, selected, menu.ID)
+		out = append(out, item)
+	}
+	return out
+}
+
+func versionMenuFromDomain(menu accessdomain.Menu) settingsusecase.VersionMenu {
+	return settingsusecase.VersionMenu{
+		Name:       menu.Name,
+		Path:       menu.Path,
+		Icon:       menu.Icon,
+		Hidden:     menu.Hidden,
+		Component:  menu.Component,
+		Meta:       versionMenuMetaFromDomain(menu.Meta),
+		Permission: menu.Permission,
+		Sort:       menu.Sort,
+		Active:     menu.Active,
+		Buttons:    versionButtonsFromDomain(menu.Buttons),
+	}
+}
+
+func versionMenuMetaFromDomain(meta accessdomain.MenuMeta) settingsusecase.VersionMenuMeta {
+	return settingsusecase.VersionMenuMeta{
+		ActiveName:     meta.ActiveName,
+		KeepAlive:      meta.KeepAlive,
+		DefaultMenu:    meta.DefaultMenu,
+		CloseTab:       meta.CloseTab,
+		TransitionType: meta.TransitionType,
+	}
+}
+
+func accessMenuMetaInput(meta settingsusecase.VersionMenuMeta) accessusecase.MenuMetaInput {
+	return accessusecase.MenuMetaInput{
+		ActiveName:     meta.ActiveName,
+		KeepAlive:      meta.KeepAlive,
+		DefaultMenu:    meta.DefaultMenu,
+		CloseTab:       meta.CloseTab,
+		TransitionType: meta.TransitionType,
+	}
+}
+
+func versionButtonsFromDomain(buttons []accessdomain.MenuButton) []settingsusecase.VersionButton {
+	out := make([]settingsusecase.VersionButton, 0, len(buttons))
+	for _, button := range buttons {
+		out = append(out, settingsusecase.VersionButton{
+			Name:        button.Name,
+			Description: button.Description,
+		})
+	}
+	return out
+}
+
+func versionMenuButtons(buttons []settingsusecase.VersionButton) []accessusecase.MenuButtonInput {
+	out := make([]accessusecase.MenuButtonInput, 0, len(buttons))
+	for _, button := range buttons {
+		out = append(out, accessusecase.MenuButtonInput{
+			Name:        button.Name,
+			Description: button.Description,
+		})
+	}
+	return out
+}
+
+func versionAPIFromDomain(api accessdomain.API) settingsusecase.VersionAPI {
+	return settingsusecase.VersionAPI{
+		Method:      api.Method,
+		Path:        api.Path,
+		Description: api.Description,
+		Group:       api.Group,
+		Permission:  api.Permission,
+		Public:      api.Public,
+	}
+}
+
+func findMenuByPath(menus []accessdomain.Menu, path string) (accessdomain.Menu, bool) {
+	for _, menu := range menus {
+		if menu.Path == path {
+			return menu, true
+		}
+	}
+	return accessdomain.Menu{}, false
+}
+
+func replaceImportedMenu(menus []accessdomain.Menu, saved accessusecase.Menu) []accessdomain.Menu {
+	converted := accessdomain.Menu{
+		ID:         saved.ID,
+		ParentID:   saved.ParentID,
+		Name:       saved.Name,
+		Path:       saved.Path,
+		Icon:       saved.Icon,
+		Hidden:     saved.Hidden,
+		Component:  saved.Component,
+		Meta:       accessdomain.MenuMeta(saved.Meta),
+		Permission: saved.Permission,
+		Sort:       saved.Sort,
+		Active:     saved.Active,
+	}
+	for index, menu := range menus {
+		if menu.ID == saved.ID || menu.Path == saved.Path {
+			menus[index] = converted
+			return menus
+		}
+	}
+	return append(menus, converted)
+}
+
+func findAPIByIdentity(apis []accessdomain.API, method, path string) (accessdomain.API, bool) {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	for _, api := range apis {
+		if api.Method == method && api.Path == path {
+			return api, true
+		}
+	}
+	return accessdomain.API{}, false
+}
+
+func replaceImportedAPI(apis []accessdomain.API, saved accessusecase.API) []accessdomain.API {
+	converted := accessdomain.API{
+		ID:          saved.ID,
+		Method:      saved.Method,
+		Path:        saved.Path,
+		Description: saved.Description,
+		Group:       saved.Group,
+		Permission:  saved.Permission,
+		Public:      saved.Public,
+	}
+	for index, api := range apis {
+		if api.ID == saved.ID || api.Method == saved.Method && api.Path == saved.Path {
+			apis[index] = converted
+			return apis
+		}
+	}
+	return append(apis, converted)
+}
+
+func (p apiTokenRolePolicy) RoleIsSuper(ctx context.Context, roleID int64) (bool, error) {
+	role, err := p.store.FindRoleByID(ctx, roleID)
+	if err != nil {
+		return false, err
+	}
+	return role.IsSuperAdmin(), nil
 }
 
 func (r accessAdminRoleReader) AdminRoleState(ctx context.Context, adminID int64) (accessusecase.AdminRoleState, error) {

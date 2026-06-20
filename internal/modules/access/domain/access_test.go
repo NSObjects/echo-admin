@@ -7,16 +7,42 @@ import (
 )
 
 func TestRestoreRoleRejectsInvalidPermissionToken(t *testing.T) {
-	_, err := RestoreRole(1, 0, "operator", "Operator", []string{"admin"}, []int64{1}, DefaultRolePath, true, time.Now(), time.Now())
+	_, err := RestoreRole(1, 0, "operator", "Operator", []string{"admin"}, []int64{1}, nil, nil, nil, DefaultRolePath, true, time.Now(), time.Now())
 	if !errors.Is(err, ErrInvalidPermission) {
 		t.Fatalf("RestoreRole() error = %v, want %v", err, ErrInvalidPermission)
 	}
 }
 
 func TestRestoreMenuRejectsInvalidPermissionToken(t *testing.T) {
-	_, err := RestoreMenu(1, 0, "Admins", "/admins", "user", "admin", 10, true, time.Now(), time.Now())
+	_, err := RestoreMenu(1, 0, "Admins", "/admins", "user", false, "./Admins", MenuMeta{}, "admin", 10, true, nil, time.Now(), time.Now())
 	if !errors.Is(err, ErrInvalidPermission) {
 		t.Fatalf("RestoreMenu() error = %v, want %v", err, ErrInvalidPermission)
+	}
+}
+
+func TestRestoreMenuNormalizesMetaAndButtons(t *testing.T) {
+	now := time.Now()
+	menu, err := RestoreMenu(1, 0, "菜单管理", "/menus", "menu", true, " ./Menus ", MenuMeta{
+		ActiveName:     " menus ",
+		KeepAlive:      true,
+		DefaultMenu:    true,
+		CloseTab:       true,
+		TransitionType: " fade ",
+	}, PermissionMenuRead, 10, true, []MenuButton{
+		{Name: "create", Description: "新增"},
+		{Name: "create", Description: "重复名称会去重"},
+	}, now, now)
+	if err != nil {
+		t.Fatalf("RestoreMenu() error = %v", err)
+	}
+	if menu.Component != "./Menus" {
+		t.Fatalf("Component = %q, want ./Menus", menu.Component)
+	}
+	if menu.Meta.ActiveName != "menus" || menu.Meta.TransitionType != "fade" {
+		t.Fatalf("Meta = %#v, want trimmed active name and transition", menu.Meta)
+	}
+	if len(menu.Buttons) != 1 || menu.Buttons[0].Name != "create" {
+		t.Fatalf("Buttons = %#v, want one create button", menu.Buttons)
 	}
 }
 
@@ -32,32 +58,57 @@ func TestPermissionCatalogCoversFoundationPermissions(t *testing.T) {
 		catalog[permission.Token] = struct{}{}
 	}
 
-	required := []string{
-		PermissionAdminRead,
-		PermissionAdminCreate,
-		PermissionAdminUpdate,
-		PermissionAdminDelete,
-		PermissionRoleRead,
-		PermissionRoleCreate,
-		PermissionRoleUpdate,
-		PermissionRoleDelete,
-		PermissionMenuRead,
-		PermissionMenuCreate,
-		PermissionMenuUpdate,
-		PermissionMenuDelete,
-		PermissionConfigRead,
-		PermissionConfigUpdate,
-		PermissionDictRead,
-		PermissionDictCreate,
-		PermissionDictUpdate,
-		PermissionDictDelete,
-		PermissionFileRead,
-		PermissionFileUpload,
-		PermissionLogRead,
-	}
-	for _, token := range required {
+	for _, token := range requiredFoundationPermissions {
 		if _, ok := catalog[token]; !ok {
 			t.Fatalf("permission catalog missing %q", token)
 		}
 	}
+}
+
+var requiredFoundationPermissions = []string{
+	PermissionAdminRead,
+	PermissionAdminCreate,
+	PermissionAdminUpdate,
+	PermissionAdminDelete,
+	PermissionRoleRead,
+	PermissionRoleCreate,
+	PermissionRoleUpdate,
+	PermissionRoleDelete,
+	PermissionMenuRead,
+	PermissionMenuCreate,
+	PermissionMenuUpdate,
+	PermissionMenuDelete,
+	PermissionAPIRead,
+	PermissionAPICreate,
+	PermissionAPIUpdate,
+	PermissionAPIDelete,
+	PermissionAPITokenRead,
+	PermissionAPITokenCreate,
+	PermissionAPITokenUpdate,
+	PermissionAPITokenDelete,
+	PermissionConfigRead,
+	PermissionConfigUpdate,
+	PermissionConfigDelete,
+	PermissionParamRead,
+	PermissionParamCreate,
+	PermissionParamUpdate,
+	PermissionParamDelete,
+	PermissionVersionRead,
+	PermissionVersionCreate,
+	PermissionVersionUpdate,
+	PermissionVersionDelete,
+	PermissionDictRead,
+	PermissionDictCreate,
+	PermissionDictUpdate,
+	PermissionDictDelete,
+	PermissionFileRead,
+	PermissionFileUpload,
+	PermissionFileUpdate,
+	PermissionFileDelete,
+	PermissionFileCategoryCreate,
+	PermissionFileCategoryUpdate,
+	PermissionFileCategoryDelete,
+	PermissionLogRead,
+	PermissionLogDelete,
+	PermissionLogResolve,
 }

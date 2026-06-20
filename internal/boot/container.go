@@ -128,12 +128,62 @@ func provideServer(i do.Injector) {
 		if err != nil {
 			return nil, err
 		}
-		srv, err := server.New(cfg, server.WithStatusReporter(resourceBundle))
+		options := []server.Option{server.WithStatusReporter(resourceBundle)}
+		options, err = appendOptionalAPIKeyVerifier(i, options)
+		if err != nil {
+			return nil, err
+		}
+		options, err = appendOptionalSystemErrorRecorder(i, options)
+		if err != nil {
+			return nil, err
+		}
+		options, err = appendOptionalJWTBlocklist(i, options)
+		if err != nil {
+			return nil, err
+		}
+		srv, err := server.New(cfg, options...)
 		if err != nil {
 			return nil, fmt.Errorf("create server: %w", err)
 		}
 		return srv, nil
 	})
+}
+
+func appendOptionalAPIKeyVerifier(i do.Injector, options []server.Option) ([]server.Option, error) {
+	verifier, err := do.InvokeAs[server.APIKeyVerifier](i)
+	if err == nil {
+		return append(options, server.WithAPIKeyVerifier(verifier)), nil
+	}
+	if optionalServiceMissing(err) {
+		return options, nil
+	}
+	return nil, err
+}
+
+func appendOptionalSystemErrorRecorder(i do.Injector, options []server.Option) ([]server.Option, error) {
+	recorder, err := do.InvokeAs[server.SystemErrorRecorder](i)
+	if err == nil {
+		return append(options, server.WithSystemErrorRecorder(recorder)), nil
+	}
+	if optionalServiceMissing(err) {
+		return options, nil
+	}
+	return nil, err
+}
+
+func appendOptionalJWTBlocklist(i do.Injector, options []server.Option) ([]server.Option, error) {
+	jwtBlocklist, err := do.InvokeAs[server.JWTBlocklistChecker](i)
+	if err == nil {
+		return append(options, server.WithJWTBlocklistChecker(jwtBlocklist)), nil
+	}
+	if optionalServiceMissing(err) {
+		return options, nil
+	}
+	return nil, err
+}
+
+func optionalServiceMissing(err error) bool {
+	return errors.Is(err, do.ErrServiceNotFound) || errors.Is(err, do.ErrServiceNotMatch)
 }
 
 func disabledResourceError(capability string) error {

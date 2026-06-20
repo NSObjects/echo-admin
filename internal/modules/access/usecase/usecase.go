@@ -79,10 +79,10 @@ func (u *Usecase) CreateRole(ctx context.Context, input RoleInput) (Role, error)
 	if checkErr := scope.ensureParentAllowed(input.ParentID, 0); checkErr != nil {
 		return Role{}, checkErr
 	}
-	if checkErr := scope.ensureGrantSubset(input.Permissions, input.MenuIDs); checkErr != nil {
+	if checkErr := scope.ensureGrantSubset(input.Permissions, input.MenuIDs, input.APIIDs, input.ButtonIDs, input.DataRoleIDs); checkErr != nil {
 		return Role{}, checkErr
 	}
-	role, err := domain.RestoreRole(0, input.ParentID, input.Code, input.Name, input.Permissions, input.MenuIDs, input.DefaultPath, input.Active, time.Time{}, time.Time{})
+	role, err := domain.RestoreRole(0, input.ParentID, input.Code, input.Name, input.Permissions, input.MenuIDs, input.APIIDs, input.ButtonIDs, input.DataRoleIDs, input.DefaultPath, input.Active, time.Time{}, time.Time{})
 	if err != nil {
 		return Role{}, mapDomainError(err)
 	}
@@ -119,7 +119,7 @@ func (u *Usecase) UpdateRole(ctx context.Context, input UpdateRoleInput) (Role, 
 	if existing.IsSuperAdmin() && !draft.active {
 		return Role{}, apperr.NewBadRequest("super admin role must stay active")
 	}
-	if checkErr := scope.ensureGrantSubset(draft.permissions, draft.menuIDs); checkErr != nil {
+	if checkErr := scope.ensureGrantSubset(draft.permissions, draft.menuIDs, draft.apiIDs, draft.buttonIDs, draft.dataRoleIDs); checkErr != nil {
 		return Role{}, checkErr
 	}
 	role, err := domain.RestoreRole(
@@ -129,6 +129,9 @@ func (u *Usecase) UpdateRole(ctx context.Context, input UpdateRoleInput) (Role, 
 		draft.name,
 		draft.permissions,
 		draft.menuIDs,
+		draft.apiIDs,
+		draft.buttonIDs,
+		draft.dataRoleIDs,
 		draft.defaultPath,
 		draft.active,
 		existing.CreatedAt,
@@ -199,10 +202,10 @@ func (u *Usecase) CopyRole(ctx context.Context, input CopyRoleInput) (Role, erro
 	if checkErr := scope.ensureParentAllowed(draft.parentID, 0); checkErr != nil {
 		return Role{}, checkErr
 	}
-	if checkErr := scope.ensureGrantSubset(source.Permissions, source.MenuIDs); checkErr != nil {
+	if checkErr := scope.ensureGrantSubset(source.Permissions, source.MenuIDs, source.APIIDs, source.ButtonIDs, source.DataRoleIDs); checkErr != nil {
 		return Role{}, checkErr
 	}
-	role, err := domain.RestoreRole(0, draft.parentID, input.Code, input.Name, source.Permissions, source.MenuIDs, draft.defaultPath, draft.active, time.Time{}, time.Time{})
+	role, err := domain.RestoreRole(0, draft.parentID, input.Code, input.Name, source.Permissions, source.MenuIDs, source.APIIDs, source.ButtonIDs, source.DataRoleIDs, draft.defaultPath, draft.active, time.Time{}, time.Time{})
 	if err != nil {
 		return Role{}, mapDomainError(err)
 	}
@@ -218,6 +221,9 @@ type roleUpdateDraft struct {
 	name        string
 	permissions []string
 	menuIDs     []int64
+	apiIDs      []int64
+	buttonIDs   []int64
+	dataRoleIDs []int64
 	defaultPath string
 	active      bool
 }
@@ -228,6 +234,9 @@ func roleUpdateDraftFrom(existing domain.Role, input UpdateRoleInput) roleUpdate
 		name:        existing.Name,
 		permissions: coalesceStrings(input.Permissions, existing.Permissions),
 		menuIDs:     coalesceIDs(input.MenuIDs, existing.MenuIDs),
+		apiIDs:      coalesceIDs(input.APIIDs, existing.APIIDs),
+		buttonIDs:   coalesceIDs(input.ButtonIDs, existing.ButtonIDs),
+		dataRoleIDs: coalesceIDs(input.DataRoleIDs, existing.DataRoleIDs),
 		defaultPath: existing.DefaultPath,
 		active:      existing.Active,
 	}
@@ -282,6 +291,18 @@ func (u *Usecase) AssignableRoleIDs(ctx context.Context) ([]int64, error) {
 	return sortedRoleIDs(scope.assignableRoleIDs), nil
 }
 
+// VisibleRoleIDs returns role ids whose administrators are visible to the active role.
+func (u *Usecase) VisibleRoleIDs(ctx context.Context) ([]int64, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sortedRoleIDs(scope.dataVisibleRoleIDs), nil
+}
+
 // EnsureAssignableRoles rejects role assignments outside the active role delegation scope.
 func (u *Usecase) EnsureAssignableRoles(ctx context.Context, roleIDs []int64) error {
 	if err := u.ready(); err != nil {
@@ -311,12 +332,27 @@ func (u *Usecase) ListMenus(ctx context.Context) ([]Menu, error) {
 	return mapMenus(menus), nil
 }
 
+// FindMenu returns one menu by id.
+func (u *Usecase) FindMenu(ctx context.Context, id int64) (Menu, error) {
+	if err := u.ready(); err != nil {
+		return Menu{}, err
+	}
+	if id <= 0 {
+		return Menu{}, apperr.NewBadRequest("invalid menu id")
+	}
+	menu, err := u.store.FindMenuByID(ctx, id)
+	if err != nil {
+		return Menu{}, err
+	}
+	return fromMenu(menu), nil
+}
+
 // CreateMenu validates and stores a new menu.
 func (u *Usecase) CreateMenu(ctx context.Context, input MenuInput) (Menu, error) {
 	if err := u.ready(); err != nil {
 		return Menu{}, err
 	}
-	menu, err := domain.RestoreMenu(0, input.ParentID, input.Name, input.Path, input.Icon, input.Permission, input.Sort, input.Active, time.Time{}, time.Time{})
+	menu, err := domain.RestoreMenu(0, input.ParentID, input.Name, input.Path, input.Icon, input.Hidden, input.Component, domain.MenuMeta(input.Meta), input.Permission, input.Sort, input.Active, domainButtonsFromInput(0, input.Buttons), time.Time{}, time.Time{})
 	if err != nil {
 		return Menu{}, mapDomainError(err)
 	}
@@ -336,7 +372,7 @@ func (u *Usecase) UpdateMenu(ctx context.Context, input UpdateMenuInput) (Menu, 
 	if err != nil {
 		return Menu{}, err
 	}
-	menu, err := domain.RestoreMenu(input.ID, input.ParentID, input.Name, input.Path, input.Icon, input.Permission, input.Sort, input.Active, existing.CreatedAt, time.Time{})
+	menu, err := domain.RestoreMenu(input.ID, input.ParentID, input.Name, input.Path, input.Icon, input.Hidden, input.Component, domain.MenuMeta(input.Meta), input.Permission, input.Sort, input.Active, domainButtonsFromInput(input.ID, input.Buttons), existing.CreatedAt, time.Time{})
 	if err != nil {
 		return Menu{}, mapDomainError(err)
 	}
@@ -370,7 +406,257 @@ func (u *Usecase) DeleteMenu(ctx context.Context, id int64) error {
 	if menuAssignedToRole(roles, existing.ID) {
 		return apperr.NewConflict("menu is assigned to roles")
 	}
+	if menuButtonAssignedToRole(roles, existing.Buttons) {
+		return apperr.NewConflict("menu button is assigned to roles")
+	}
 	return u.store.DeleteMenu(ctx, existing.ID)
+}
+
+// MenuRoleIDs returns visible role ids currently granted one menu.
+func (u *Usecase) MenuRoleIDs(ctx context.Context, menuID int64) ([]int64, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	if _, err := u.store.FindMenuByID(ctx, menuID); err != nil {
+		return nil, err
+	}
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := scope.ensureMenuGrantReadable(menuID); err != nil {
+		return nil, err
+	}
+	return roleIDsWithMenu(scope.visibleRoles(), menuID), nil
+}
+
+// SetMenuRoles replaces role grants for one menu within the active role scope.
+func (u *Usecase) SetMenuRoles(ctx context.Context, input MenuRolesInput) ([]int64, error) {
+	return u.setRoleGrants(
+		ctx,
+		input.MenuID,
+		input.RoleIDs,
+		func(ctx context.Context, id int64) error {
+			_, err := u.store.FindMenuByID(ctx, id)
+			return err
+		},
+		roleScope.ensureMenuGrantReadable,
+		roleWithMenuGrant,
+		roleIDsWithMenu,
+	)
+}
+
+// ListAPIs returns paginated API route metadata.
+func (u *Usecase) ListAPIs(ctx context.Context, input ListInput) (APIListOutput, error) {
+	if err := u.ready(); err != nil {
+		return APIListOutput{}, err
+	}
+	filter, err := normalizeListInput(input)
+	if err != nil {
+		return APIListOutput{}, err
+	}
+	apis, err := u.store.ListAPIs(ctx)
+	if err != nil {
+		return APIListOutput{}, err
+	}
+	pageAPIs := paginateAPIs(apis, filter)
+	return APIListOutput{
+		Items:    mapAPIs(pageAPIs),
+		Page:     filter.Page,
+		PageSize: filter.PageSize,
+		Total:    len(apis),
+	}, nil
+}
+
+// FindAPI returns one managed API route by id.
+func (u *Usecase) FindAPI(ctx context.Context, id int64) (API, error) {
+	if err := u.ready(); err != nil {
+		return API{}, err
+	}
+	if id <= 0 {
+		return API{}, apperr.NewBadRequest("invalid api id")
+	}
+	api, err := u.store.FindAPIByID(ctx, id)
+	if err != nil {
+		return API{}, err
+	}
+	return fromAPI(api), nil
+}
+
+// APIGroups returns sorted API group names for filters and editors.
+func (u *Usecase) APIGroups(ctx context.Context) ([]string, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	apis, err := u.store.ListAPIs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	groups := make(map[string]struct{}, len(apis))
+	for _, api := range apis {
+		groups[api.Group] = struct{}{}
+	}
+	out := make([]string, 0, len(groups))
+	for group := range groups {
+		out = append(out, group)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// CreateAPI validates and stores a managed API route.
+func (u *Usecase) CreateAPI(ctx context.Context, input APIInput) (API, error) {
+	if err := u.ready(); err != nil {
+		return API{}, err
+	}
+	api, err := domain.RestoreAPI(0, input.Method, input.Path, input.Description, input.Group, input.Permission, input.Public, time.Time{}, time.Time{})
+	if err != nil {
+		return API{}, mapDomainError(err)
+	}
+	created, err := u.store.CreateAPI(ctx, api)
+	if err != nil {
+		return API{}, err
+	}
+	return fromAPI(created), nil
+}
+
+// UpdateAPI replaces mutable API route metadata.
+func (u *Usecase) UpdateAPI(ctx context.Context, input UpdateAPIInput) (API, error) {
+	if err := u.ready(); err != nil {
+		return API{}, err
+	}
+	existing, err := u.store.FindAPIByID(ctx, input.ID)
+	if err != nil {
+		return API{}, err
+	}
+	api, err := domain.RestoreAPI(existing.ID, input.Method, input.Path, input.Description, input.Group, input.Permission, input.Public, existing.CreatedAt, time.Time{})
+	if err != nil {
+		return API{}, mapDomainError(err)
+	}
+	updated, err := u.store.UpdateAPI(ctx, api)
+	if err != nil {
+		return API{}, err
+	}
+	return fromAPI(updated), nil
+}
+
+// DeleteAPI removes an API route only when no role grant still references it.
+func (u *Usecase) DeleteAPI(ctx context.Context, id int64) error {
+	return u.DeleteAPIs(ctx, []int64{id})
+}
+
+// DeleteAPIs removes API routes only when no role grant still references them.
+func (u *Usecase) DeleteAPIs(ctx context.Context, ids []int64) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	ids, err := normalizeRequestedAPIIDs(ids)
+	if err != nil {
+		return err
+	}
+	roles, err := u.store.ListAllRoles(ctx)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		existing, err := u.store.FindAPIByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if apiAssignedToRole(roles, existing.ID) {
+			return apperr.NewConflict("api is assigned to roles")
+		}
+	}
+	for _, id := range ids {
+		if err := u.store.DeleteAPI(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// APIRoleIDs returns visible role ids currently granted one API route.
+func (u *Usecase) APIRoleIDs(ctx context.Context, apiID int64) ([]int64, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	if _, err := u.store.FindAPIByID(ctx, apiID); err != nil {
+		return nil, err
+	}
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := scope.ensureAPIGrantReadable(apiID); err != nil {
+		return nil, err
+	}
+	return roleIDsWithAPI(scope.visibleRoles(), apiID), nil
+}
+
+// SetAPIRoles replaces role grants for one API route within the active role scope.
+func (u *Usecase) SetAPIRoles(ctx context.Context, input APIRolesInput) ([]int64, error) {
+	return u.setRoleGrants(
+		ctx,
+		input.APIID,
+		input.RoleIDs,
+		func(ctx context.Context, id int64) error {
+			_, err := u.store.FindAPIByID(ctx, id)
+			return err
+		},
+		roleScope.ensureAPIGrantReadable,
+		roleWithAPIGrant,
+		roleIDsWithAPI,
+	)
+}
+
+func (u *Usecase) setRoleGrants(
+	ctx context.Context,
+	resourceID int64,
+	roleIDs []int64,
+	ensureResource func(context.Context, int64) error,
+	ensureGrantReadable func(roleScope, int64) error,
+	roleWithGrant func(domain.Role, int64, bool) (domain.Role, bool, error),
+	roleIDsWithGrant func([]domain.Role, int64) []int64,
+) ([]int64, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	if err := ensureResource(ctx, resourceID); err != nil {
+		return nil, err
+	}
+	roleIDs, err := normalizeRequestedRoleIDs(roleIDs)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureGrantReadable(scope, resourceID); err != nil {
+		return nil, err
+	}
+	wanted := idSet(roleIDs)
+	if err := scope.ensureRolesMutable(roleIDs); err != nil {
+		return nil, err
+	}
+	for index, role := range scope.allRoles {
+		if !scope.canEditRoleGrant(role.ID) {
+			continue
+		}
+		next, changed, err := roleWithGrant(role, resourceID, hasID(wanted, role.ID))
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			continue
+		}
+		updated, err := u.store.UpdateRole(ctx, next)
+		if err != nil {
+			return nil, err
+		}
+		scope.allRoles[index] = updated
+	}
+	return roleIDsWithGrant(scope.visibleRoles(), resourceID), nil
 }
 
 func (u *Usecase) ready() error {
@@ -407,21 +693,24 @@ func (u *Usecase) roleScope(ctx context.Context) (roleScope, error) {
 	allRoleIDs := roleIDSet(roles)
 	if activeRole.IsSuperAdmin() {
 		return roleScope{
-			activeRole:        activeRole,
-			allRoles:          roles,
-			visibleRoleIDs:    allRoleIDs,
-			assignableRoleIDs: allRoleIDs,
-			super:             true,
+			activeRole:         activeRole,
+			allRoles:           roles,
+			visibleRoleIDs:     allRoleIDs,
+			assignableRoleIDs:  allRoleIDs,
+			dataVisibleRoleIDs: allRoleIDs,
+			super:              true,
 		}, nil
 	}
 	descendants := descendantRoleIDs(roles, activeRole.ID)
 	visible := copyIDSet(descendants)
 	visible[activeRole.ID] = struct{}{}
+	dataVisible := intersectIDs(activeRole.DataRoleIDs, visible)
 	return roleScope{
-		activeRole:        activeRole,
-		allRoles:          roles,
-		visibleRoleIDs:    visible,
-		assignableRoleIDs: descendants,
+		activeRole:         activeRole,
+		allRoles:           roles,
+		visibleRoleIDs:     visible,
+		assignableRoleIDs:  descendants,
+		dataVisibleRoleIDs: dataVisible,
 	}, nil
 }
 
@@ -447,6 +736,17 @@ func paginateRoles(roles []domain.Role, filter ListFilter) []domain.Role {
 	return roles[filter.Offset:end]
 }
 
+func paginateAPIs(apis []domain.API, filter ListFilter) []domain.API {
+	if filter.Offset >= len(apis) {
+		return []domain.API{}
+	}
+	end := filter.Offset + filter.Limit
+	if end > len(apis) {
+		end = len(apis)
+	}
+	return apis[filter.Offset:end]
+}
+
 func mapRoles(roles []domain.Role) []Role {
 	out := make([]Role, 0, len(roles))
 	for _, role := range roles {
@@ -463,6 +763,14 @@ func mapMenus(menus []domain.Menu) []Menu {
 	return out
 }
 
+func mapAPIs(apis []domain.API) []API {
+	out := make([]API, 0, len(apis))
+	for _, api := range apis {
+		out = append(out, fromAPI(api))
+	}
+	return out
+}
+
 func fromRole(role domain.Role) Role {
 	return Role{
 		ID:          role.ID,
@@ -471,6 +779,9 @@ func fromRole(role domain.Role) Role {
 		Name:        role.Name,
 		Permissions: role.Permissions,
 		MenuIDs:     role.MenuIDs,
+		APIIDs:      role.APIIDs,
+		ButtonIDs:   role.ButtonIDs,
+		DataRoleIDs: role.DataRoleIDs,
 		DefaultPath: role.DefaultPath,
 		Active:      role.Active,
 		CreatedAt:   role.CreatedAt,
@@ -478,19 +789,71 @@ func fromRole(role domain.Role) Role {
 	}
 }
 
+func fromAPI(api domain.API) API {
+	return API{
+		ID:          api.ID,
+		Method:      api.Method,
+		Path:        api.Path,
+		Description: api.Description,
+		Group:       api.Group,
+		Permission:  api.Permission,
+		Public:      api.Public,
+		CreatedAt:   api.CreatedAt,
+		UpdatedAt:   api.UpdatedAt,
+	}
+}
+
 func fromMenu(menu domain.Menu) Menu {
 	return Menu{
-		ID:         menu.ID,
-		ParentID:   menu.ParentID,
-		Name:       menu.Name,
-		Path:       menu.Path,
-		Icon:       menu.Icon,
+		ID:        menu.ID,
+		ParentID:  menu.ParentID,
+		Name:      menu.Name,
+		Path:      menu.Path,
+		Icon:      menu.Icon,
+		Hidden:    menu.Hidden,
+		Component: menu.Component,
+		Meta: MenuMeta{
+			ActiveName:     menu.Meta.ActiveName,
+			KeepAlive:      menu.Meta.KeepAlive,
+			DefaultMenu:    menu.Meta.DefaultMenu,
+			CloseTab:       menu.Meta.CloseTab,
+			TransitionType: menu.Meta.TransitionType,
+		},
 		Permission: menu.Permission,
 		Sort:       menu.Sort,
 		Active:     menu.Active,
+		Buttons:    fromButtons(menu.Buttons),
 		CreatedAt:  menu.CreatedAt,
 		UpdatedAt:  menu.UpdatedAt,
 	}
+}
+
+func fromButtons(buttons []domain.MenuButton) []Button {
+	out := make([]Button, 0, len(buttons))
+	for _, button := range buttons {
+		out = append(out, Button{
+			ID:          button.ID,
+			MenuID:      button.MenuID,
+			Name:        button.Name,
+			Description: button.Description,
+			CreatedAt:   button.CreatedAt,
+			UpdatedAt:   button.UpdatedAt,
+		})
+	}
+	return out
+}
+
+func domainButtonsFromInput(menuID int64, buttons []MenuButtonInput) []domain.MenuButton {
+	out := make([]domain.MenuButton, 0, len(buttons))
+	for _, button := range buttons {
+		out = append(out, domain.MenuButton{
+			ID:          button.ID,
+			MenuID:      menuID,
+			Name:        button.Name,
+			Description: button.Description,
+		})
+	}
+	return out
 }
 
 func coalesceIDs(next, fallback []int64) []int64 {
@@ -550,15 +913,26 @@ var domainErrorMessages = []struct {
 	{domain.ErrInvalidMenuID, "invalid menu id"},
 	{domain.ErrInvalidMenuName, "invalid menu name"},
 	{domain.ErrInvalidMenuPath, "invalid menu path"},
+	{domain.ErrInvalidComponent, "invalid menu component"},
+	{domain.ErrInvalidMenuMeta, "invalid menu meta"},
 	{domain.ErrInvalidPermission, "invalid permission"},
+	{domain.ErrInvalidButtonID, "invalid menu button id"},
+	{domain.ErrInvalidButtonName, "invalid menu button name"},
+	{domain.ErrInvalidButtonDesc, "invalid menu button description"},
+	{domain.ErrInvalidAPIID, "invalid api id"},
+	{domain.ErrInvalidAPIPath, "invalid api path"},
+	{domain.ErrInvalidAPIMethod, "invalid api method"},
+	{domain.ErrInvalidAPIGroup, "invalid api group"},
+	{domain.ErrInvalidAPIDesc, "invalid api description"},
 }
 
 type roleScope struct {
-	activeRole        domain.Role
-	allRoles          []domain.Role
-	visibleRoleIDs    map[int64]struct{}
-	assignableRoleIDs map[int64]struct{}
-	super             bool
+	activeRole         domain.Role
+	allRoles           []domain.Role
+	visibleRoleIDs     map[int64]struct{}
+	assignableRoleIDs  map[int64]struct{}
+	dataVisibleRoleIDs map[int64]struct{}
+	super              bool
 }
 
 func (s roleScope) visibleRoles() []domain.Role {
@@ -606,7 +980,7 @@ func (s roleScope) ensureParentAllowed(parentID, roleID int64) error {
 	return apperr.NewPermissionDenied("role", strconv.FormatInt(parentID, 10))
 }
 
-func (s roleScope) ensureGrantSubset(permissions []string, menuIDs []int64) error {
+func (s roleScope) ensureGrantSubset(permissions []string, menuIDs, apiIDs, buttonIDs, dataRoleIDs []int64) error {
 	if s.super {
 		return nil
 	}
@@ -616,7 +990,51 @@ func (s roleScope) ensureGrantSubset(permissions []string, menuIDs []int64) erro
 	if !isInt64Subset(menuIDs, s.activeRole.MenuIDs) {
 		return apperr.NewPermissionDenied("menu", "grant")
 	}
+	if !isInt64Subset(apiIDs, s.activeRole.APIIDs) {
+		return apperr.NewPermissionDenied("api", "grant")
+	}
+	if !isInt64Subset(buttonIDs, s.activeRole.ButtonIDs) {
+		return apperr.NewPermissionDenied("button", "grant")
+	}
+	if !isInt64SubsetOfSet(dataRoleIDs, s.assignableRoleIDs) {
+		return apperr.NewPermissionDenied("data_role", "grant")
+	}
 	return nil
+}
+
+func (s roleScope) ensureMenuGrantReadable(menuID int64) error {
+	if s.super || containsID(s.activeRole.MenuIDs, menuID) {
+		return nil
+	}
+	return apperr.NewPermissionDenied("menu", strconv.FormatInt(menuID, 10))
+}
+
+func (s roleScope) ensureAPIGrantReadable(apiID int64) error {
+	if s.super || containsID(s.activeRole.APIIDs, apiID) {
+		return nil
+	}
+	return apperr.NewPermissionDenied("api", strconv.FormatInt(apiID, 10))
+}
+
+func (s roleScope) ensureRolesMutable(roleIDs []int64) error {
+	for _, roleID := range roleIDs {
+		role, ok := findRole(s.allRoles, roleID)
+		if !ok {
+			return apperr.NewBadRequest("invalid role id")
+		}
+		if err := s.ensureRoleMutable(role); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s roleScope) canEditRoleGrant(roleID int64) bool {
+	if s.super {
+		return true
+	}
+	_, ok := s.assignableRoleIDs[roleID]
+	return ok
 }
 
 func roleParentWouldCycle(roles []domain.Role, roleID, parentID int64) bool {
@@ -660,6 +1078,144 @@ func menuAssignedToRole(roles []domain.Role, menuID int64) bool {
 	return false
 }
 
+func menuButtonAssignedToRole(roles []domain.Role, buttons []domain.MenuButton) bool {
+	buttonIDs := make(map[int64]struct{}, len(buttons))
+	for _, button := range buttons {
+		if button.ID > 0 {
+			buttonIDs[button.ID] = struct{}{}
+		}
+	}
+	if len(buttonIDs) == 0 {
+		return false
+	}
+	for _, role := range roles {
+		for _, buttonID := range role.ButtonIDs {
+			if _, ok := buttonIDs[buttonID]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func apiAssignedToRole(roles []domain.Role, apiID int64) bool {
+	for _, role := range roles {
+		if containsID(role.APIIDs, apiID) {
+			return true
+		}
+	}
+	return false
+}
+
+func roleIDsWithMenu(roles []domain.Role, menuID int64) []int64 {
+	out := make([]int64, 0, len(roles))
+	for _, role := range roles {
+		if containsID(role.MenuIDs, menuID) {
+			out = append(out, role.ID)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func roleIDsWithAPI(roles []domain.Role, apiID int64) []int64 {
+	out := make([]int64, 0, len(roles))
+	for _, role := range roles {
+		if containsID(role.APIIDs, apiID) {
+			out = append(out, role.ID)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func roleWithMenuGrant(role domain.Role, menuID int64, assigned bool) (domain.Role, bool, error) {
+	menuIDs, changed := grantIDs(role.MenuIDs, menuID, assigned)
+	if !changed {
+		return role, false, nil
+	}
+	next, err := domain.RestoreRole(role.ID, role.ParentID, role.Code, role.Name, role.Permissions, menuIDs, role.APIIDs, role.ButtonIDs, role.DataRoleIDs, role.DefaultPath, role.Active, role.CreatedAt, time.Time{})
+	return next, true, err
+}
+
+func roleWithAPIGrant(role domain.Role, apiID int64, assigned bool) (domain.Role, bool, error) {
+	apiIDs, changed := grantIDs(role.APIIDs, apiID, assigned)
+	if !changed {
+		return role, false, nil
+	}
+	next, err := domain.RestoreRole(role.ID, role.ParentID, role.Code, role.Name, role.Permissions, role.MenuIDs, apiIDs, role.ButtonIDs, role.DataRoleIDs, role.DefaultPath, role.Active, role.CreatedAt, time.Time{})
+	return next, true, err
+}
+
+func grantIDs(ids []int64, id int64, assigned bool) ([]int64, bool) {
+	if assigned {
+		if containsID(ids, id) {
+			return ids, false
+		}
+		out := append([]int64(nil), ids...)
+		out = append(out, id)
+		return out, true
+	}
+	if !containsID(ids, id) {
+		return ids, false
+	}
+	out := make([]int64, 0, len(ids)-1)
+	for _, existingID := range ids {
+		if existingID != id {
+			out = append(out, existingID)
+		}
+	}
+	return out, true
+}
+
+func normalizeRequestedRoleIDs(roleIDs []int64) ([]int64, error) {
+	seen := make(map[int64]struct{}, len(roleIDs))
+	out := make([]int64, 0, len(roleIDs))
+	for _, roleID := range roleIDs {
+		if roleID <= 0 {
+			return nil, apperr.NewBadRequest("invalid role id")
+		}
+		if _, ok := seen[roleID]; ok {
+			continue
+		}
+		seen[roleID] = struct{}{}
+		out = append(out, roleID)
+	}
+	return out, nil
+}
+
+func normalizeRequestedAPIIDs(apiIDs []int64) ([]int64, error) {
+	if len(apiIDs) == 0 {
+		return nil, apperr.NewBadRequest("api ids are required")
+	}
+	seen := make(map[int64]struct{}, len(apiIDs))
+	out := make([]int64, 0, len(apiIDs))
+	for _, apiID := range apiIDs {
+		if apiID <= 0 {
+			return nil, apperr.NewBadRequest("invalid api id")
+		}
+		if _, ok := seen[apiID]; ok {
+			continue
+		}
+		seen[apiID] = struct{}{}
+		out = append(out, apiID)
+	}
+	return out, nil
+}
+
+func idSet(ids []int64) map[int64]struct{} {
+	out := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+func hasID(values map[int64]struct{}, id int64) bool {
+	_, ok := values[id]
+	return ok
+}
+
 func findRole(roles []domain.Role, roleID int64) (domain.Role, bool) {
 	for _, role := range roles {
 		if role.ID == roleID {
@@ -698,6 +1254,16 @@ func copyIDSet(values map[int64]struct{}) map[int64]struct{} {
 	out := make(map[int64]struct{}, len(values))
 	for value := range values {
 		out[value] = struct{}{}
+	}
+	return out
+}
+
+func intersectIDs(values []int64, allowed map[int64]struct{}) map[int64]struct{} {
+	out := make(map[int64]struct{}, len(values))
+	for _, value := range values {
+		if _, ok := allowed[value]; ok {
+			out[value] = struct{}{}
+		}
 	}
 	return out
 }
@@ -756,6 +1322,15 @@ func isInt64Subset(values, allowed []int64) bool {
 	}
 	for _, value := range values {
 		if _, ok := allowedSet[value]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func isInt64SubsetOfSet(values []int64, allowed map[int64]struct{}) bool {
+	for _, value := range values {
+		if _, ok := allowed[value]; !ok {
 			return false
 		}
 	}

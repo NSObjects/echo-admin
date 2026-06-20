@@ -26,6 +26,7 @@ type Store interface {
 // RoleScope authorizes role assignments without exposing access storage details.
 type RoleScope interface {
 	AssignableRoleIDs(context.Context) ([]int64, error)
+	VisibleRoleIDs(context.Context) ([]int64, error)
 	EnsureAssignableRoles(context.Context, []int64) error
 }
 
@@ -60,6 +61,12 @@ type UpdateAdminInput struct {
 	RoleIDs      []int64
 	ActiveRoleID *int64
 	Active       *bool
+}
+
+// RoleAdminsInput carries the full administrator assignment for one role.
+type RoleAdminsInput struct {
+	RoleID   int64
+	AdminIDs []int64
 }
 
 // ListInput carries pagination for administrator lists.

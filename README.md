@@ -1,6 +1,6 @@
 # echo-admin
 
-`echo-admin` 是一个 module-first 的 Go 中后台基础框架。它提供登录认证、管理员管理、角色权限、菜单管理、系统配置、数据字典、文件上传、操作日志和登录日志，为后续业务模块提供统一后台管理能力。
+`echo-admin` 是一个 module-first 的 Go 中后台基础框架。它提供登录认证、管理员管理、角色权限、菜单管理、API Token、系统配置、数据字典、文件上传和分类、操作日志、登录日志和系统错误日志，为后续业务模块提供统一后台管理能力。
 
 项目后端使用 Go 1.26、Echo v5、Casbin 和 `samber/do`。前端位于 `web/`，使用 Umi Max、React、Ant Design 和 ProComponents。
 
@@ -21,9 +21,10 @@
 ├── internal/modules/auth/       # 登录认证、JWT 签发、当前用户和授权判断
 ├── internal/modules/identity/   # 管理员管理
 ├── internal/modules/access/     # 角色权限和菜单管理
+├── internal/modules/apitoken/    # API Token 管理和 token 认证
 ├── internal/modules/settings/   # 系统配置和数据字典
-├── internal/modules/fileasset/  # 文件上传元数据
-├── internal/modules/audit/      # 操作日志和登录日志
+├── internal/modules/fileasset/  # 文件上传元数据和分类
+├── internal/modules/audit/      # 操作日志、登录日志和系统错误日志
 ├── internal/platform/           # HTTP runtime、配置、错误、请求响应、基础设施能力
 ├── web/                         # 前端中后台应用
 ├── k8s/                         # Kubernetes 示例
@@ -61,10 +62,10 @@ curl http://127.0.0.1:9322/api/capabilities
 
 ```text
 username: admin
-password: admin123
+password: 123456
 ```
 
-`super_admin` 是根角色，默认拥有全部权限、全部基础菜单和默认入口 `/dashboard`。管理员可以拥有多个角色，JWT 会携带当前生效的 `role_id`；切换角色后后端会重新签发只包含该角色权限的新 token，前端菜单和按钮权限也会随之刷新。
+`super_admin` 是根角色，默认拥有全部权限、全部基础菜单、全部 API、全部按钮、全部数据角色和默认入口 `/dashboard`。管理员可以拥有多个角色，JWT 会携带当前生效的 `role_id`；切换角色后后端会重新签发只包含该角色权限的新 token，前端菜单、按钮权限和数据权限也会随之刷新。退出登录会把当前 JWT 的 SHA-256 哈希写入服务端黑名单，旧 token 不能继续访问私有接口。
 
 前端：
 
@@ -128,16 +129,27 @@ docker compose --profile resources up
 internal/modules/auth/           # 登录认证、当前用户和权限判断
 internal/modules/identity/       # 管理员生命周期
 internal/modules/access/         # 角色、权限和菜单
+internal/modules/apitoken/       # API Token 管理和 token 认证
 internal/modules/settings/       # 系统配置和数据字典
-internal/modules/fileasset/      # 文件上传元数据
-internal/modules/audit/          # 操作日志和登录日志
+internal/modules/fileasset/      # 文件上传元数据和分类
+internal/modules/audit/          # 操作日志、登录日志和系统错误日志
 ```
 
 运行期只使用 MySQL adapter。各模块的 usecase 定义自己的 store interface，`internal/boot` 从已配置的 `*gorm.DB` 创建 concrete store，并负责跨模块装配，例如 auth 通过自己的小接口读取 identity/access，并通过 boot bridge 写入 audit。
 
 授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。当前生效角色决定本次请求的权限集合，已分配但未激活的其他角色不会参与授权。
 
-`access` 模块提供权限目录、API 目录、角色树和菜单管理。权限目录和 API 目录会持久化到 MySQL，便于初始化检查和后台审计；实际授权仍以角色持有的 permission token 为准，避免数据库 API 元数据和代码路由形成两套授权真源。角色通过 `parent_id` 形成委派树：`super_admin` 可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限或菜单。菜单项通过 `permission` token 控制可见性，前端静态路由只注册页面，最终菜单显示以后端 `/api/auth/me` 返回的菜单为准。
+`auth` 模块提供登录、当前用户、当前用户资料更新、角色切换、当前用户改密码、服务端退出登录和权限判断。JWT 只保存当前生效角色；退出登录和当前用户改密码都会撤销当前 bearer token，JWT middleware 每次验签成功后都会检查黑名单，已撤销且未过期的 token 统一按未授权处理。黑名单表只保存 token 哈希和过期时间，不保存原始 JWT。
+
+`access` 模块提供权限目录、API 目录、角色树、数据权限、菜单管理和菜单按钮管理。权限目录、API 目录、菜单 meta 和菜单按钮会持久化到 MySQL，便于初始化检查和后台审计；后台私有 handler 会同时校验 permission token、当前 route 的 method/path API 记录，以及普通角色持有的 `api_ids`。`super_admin` 默认拥有全部权限、全部基础菜单、全部菜单按钮、全部数据角色和全部初始化 API，新增 API 记录不会把根角色锁在门外，但普通角色必须显式分配对应 API 后才能访问该接口。角色通过 `parent_id` 形成委派树：`super_admin` 可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限、菜单、API、菜单按钮或数据角色。`data_role_ids` 是当前角色可见的管理员数据范围，管理员列表按这些角色过滤；管理员创建、更新和删除仍按可分配角色边界校验。菜单项通过 `permission` token 控制可见性，菜单记录同时保存 `hidden`、`component`、`keep_alive`、`default_menu`、`close_tab`、`active_name` 和 `transition_type` 等 gin-vue-admin 风格路由元信息。前端静态路由只注册页面，最终菜单显示以后端 `/api/auth/me` 返回的菜单为准。
+
+`settings` 模块提供系统配置、系统参数、数据字典和版本管理。系统配置支持创建、更新、删除，启动种子配置 `site_name` 不允许从后台删除。系统参数提供 gin-vue-admin 风格的可分页参数表，支持名称/键筛选、按 ID 或 key 查询、创建、更新、单条删除和批量删除。数据字典支持字典项树形父子关系、扩展值、层级路径、防循环父级调整和父项删除保护。版本管理保存可审计的发布记录，版本号唯一，包含版本名称、说明和发布时间；支持详情读取、JSON 下载、单条删除、批量删除、选择菜单/API/字典导出版本包，以及导入版本包恢复菜单、API 和字典，创建、导出、导入、更新、删除都会写操作日志。
+
+`apitoken` 模块提供 API Token 列表、创建、更新、作废和请求认证。创建 token 时可指定目标管理员、目标角色和 1-365 天有效期；普通角色只能给自己当前身份签发，`super_admin` 可以给已启用且持有目标角色的管理员签发。明文只返回一次，MySQL 只保存 SHA-256 哈希和短前缀；后续列表和更新接口不会回显明文或哈希。服务端接受 `X-API-Token` 请求头，验证成功后把 token 绑定的管理员和角色写入 request context，后续仍由同一套 `RequireRoutePermission` 校验 permission token、API 目录和角色 `api_ids`。停用或过期 token 会被拒绝，成功使用会更新 `last_used_at`；删除操作会作废 token，不物理删除记录。
+
+`fileasset` 模块提供本地上传、外部 URL 元数据登记、文件重命名、文件删除和分类树管理。文件可以按分类筛选，上传和导入 URL 时可选择分类；删除分类只会把该分类下的文件归到未分类，不会删除文件资产。
+
+`audit` 模块保存操作日志、登录日志和系统错误日志，并支持单条和批量删除。系统错误日志由统一 HTTP 错误边界记录，只记录内部错误和 panic 恢复后的 5xx 响应；普通 4xx 业务错误不会写入系统错误表。错误记录包含安全响应码、请求路径、请求 ID、用户 ID 和诊断 detail，供超管在日志页排查；超管可以把系统错误标记为已处理、记录处理备注，也可以取消处理状态。
 
 HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase、统一响应。核心业务规则放在 `domain` 和 `usecase`。
 
@@ -158,8 +170,10 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | 管理员登录 |
 | `POST` | `/api/auth/role` | 切换当前生效角色并重新签发 token |
-| `POST` | `/api/auth/logout` | 客户端退出登录 |
+| `POST` | `/api/auth/logout` | 服务端退出登录并拉黑当前 JWT |
+| `POST` | `/api/auth/password` | 当前管理员修改密码并拉黑当前 JWT |
 | `GET` | `/api/auth/me` | 当前管理员 |
+| `PATCH` | `/api/auth/me` | 更新当前管理员资料 |
 | `GET` | `/api/admins` | 管理员列表 |
 | `POST` | `/api/admins` | 创建管理员 |
 | `PATCH` | `/api/admins/:id` | 更新管理员 |
@@ -169,25 +183,81 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | `PATCH` | `/api/roles/:id` | 更新角色 |
 | `DELETE` | `/api/roles/:id` | 删除角色 |
 | `POST` | `/api/roles/:id/copy` | 复制角色 |
+| `GET` | `/api/roles/:id/admins` | 角色关联管理员 |
+| `PUT` | `/api/roles/:id/admins` | 覆盖角色关联管理员 |
 | `GET` | `/api/permissions` | 权限目录元数据 |
+| `GET` | `/api/apis` | API 列表 |
+| `GET` | `/api/apis/groups` | API 分组 |
+| `POST` | `/api/apis` | 创建 API |
+| `POST` | `/api/apis/batch-delete` | 批量删除 API |
+| `GET` | `/api/apis/:id` | API 详情 |
+| `PATCH` | `/api/apis/:id` | 更新 API |
+| `DELETE` | `/api/apis/:id` | 删除 API |
+| `GET` | `/api/apis/:id/roles` | API 授权角色 |
+| `PUT` | `/api/apis/:id/roles` | 覆盖 API 授权角色 |
+| `GET` | `/api/api-tokens` | API Token 列表 |
+| `POST` | `/api/api-tokens` | 创建 API Token |
+| `PATCH` | `/api/api-tokens/:id` | 更新 API Token |
+| `DELETE` | `/api/api-tokens/:id` | 作废 API Token |
 | `GET` | `/api/menus` | 菜单列表 |
 | `POST` | `/api/menus` | 创建菜单 |
+| `GET` | `/api/menus/:id` | 菜单详情 |
 | `PATCH` | `/api/menus/:id` | 更新菜单 |
 | `DELETE` | `/api/menus/:id` | 删除菜单 |
+| `GET` | `/api/menus/:id/roles` | 菜单授权角色 |
+| `PUT` | `/api/menus/:id/roles` | 覆盖菜单授权角色 |
 | `GET` | `/api/system/configs` | 系统配置列表 |
 | `PUT` | `/api/system/configs/:key` | 创建或更新系统配置 |
+| `DELETE` | `/api/system/configs/:key` | 删除系统配置 |
+| `GET` | `/api/system/params` | 系统参数列表 |
+| `POST` | `/api/system/params` | 创建系统参数 |
+| `POST` | `/api/system/params/batch-delete` | 批量删除系统参数 |
+| `GET` | `/api/system/params/key/:key` | 按键获取系统参数 |
+| `GET` | `/api/system/params/:id` | 系统参数详情 |
+| `PATCH` | `/api/system/params/:id` | 更新系统参数 |
+| `DELETE` | `/api/system/params/:id` | 删除系统参数 |
+| `GET` | `/api/system/versions` | 版本记录列表 |
+| `POST` | `/api/system/versions` | 创建版本记录 |
+| `POST` | `/api/system/versions/export` | 导出版本包 |
+| `POST` | `/api/system/versions/import` | 导入版本包 |
+| `POST` | `/api/system/versions/batch-delete` | 批量删除版本记录 |
+| `GET` | `/api/system/versions/:id` | 版本记录详情 |
+| `GET` | `/api/system/versions/:id/download` | 下载版本记录 JSON |
+| `PATCH` | `/api/system/versions/:id` | 更新版本记录 |
+| `DELETE` | `/api/system/versions/:id` | 删除版本记录 |
 | `GET` | `/api/dictionaries` | 字典列表 |
 | `POST` | `/api/dictionaries` | 创建字典 |
+| `GET` | `/api/dictionaries/export` | 导出字典 JSON |
+| `POST` | `/api/dictionaries/import` | 导入字典 JSON |
 | `PATCH` | `/api/dictionaries/:code` | 更新字典 |
 | `DELETE` | `/api/dictionaries/:code` | 删除字典 |
 | `POST` | `/api/dictionaries/:code/items` | 新增字典项 |
 | `PATCH` | `/api/dictionaries/:code/items/:item_id` | 更新字典项 |
 | `DELETE` | `/api/dictionaries/:code/items/:item_id` | 删除字典项 |
+| `GET` | `/api/file-categories` | 文件分类树 |
+| `POST` | `/api/file-categories` | 创建文件分类 |
+| `PATCH` | `/api/file-categories/:id` | 更新文件分类 |
+| `DELETE` | `/api/file-categories/:id` | 删除文件分类 |
 | `GET` | `/api/files` | 文件列表 |
 | `POST` | `/api/files` | 上传文件 |
+| `POST` | `/api/files/import-url` | 导入外部文件 URL |
+| `PATCH` | `/api/files/:id/name` | 重命名文件 |
+| `DELETE` | `/api/files/:id` | 删除文件 |
 | `GET` | `/api/uploads/*` | 上传文件静态访问 |
 | `GET` | `/api/logs/operations` | 操作日志 |
+| `GET` | `/api/logs/operations/:id` | 操作日志详情 |
+| `DELETE` | `/api/logs/operations/:id` | 删除操作日志 |
+| `POST` | `/api/logs/operations/batch-delete` | 批量删除操作日志 |
 | `GET` | `/api/logs/logins` | 登录日志 |
+| `GET` | `/api/logs/logins/:id` | 登录日志详情 |
+| `DELETE` | `/api/logs/logins/:id` | 删除登录日志 |
+| `POST` | `/api/logs/logins/batch-delete` | 批量删除登录日志 |
+| `GET` | `/api/logs/errors` | 系统错误日志 |
+| `GET` | `/api/logs/errors/:id` | 系统错误日志详情 |
+| `POST` | `/api/logs/errors/:id/resolve` | 标记系统错误已处理 |
+| `DELETE` | `/api/logs/errors/:id/resolve` | 取消系统错误处理状态 |
+| `DELETE` | `/api/logs/errors/:id` | 删除系统错误日志 |
+| `POST` | `/api/logs/errors/batch-delete` | 批量删除系统错误日志 |
 
 ## 新业务模块
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"time"
 
 	drivermysql "github.com/go-sql-driver/mysql"
@@ -28,7 +29,7 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 		return nil, errors.New("create settings store: nil db")
 	}
 	store := &Store{db: db}
-	if err := db.WithContext(ctx).AutoMigrate(&configModel{}, &dictionaryModel{}, &dictionaryItemModel{}); err != nil {
+	if err := db.WithContext(ctx).AutoMigrate(&configModel{}, &paramModel{}, &dictionaryModel{}, &dictionaryItemModel{}, &versionModel{}); err != nil {
 		return nil, apperr.WrapDatabase(err, "migrate settings tables")
 	}
 	if err := store.seed(ctx); err != nil {
@@ -85,6 +86,119 @@ func (s *Store) UpsertConfig(ctx context.Context, config domain.SystemConfig) (d
 	return model.toDomain()
 }
 
+// DeleteConfig removes one config by key.
+func (s *Store) DeleteConfig(ctx context.Context, key string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result := s.db.WithContext(ctx).Delete(&configModel{}, "`key` = ?", key)
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, "delete config")
+	}
+	if result.RowsAffected == 0 {
+		return apperr.NewNotFound("config")
+	}
+	return nil
+}
+
+// ListParams returns parameters ordered by creation time.
+func (s *Store) ListParams(ctx context.Context) ([]domain.SystemParam, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var models []paramModel
+	if err := s.db.WithContext(ctx).Order("id DESC").Find(&models).Error; err != nil {
+		return nil, apperr.WrapDatabase(err, "list system params")
+	}
+	params := make([]domain.SystemParam, 0, len(models))
+	for _, model := range models {
+		param, err := model.toDomain()
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, param)
+	}
+	return params, nil
+}
+
+// FindParamByID returns one parameter by id.
+func (s *Store) FindParamByID(ctx context.Context, id int64) (domain.SystemParam, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemParam{}, err
+	}
+	return s.findParamByID(ctx, id)
+}
+
+// FindParamByKey returns one parameter by key.
+func (s *Store) FindParamByKey(ctx context.Context, key string) (domain.SystemParam, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemParam{}, err
+	}
+	var model paramModel
+	if err := s.db.WithContext(ctx).First(&model, "`key` = ?", key).Error; err != nil {
+		return domain.SystemParam{}, mapReadError(err, "system param", "find system param")
+	}
+	return model.toDomain()
+}
+
+// CreateParam inserts one parameter.
+func (s *Store) CreateParam(ctx context.Context, param domain.SystemParam) (domain.SystemParam, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemParam{}, err
+	}
+	now := time.Now().UTC()
+	model := paramModelFromDomain(param, now)
+	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return domain.SystemParam{}, mapWriteError(err, "system param key already exists", "create system param")
+	}
+	return model.toDomain()
+}
+
+// UpdateParam replaces mutable fields for one parameter.
+func (s *Store) UpdateParam(ctx context.Context, param domain.SystemParam) (domain.SystemParam, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemParam{}, err
+	}
+	now := time.Now().UTC()
+	model := paramModelFromDomain(param, now)
+	result := s.db.WithContext(ctx).Model(&paramModel{}).
+		Where("id = ?", param.ID).
+		Updates(map[string]interface{}{
+			"name":       model.Name,
+			"key":        model.Key,
+			"value":      model.Value,
+			"desc":       model.Desc,
+			"updated_at": now,
+		})
+	if result.Error != nil {
+		return domain.SystemParam{}, mapWriteError(result.Error, "system param key already exists", "update system param")
+	}
+	if result.RowsAffected == 0 {
+		return domain.SystemParam{}, apperr.NewNotFound("system param")
+	}
+	return s.findParamByID(ctx, param.ID)
+}
+
+// DeleteParam removes one parameter by id.
+func (s *Store) DeleteParam(ctx context.Context, id int64) error {
+	return s.DeleteParams(ctx, []int64{id})
+}
+
+// DeleteParams removes parameters by id.
+func (s *Store) DeleteParams(ctx context.Context, ids []int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result := s.db.WithContext(ctx).Delete(&paramModel{}, "id IN ?", ids)
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, "delete system params")
+	}
+	if result.RowsAffected == 0 {
+		return apperr.NewNotFound("system param")
+	}
+	return nil
+}
+
 // ListDictionaries returns dictionaries with items ordered for display.
 func (s *Store) ListDictionaries(ctx context.Context) ([]domain.Dictionary, error) {
 	if err := ctx.Err(); err != nil {
@@ -92,7 +206,7 @@ func (s *Store) ListDictionaries(ctx context.Context) ([]domain.Dictionary, erro
 	}
 	var models []dictionaryModel
 	err := s.db.WithContext(ctx).
-		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("sort ASC, id ASC") }).
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("level ASC, sort ASC, id ASC") }).
 		Order("id DESC").
 		Find(&models).Error
 	if err != nil {
@@ -193,21 +307,46 @@ func (s *Store) UpdateDictionaryItem(ctx context.Context, code string, item doma
 		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
 	}
 	model := dictionaryItemModelFromDomain(dictionary.ID, item)
-	result := s.db.WithContext(ctx).Model(&dictionaryItemModel{}).
-		Where("id = ? AND dictionary_id = ?", item.ID, dictionary.ID).
-		Updates(map[string]interface{}{
-			"label":  model.Label,
-			"value":  model.Value,
-			"sort":   model.Sort,
-			"active": model.Active,
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing dictionaryItemModel
+		if err := tx.First(&existing, "id = ? AND dictionary_id = ?", item.ID, dictionary.ID).Error; err != nil {
+			return mapReadError(err, "dictionary item", "find dictionary item")
+		}
+		result := tx.Model(&existing).Updates(map[string]interface{}{
+			"parent_id": model.ParentID,
+			"label":     model.Label,
+			"value":     model.Value,
+			"extend":    model.Extend,
+			"sort":      model.Sort,
+			"active":    model.Active,
+			"level":     model.Level,
+			"path":      model.Path,
 		})
-	if result.Error != nil {
-		return domain.Dictionary{}, apperr.WrapDatabase(result.Error, "update dictionary item")
-	}
-	if result.RowsAffected == 0 {
-		return domain.Dictionary{}, apperr.NewNotFound("dictionary item")
+		if result.Error != nil {
+			return apperr.WrapDatabase(result.Error, "update dictionary item")
+		}
+		return refreshDictionaryItemChildren(tx, dictionary.ID, item.ID)
+	})
+	if err != nil {
+		return domain.Dictionary{}, err
 	}
 	return s.findDictionaryByCode(ctx, code)
+}
+
+// FindDictionaryItem returns one item under a dictionary code.
+func (s *Store) FindDictionaryItem(ctx context.Context, code string, itemID int64) (domain.DictionaryItem, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.DictionaryItem{}, err
+	}
+	var item dictionaryItemModel
+	err := s.db.WithContext(ctx).
+		Joins("JOIN settings_dictionaries ON settings_dictionaries.id = settings_dictionary_items.dictionary_id").
+		Where("settings_dictionaries.code = ? AND settings_dictionary_items.id = ?", code, itemID).
+		First(&item).Error
+	if err != nil {
+		return domain.DictionaryItem{}, mapReadError(err, "dictionary item", "find dictionary item")
+	}
+	return item.toDomain()
 }
 
 // DeleteDictionaryItem removes one dictionary item under code.
@@ -219,6 +358,15 @@ func (s *Store) DeleteDictionaryItem(ctx context.Context, code string, itemID in
 	if err := s.db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
 		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
 	}
+	var children int64
+	if err := s.db.WithContext(ctx).Model(&dictionaryItemModel{}).
+		Where("dictionary_id = ? AND parent_id = ?", dictionary.ID, itemID).
+		Count(&children).Error; err != nil {
+		return domain.Dictionary{}, apperr.WrapDatabase(err, "count dictionary item children")
+	}
+	if children > 0 {
+		return domain.Dictionary{}, apperr.NewBadRequest("dictionary item has children")
+	}
 	result := s.db.WithContext(ctx).Delete(&dictionaryItemModel{}, "id = ? AND dictionary_id = ?", itemID, dictionary.ID)
 	if result.Error != nil {
 		return domain.Dictionary{}, apperr.WrapDatabase(result.Error, "delete dictionary item")
@@ -227,6 +375,96 @@ func (s *Store) DeleteDictionaryItem(ctx context.Context, code string, itemID in
 		return domain.Dictionary{}, apperr.NewNotFound("dictionary item")
 	}
 	return s.findDictionaryByCode(ctx, code)
+}
+
+// ListVersions returns release records in reverse chronological order.
+func (s *Store) ListVersions(ctx context.Context) ([]domain.SystemVersion, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var models []versionModel
+	if err := s.db.WithContext(ctx).Order("published_at DESC, id DESC").Find(&models).Error; err != nil {
+		return nil, apperr.WrapDatabase(err, "list system versions")
+	}
+	versions := make([]domain.SystemVersion, 0, len(models))
+	for _, model := range models {
+		version, err := model.toDomain()
+		if err != nil {
+			return nil, err
+		}
+		versions = append(versions, version)
+	}
+	return versions, nil
+}
+
+// FindVersionByID returns one release record by id.
+func (s *Store) FindVersionByID(ctx context.Context, id int64) (domain.SystemVersion, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemVersion{}, err
+	}
+	return s.findVersionByID(ctx, id)
+}
+
+// CreateVersion inserts one release record.
+func (s *Store) CreateVersion(ctx context.Context, version domain.SystemVersion) (domain.SystemVersion, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemVersion{}, err
+	}
+	now := time.Now().UTC()
+	model := versionModelFromDomain(version, now)
+	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return domain.SystemVersion{}, mapWriteError(err, "system version already exists", "create system version")
+	}
+	return model.toDomain()
+}
+
+// UpdateVersion changes one release record by id.
+func (s *Store) UpdateVersion(ctx context.Context, version domain.SystemVersion) (domain.SystemVersion, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemVersion{}, err
+	}
+	now := time.Now().UTC()
+	model := versionModelFromDomain(version, now)
+	result := s.db.WithContext(ctx).Model(&versionModel{}).
+		Where("id = ?", version.ID).
+		Updates(map[string]interface{}{
+			"version":      model.Version,
+			"name":         model.Name,
+			"description":  model.Description,
+			"data":         model.Data,
+			"published_at": model.PublishedAt,
+			"updated_at":   now,
+		})
+	if result.Error != nil {
+		return domain.SystemVersion{}, mapWriteError(result.Error, "system version already exists", "update system version")
+	}
+	if result.RowsAffected == 0 {
+		return domain.SystemVersion{}, apperr.NewNotFound("system version")
+	}
+	return s.findVersionByID(ctx, version.ID)
+}
+
+// DeleteVersion removes one release record.
+func (s *Store) DeleteVersion(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.DeleteVersions(ctx, []int64{id})
+}
+
+// DeleteVersions removes release records by id.
+func (s *Store) DeleteVersions(ctx context.Context, ids []int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result := s.db.WithContext(ctx).Delete(&versionModel{}, "id IN ?", ids)
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, "delete system version")
+	}
+	if result.RowsAffected == 0 {
+		return apperr.NewNotFound("system version")
+	}
+	return nil
 }
 
 func (s *Store) seed(ctx context.Context) error {
@@ -250,11 +488,11 @@ func (s *Store) seedStatusDictionary(ctx context.Context) error {
 		return apperr.WrapDatabase(err, "find seed dictionary")
 	}
 	now := time.Now().UTC()
-	enabled, err := domain.RestoreDictionaryItem(0, "启用", "enabled", 10, true)
+	enabled, err := domain.RestoreDictionaryItem(0, 0, "启用", "enabled", "", 10, true, 0, "", nil)
 	if err != nil {
 		return err
 	}
-	disabled, err := domain.RestoreDictionaryItem(0, "禁用", "disabled", 20, true)
+	disabled, err := domain.RestoreDictionaryItem(0, 0, "禁用", "disabled", "", 20, true, 0, "", nil)
 	if err != nil {
 		return err
 	}
@@ -276,6 +514,22 @@ func (s *Store) findDictionaryByCode(ctx context.Context, code string) (domain.D
 		First(&model, "code = ?", code).Error
 	if err != nil {
 		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
+	}
+	return model.toDomain()
+}
+
+func (s *Store) findVersionByID(ctx context.Context, id int64) (domain.SystemVersion, error) {
+	var model versionModel
+	if err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
+		return domain.SystemVersion{}, mapReadError(err, "system version", "find system version")
+	}
+	return model.toDomain()
+}
+
+func (s *Store) findParamByID(ctx context.Context, id int64) (domain.SystemParam, error) {
+	var model paramModel
+	if err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
+		return domain.SystemParam{}, mapReadError(err, "system param", "find system param")
 	}
 	return model.toDomain()
 }
@@ -304,6 +558,36 @@ func configModelFromDomain(config domain.SystemConfig, updatedAt time.Time) conf
 
 func (m configModel) toDomain() (domain.SystemConfig, error) {
 	return domain.RestoreSystemConfig(m.Key, m.Name, m.Value, m.Public, m.UpdatedAt)
+}
+
+type paramModel struct {
+	ID        int64     `gorm:"primaryKey"`
+	Name      string    `gorm:"type:varchar(120);not null"`
+	Key       string    `gorm:"column:key;type:varchar(80);not null;uniqueIndex"`
+	Value     string    `gorm:"type:text;not null"`
+	Desc      string    `gorm:"type:text;not null"`
+	CreatedAt time.Time `gorm:"not null"`
+	UpdatedAt time.Time `gorm:"not null"`
+}
+
+func (paramModel) TableName() string {
+	return "settings_system_params"
+}
+
+func paramModelFromDomain(param domain.SystemParam, now time.Time) paramModel {
+	return paramModel{
+		ID:        param.ID,
+		Name:      param.Name,
+		Key:       param.Key,
+		Value:     param.Value,
+		Desc:      param.Desc,
+		CreatedAt: coalesceTime(param.CreatedAt, now),
+		UpdatedAt: coalesceTime(param.UpdatedAt, now),
+	}
+}
+
+func (m paramModel) toDomain() (domain.SystemParam, error) {
+	return domain.RestoreSystemParam(m.ID, m.Name, m.Key, m.Value, m.Desc, m.CreatedAt, m.UpdatedAt)
 }
 
 type dictionaryModel struct {
@@ -356,10 +640,14 @@ func (m dictionaryModel) toDomain() (domain.Dictionary, error) {
 type dictionaryItemModel struct {
 	ID           int64  `gorm:"primaryKey"`
 	DictionaryID int64  `gorm:"not null;index"`
+	ParentID     int64  `gorm:"not null;default:0;index"`
 	Label        string `gorm:"type:varchar(120);not null"`
 	Value        string `gorm:"type:varchar(120);not null"`
+	Extend       string `gorm:"type:text;not null"`
 	Sort         int    `gorm:"not null"`
 	Active       bool   `gorm:"not null"`
+	Level        int    `gorm:"not null;default:0;index"`
+	Path         string `gorm:"type:text;not null"`
 }
 
 func (dictionaryItemModel) TableName() string {
@@ -370,15 +658,81 @@ func dictionaryItemModelFromDomain(dictionaryID int64, item domain.DictionaryIte
 	return dictionaryItemModel{
 		ID:           item.ID,
 		DictionaryID: dictionaryID,
+		ParentID:     item.ParentID,
 		Label:        item.Label,
 		Value:        item.Value,
+		Extend:       item.Extend,
 		Sort:         item.Sort,
 		Active:       item.Active,
+		Level:        item.Level,
+		Path:         item.Path,
 	}
 }
 
 func (m dictionaryItemModel) toDomain() (domain.DictionaryItem, error) {
-	return domain.RestoreDictionaryItem(m.ID, m.Label, m.Value, m.Sort, m.Active)
+	return domain.RestoreDictionaryItem(m.ID, m.ParentID, m.Label, m.Value, m.Extend, m.Sort, m.Active, m.Level, m.Path, nil)
+}
+
+func refreshDictionaryItemChildren(tx *gorm.DB, dictionaryID, parentID int64) error {
+	var parent dictionaryItemModel
+	if err := tx.First(&parent, "id = ? AND dictionary_id = ?", parentID, dictionaryID).Error; err != nil {
+		return mapReadError(err, "dictionary item", "find dictionary item")
+	}
+	var children []dictionaryItemModel
+	if err := tx.Where("dictionary_id = ? AND parent_id = ?", dictionaryID, parentID).Find(&children).Error; err != nil {
+		return apperr.WrapDatabase(err, "list dictionary item children")
+	}
+	for _, child := range children {
+		child.Level = parent.Level + 1
+		child.Path = childPath(parent)
+		if err := tx.Save(&child).Error; err != nil {
+			return apperr.WrapDatabase(err, "update dictionary item child path")
+		}
+		if err := refreshDictionaryItemChildren(tx, dictionaryID, child.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func childPath(parent dictionaryItemModel) string {
+	parentID := strconv.FormatInt(parent.ID, 10)
+	if parent.Path == "" {
+		return parentID
+	}
+	return parent.Path + "," + parentID
+}
+
+type versionModel struct {
+	ID          int64     `gorm:"primaryKey"`
+	Version     string    `gorm:"type:varchar(80);not null;uniqueIndex"`
+	Name        string    `gorm:"type:varchar(120);not null"`
+	Description string    `gorm:"type:text;not null"`
+	Data        string    `gorm:"type:longtext"`
+	PublishedAt time.Time `gorm:"not null;index"`
+	CreatedAt   time.Time `gorm:"not null"`
+	UpdatedAt   time.Time `gorm:"not null"`
+}
+
+func (versionModel) TableName() string {
+	return "settings_system_versions"
+}
+
+func versionModelFromDomain(version domain.SystemVersion, now time.Time) versionModel {
+	return versionModel{
+		ID:          version.ID,
+		Version:     version.Version,
+		Name:        version.Name,
+		Description: version.Description,
+		Data:        version.Data,
+		PublishedAt: coalesceTime(version.PublishedAt, now),
+		CreatedAt:   coalesceTime(version.CreatedAt, now),
+		UpdatedAt:   coalesceTime(version.UpdatedAt, now),
+	}
+}
+
+func (m versionModel) toDomain() (domain.SystemVersion, error) {
+	return domain.RestoreSystemVersion(m.ID, m.Version, m.Name, m.Description, m.Data, m.PublishedAt, m.CreatedAt, m.UpdatedAt)
 }
 
 func mapReadError(err error, resource, operation string) error {

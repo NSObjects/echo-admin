@@ -22,7 +22,7 @@ import (
 
 func TestAuthFlowReturnsCurrentUser(t *testing.T) {
 	e := newTestEcho(t)
-	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"admin123"}`, "")
+	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
 	}
@@ -39,12 +39,80 @@ func TestAuthFlowReturnsCurrentUser(t *testing.T) {
 	if body.Data.Username != "admin" {
 		t.Fatalf("me username = %q, want admin", body.Data.Username)
 	}
+	if len(body.Data.Menus) != 1 || body.Data.Menus[0].Component != "./Admins" {
+		t.Fatalf("me menus = %#v, want one admins menu with component", body.Data.Menus)
+	}
+}
+
+func TestLogoutBlacklistsCurrentToken(t *testing.T) {
+	e := newTestEcho(t)
+	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
+	}
+	token := decodeLoginResponse(t, login).Data.Token
+
+	logout := doJSON(t, e, http.MethodPost, "/api/auth/logout", "", token)
+	if logout.Code != http.StatusOK {
+		t.Fatalf("logout status = %d, want %d: %s", logout.Code, http.StatusOK, logout.Body.String())
+	}
+	me := doJSON(t, e, http.MethodGet, "/api/auth/me", "", token)
+	if me.Code != http.StatusUnauthorized {
+		t.Fatalf("me status after logout = %d, want %d: %s", me.Code, http.StatusUnauthorized, me.Body.String())
+	}
+}
+
+func TestChangePasswordRevokesCurrentToken(t *testing.T) {
+	e := newTestEcho(t)
+	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
+	}
+	token := decodeLoginResponse(t, login).Data.Token
+
+	change := doJSON(t, e, http.MethodPost, "/api/auth/password", `{"current_password":"123456","new_password":"changed123"}`, token)
+	if change.Code != http.StatusOK {
+		t.Fatalf("change password status = %d, want %d: %s", change.Code, http.StatusOK, change.Body.String())
+	}
+	me := doJSON(t, e, http.MethodGet, "/api/auth/me", "", token)
+	if me.Code != http.StatusUnauthorized {
+		t.Fatalf("me status after password change = %d, want %d: %s", me.Code, http.StatusUnauthorized, me.Body.String())
+	}
+	oldLogin := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	if oldLogin.Code != http.StatusUnauthorized {
+		t.Fatalf("old login status = %d, want %d: %s", oldLogin.Code, http.StatusUnauthorized, oldLogin.Body.String())
+	}
+	newLogin := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"changed123"}`, "")
+	if newLogin.Code != http.StatusOK {
+		t.Fatalf("new login status = %d, want %d: %s", newLogin.Code, http.StatusOK, newLogin.Body.String())
+	}
+}
+
+func TestUpdateProfileReturnsCurrentUser(t *testing.T) {
+	e := newTestEcho(t)
+	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
+	}
+	token := decodeLoginResponse(t, login).Data.Token
+
+	update := doJSON(t, e, http.MethodPatch, "/api/auth/me", `{"display_name":"平台管理员","email":"ops@example.com"}`, token)
+	if update.Code != http.StatusOK {
+		t.Fatalf("update profile status = %d, want %d: %s", update.Code, http.StatusOK, update.Body.String())
+	}
+	body := decodeCurrentUserResponse(t, update)
+	if body.Data.DisplayName != "平台管理员" {
+		t.Fatalf("display name = %q, want 平台管理员", body.Data.DisplayName)
+	}
+	if body.Data.Email != "ops@example.com" {
+		t.Fatalf("email = %q, want ops@example.com", body.Data.Email)
+	}
 }
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
 	store := newAuthStore(t)
-	uc := authusecase.New(store, store, store, &loginRecorder{}, "test-secret")
+	uc := authusecase.New(store, store, store, store, store, &loginRecorder{}, "test-secret")
 	handler := authhttp.New(uc)
 
 	e := echo.New()
@@ -55,6 +123,7 @@ func newTestEcho(t *testing.T) *echo.Echo {
 		Enabled:    true,
 		SigningKey: []byte("test-secret"),
 		SkipPaths:  []string{"/api/auth/login"},
+		Blocklist:  uc,
 	})
 	if err != nil {
 		t.Fatalf("JWT() error = %v", err)
@@ -66,7 +135,7 @@ func newTestEcho(t *testing.T) *echo.Echo {
 
 func newAuthStore(t *testing.T) *authStore {
 	t.Helper()
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
 	if err != nil {
 		t.Fatalf("GenerateFromPassword() error = %v", err)
 	}
@@ -75,15 +144,20 @@ func newAuthStore(t *testing.T) *authStore {
 	if err != nil {
 		t.Fatalf("RestoreAdmin() error = %v", err)
 	}
-	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", []string{accessdomain.PermissionAdminRead}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
+	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", []string{accessdomain.PermissionAdminRead}, []int64{1}, []int64{1}, nil, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole() error = %v", err)
 	}
-	menu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", accessdomain.PermissionAdminRead, 10, true, now, now)
+	menu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", false, "./Admins", accessdomain.MenuMeta{}, accessdomain.PermissionAdminRead, 10, true, nil, now, now)
 	if err != nil {
 		t.Fatalf("RestoreMenu() error = %v", err)
 	}
-	return &authStore{admin: admin, role: role, menu: menu}
+	return &authStore{
+		admin:       admin,
+		role:        role,
+		menu:        menu,
+		blacklisted: map[string]time.Time{},
+	}
 }
 
 func doJSON(t *testing.T, e *echo.Echo, method, path, body, token string) *httptest.ResponseRecorder {
@@ -99,9 +173,10 @@ func doJSON(t *testing.T, e *echo.Echo, method, path, body, token string) *httpt
 }
 
 type authStore struct {
-	admin identitydomain.Admin
-	role  accessdomain.Role
-	menu  accessdomain.Menu
+	admin       identitydomain.Admin
+	role        accessdomain.Role
+	menu        accessdomain.Menu
+	blacklisted map[string]time.Time
 }
 
 func (s *authStore) FindByUsername(context.Context, string) (identitydomain.Admin, error) {
@@ -123,6 +198,20 @@ func (s *authStore) FindRoleByID(context.Context, int64) (accessdomain.Role, err
 
 func (s *authStore) ListMenus(context.Context) ([]accessdomain.Menu, error) {
 	return []accessdomain.Menu{s.menu}, nil
+}
+
+func (s *authStore) ListAPIs(context.Context) ([]accessdomain.API, error) {
+	return nil, nil
+}
+
+func (s *authStore) AddJWTBlacklist(_ context.Context, entry authusecase.JWTBlacklistEntry) error {
+	s.blacklisted[entry.TokenHash] = entry.ExpiresAt
+	return nil
+}
+
+func (s *authStore) JWTBlacklisted(_ context.Context, tokenHash string, now time.Time) (bool, error) {
+	expiresAt, ok := s.blacklisted[tokenHash]
+	return ok && now.Before(expiresAt), nil
 }
 
 type loginRecorder struct{}
@@ -148,7 +237,12 @@ func decodeLoginResponse(t *testing.T, rec *httptest.ResponseRecorder) loginResp
 
 type currentUserResponse struct {
 	Data struct {
-		Username string `json:"username"`
+		Username    string `json:"username"`
+		DisplayName string `json:"display_name"`
+		Email       string `json:"email"`
+		Menus       []struct {
+			Component string `json:"component"`
+		} `json:"menus"`
 	} `json:"data"`
 }
 

@@ -3,6 +3,7 @@ import {
   DeleteOutlined,
   PlusOutlined,
   ReloadOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
@@ -26,6 +27,10 @@ import {
   copyRole,
   createRole,
   deleteRole,
+  listRoleAdmins,
+  listAdmins,
+  listAPIs,
+  type AdminUser,
   type ListParams,
   listMenus,
   listPermissions,
@@ -34,7 +39,9 @@ import {
   type PageMeta,
   type PermissionDefinition,
   type Role,
+  setRoleAdmins,
   updateRole,
+  type APIResource,
 } from '@/services/admin';
 
 type RoleFormValues = {
@@ -43,6 +50,9 @@ type RoleFormValues = {
   name: string;
   permissions: string[];
   menu_ids?: number[];
+  api_ids?: number[];
+  button_ids?: number[];
+  data_role_ids?: number[];
   default_path?: string;
   active: boolean;
 };
@@ -50,27 +60,45 @@ type RoleFormValues = {
 const Roles: React.FC = () => {
   const access = useAccess();
   const [roles, setRoles] = useState<Role[]>([]);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [menus, setMenus] = useState<Menu[]>([]);
+  const [apis, setAPIs] = useState<APIResource[]>([]);
   const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
   const [page, setPage] = useState<PageMeta>();
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [editing, setEditing] = useState<Role>();
   const [copying, setCopying] = useState<Role>();
+  const [memberRole, setMemberRole] = useState<Role>();
+  const [memberAdminIDs, setMemberAdminIDs] = useState<number[]>([]);
   const [form] = Form.useForm<RoleFormValues>();
 
   const loadData = async (params: ListParams = {}) => {
     setLoading(true);
     try {
-      const [roleResponse, menuResponse, permissionResponse] =
-        await Promise.all([
-          listRoles(params),
-          access.canMenuRead ? listMenus() : Promise.resolve([]),
-          listPermissions(),
-        ]);
+      const [
+        roleResponse,
+        adminResponse,
+        menuResponse,
+        apiResponse,
+        permissionResponse,
+      ] = await Promise.all([
+        listRoles(params),
+        access.canAdminRead
+          ? listAdmins({ page_size: 100 })
+          : Promise.resolve({ data: [] }),
+        access.canMenuRead ? listMenus() : Promise.resolve([]),
+        access.canApiRead
+          ? listAPIs({ page_size: 100 })
+          : Promise.resolve({ data: [] }),
+        listPermissions(),
+      ]);
       setRoles(roleResponse.data);
+      setAdmins(adminResponse.data);
       setPage(roleResponse.page);
       setMenus(menuResponse);
+      setAPIs(apiResponse.data);
       setPermissions(permissionResponse);
     } finally {
       setLoading(false);
@@ -90,6 +118,9 @@ const Roles: React.FC = () => {
       parent_id: 0,
       permissions: [],
       menu_ids: [],
+      api_ids: [],
+      button_ids: [],
+      data_role_ids: [],
       default_path: '/dashboard',
     });
     setModalOpen(true);
@@ -104,6 +135,9 @@ const Roles: React.FC = () => {
       name: record.name,
       permissions: record.permissions,
       menu_ids: record.menu_ids,
+      api_ids: record.api_ids,
+      button_ids: record.button_ids,
+      data_role_ids: record.data_role_ids,
       default_path: record.default_path,
       active: record.active,
     });
@@ -119,6 +153,9 @@ const Roles: React.FC = () => {
       name: `${record.name}副本`,
       permissions: record.permissions,
       menu_ids: record.menu_ids,
+      api_ids: record.api_ids,
+      button_ids: record.button_ids,
+      data_role_ids: record.data_role_ids,
       default_path: record.default_path,
       active: record.active,
     });
@@ -133,6 +170,9 @@ const Roles: React.FC = () => {
         name: values.name,
         permissions: values.permissions,
         menu_ids: values.menu_ids,
+        api_ids: values.api_ids,
+        button_ids: values.button_ids,
+        data_role_ids: values.data_role_ids,
         default_path: values.default_path,
         active: values.active,
       });
@@ -153,6 +193,9 @@ const Roles: React.FC = () => {
         name: values.name,
         permissions: values.permissions,
         menu_ids: values.menu_ids,
+        api_ids: values.api_ids,
+        button_ids: values.button_ids,
+        data_role_ids: values.data_role_ids,
         default_path: values.default_path,
         active: values.active,
       });
@@ -160,6 +203,24 @@ const Roles: React.FC = () => {
     }
     setModalOpen(false);
     setCopying(undefined);
+    await loadData({ page: page?.page, page_size: page?.page_size });
+  };
+
+  const openMembers = async (record: Role) => {
+    setMemberRole(record);
+    setMembersOpen(true);
+    setMemberAdminIDs(await listRoleAdmins(record.id));
+  };
+
+  const submitMembers = async () => {
+    if (!memberRole) {
+      return;
+    }
+    const assignedIDs = await setRoleAdmins(memberRole.id, memberAdminIDs);
+    setMemberAdminIDs(assignedIDs);
+    message.success('角色成员已更新');
+    setMembersOpen(false);
+    setMemberRole(undefined);
     await loadData({ page: page?.page, page_size: page?.page_size });
   };
 
@@ -197,6 +258,21 @@ const Roles: React.FC = () => {
       dataIndex: 'menu_ids',
       render: (menuIDs: number[]) => `${menuIDs.length} 个`,
     },
+    {
+      title: 'API',
+      dataIndex: 'api_ids',
+      render: (apiIDs: number[]) => `${apiIDs.length} 个`,
+    },
+    {
+      title: '按钮',
+      dataIndex: 'button_ids',
+      render: (buttonIDs: number[]) => `${buttonIDs.length} 个`,
+    },
+    {
+      title: '数据权限',
+      dataIndex: 'data_role_ids',
+      render: (roleIDs: number[]) => `${roleIDs.length} 个`,
+    },
     { title: '入口', dataIndex: 'default_path' },
     {
       title: '状态',
@@ -224,6 +300,15 @@ const Roles: React.FC = () => {
               onClick={() => openCopy(record)}
             >
               复制
+            </Button>
+          ) : null}
+          {access.canRoleUpdate && access.canAdminRead ? (
+            <Button
+              type="link"
+              icon={<TeamOutlined />}
+              onClick={() => void openMembers(record)}
+            >
+              成员
             </Button>
           ) : null}
           {access.canRoleDelete ? (
@@ -260,6 +345,24 @@ const Roles: React.FC = () => {
   const menuOptions = menus.map((menu) => ({
     label: menu.name,
     value: menu.id,
+  }));
+  const apiOptions = apis.map((api) => ({
+    label: `${api.group} / ${api.description} (${api.method} ${api.path})`,
+    value: api.id,
+  }));
+  const buttonOptions = menus.flatMap((menu) =>
+    menu.buttons.map((button) => ({
+      label: `${menu.name} / ${button.description || button.name} (${button.name})`,
+      value: button.id,
+    })),
+  );
+  const dataRoleOptions = roles.map((role) => ({
+    label: role.name,
+    value: role.id,
+  }));
+  const adminOptions = admins.map((admin) => ({
+    label: `${admin.display_name} (${admin.username})`,
+    value: admin.id,
   }));
 
   return (
@@ -344,6 +447,27 @@ const Roles: React.FC = () => {
               options={menuOptions}
             />
           </Form.Item>
+          <Form.Item label="API" name="api_ids">
+            <Select
+              disabled={Boolean(copying)}
+              mode="multiple"
+              options={apiOptions}
+            />
+          </Form.Item>
+          <Form.Item label="按钮" name="button_ids">
+            <Select
+              disabled={Boolean(copying)}
+              mode="multiple"
+              options={buttonOptions}
+            />
+          </Form.Item>
+          <Form.Item label="数据权限" name="data_role_ids">
+            <Select
+              disabled={Boolean(copying)}
+              mode="multiple"
+              options={dataRoleOptions}
+            />
+          </Form.Item>
           <Form.Item
             label="默认入口"
             name="default_path"
@@ -355,6 +479,24 @@ const Roles: React.FC = () => {
             <Switch />
           </Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        title={memberRole ? `${memberRole.name}成员` : '角色成员'}
+        open={membersOpen}
+        onOk={() => void submitMembers()}
+        onCancel={() => {
+          setMembersOpen(false);
+          setMemberRole(undefined);
+        }}
+        destroyOnHidden
+      >
+        <Select
+          mode="multiple"
+          style={{ width: '100%' }}
+          value={memberAdminIDs}
+          options={adminOptions}
+          onChange={setMemberAdminIDs}
+        />
       </Modal>
     </PageContainer>
   );

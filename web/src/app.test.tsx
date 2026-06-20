@@ -138,9 +138,19 @@ describe('app menu filtering', () => {
           name: '工作台',
           path: '/dashboard',
           icon: 'dashboard',
+          hidden: false,
+          component: './Dashboard',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
           permission: '',
           sort: 10,
           active: true,
+          buttons: [],
         },
         {
           id: 2,
@@ -148,9 +158,19 @@ describe('app menu filtering', () => {
           name: '角色权限',
           path: '/roles',
           icon: 'safety',
+          hidden: false,
+          component: './Roles',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
           permission: 'role:read',
           sort: 20,
           active: true,
+          buttons: [],
         },
       ],
     );
@@ -179,9 +199,19 @@ describe('app menu filtering', () => {
           name: '系统配置',
           path: '/configs',
           icon: 'setting',
+          hidden: false,
+          component: './Configs',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
           permission: 'config:read',
           sort: 10,
           active: true,
+          buttons: [],
         },
       ],
     );
@@ -193,5 +223,60 @@ describe('app menu filtering', () => {
         routes: [{ path: '/configs', name: 'configs' }],
       },
     ]);
+  });
+
+  it('excludes backend hidden menus from layout navigation', async () => {
+    const { filterMenuDataByGrantedMenus } = await import('./runtime/menu');
+
+    const filtered = filterMenuDataByGrantedMenus(
+      [
+        { path: '/dashboard', name: 'dashboard' },
+        { path: '/menus', name: 'menus' },
+      ],
+      [
+        {
+          id: 1,
+          parent_id: 0,
+          name: '工作台',
+          path: '/dashboard',
+          icon: 'dashboard',
+          hidden: false,
+          component: './Dashboard',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
+          permission: '',
+          sort: 10,
+          active: true,
+          buttons: [],
+        },
+        {
+          id: 2,
+          parent_id: 0,
+          name: '菜单管理',
+          path: '/menus',
+          icon: 'menu',
+          hidden: true,
+          component: './Menus',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
+          permission: 'menu:read',
+          sort: 20,
+          active: true,
+          buttons: [],
+        },
+      ],
+    );
+
+    expect(filtered.map((item) => item.path)).toEqual(['/dashboard']);
   });
 });

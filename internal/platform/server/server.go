@@ -25,6 +25,9 @@ type Server struct {
 	config         *Config
 	appConfig      configs.Config
 	statusReporter StatusReporter
+	apiKeyVerifier middlewares.APIKeyVerifier
+	errorRecorder  middlewares.SystemErrorRecorder
+	jwtBlocklist   middlewares.JWTBlocklistChecker
 }
 
 type healthResponse struct {
@@ -66,10 +69,46 @@ type capabilitiesResponse struct {
 // Option customizes the HTTP server.
 type Option func(*Server)
 
+// APIKeyIdentity is the server-owned identity shape returned by API key auth.
+type APIKeyIdentity = middlewares.APIKeyIdentity
+
+// APIKeyVerifier verifies API key credentials before JWT middleware runs.
+type APIKeyVerifier = middlewares.APIKeyVerifier
+
+// SystemErrorRecorder stores internal API failure diagnostics.
+type SystemErrorRecorder = middlewares.SystemErrorRecorder
+
+// SystemErrorInput is the server-owned diagnostic payload for internal errors.
+type SystemErrorInput = middlewares.SystemErrorInput
+
+// JWTBlocklistChecker reports whether a raw JWT has been revoked.
+type JWTBlocklistChecker = middlewares.JWTBlocklistChecker
+
 // WithStatusReporter installs the readiness and capability reporter.
 func WithStatusReporter(reporter StatusReporter) Option {
 	return func(s *Server) {
 		s.statusReporter = reporter
+	}
+}
+
+// WithAPIKeyVerifier installs optional API token authentication.
+func WithAPIKeyVerifier(verifier APIKeyVerifier) Option {
+	return func(s *Server) {
+		s.apiKeyVerifier = verifier
+	}
+}
+
+// WithSystemErrorRecorder installs optional internal-error recording.
+func WithSystemErrorRecorder(recorder SystemErrorRecorder) Option {
+	return func(s *Server) {
+		s.errorRecorder = recorder
+	}
+}
+
+// WithJWTBlocklistChecker installs optional server-side JWT revocation checks.
+func WithJWTBlocklistChecker(checker JWTBlocklistChecker) Option {
+	return func(s *Server) {
+		s.jwtBlocklist = checker
 	}
 }
 
@@ -115,7 +154,7 @@ func New(cfg configs.Config, opts ...Option) (*Server, error) {
 
 func (s *Server) configureEcho() {
 	s.echo.Validator = &middlewares.Validator{Validator: validator.New()}
-	s.echo.HTTPErrorHandler = middlewares.ErrorHandler
+	s.echo.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(s.errorRecorder)
 }
 
 func (s *Server) installMiddleware() error {
@@ -131,6 +170,7 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 		s.appConfig.JWT.SkipPaths,
 		s.appConfig.JWT.Enabled,
 	)
+	jwtConfig.Blocklist = s.jwtBlocklist
 	httpConfig := s.appConfig.HTTP
 
 	return &middlewares.MiddlewareConfig{
@@ -142,8 +182,14 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 		EnableGzip:           !httpConfig.GzipDisabled,
 		EnableCORS:           httpConfig.CORS.Enabled,
 		CORS:                 corsMiddlewareConfig(httpConfig.CORS),
-		EnableJWT:            jwtConfig.Enabled,
-		JWT:                  jwtConfig,
+		EnableAPIKey:         s.apiKeyVerifier != nil,
+		APIKey: &middlewares.APIKeyConfig{
+			Header:   middlewares.APIKeyHeader,
+			Verifier: s.apiKeyVerifier,
+			Enabled:  s.apiKeyVerifier != nil,
+		},
+		EnableJWT: jwtConfig.Enabled,
+		JWT:       jwtConfig,
 	}
 }
 

@@ -19,7 +19,7 @@ export function filterMenuDataByGrantedMenus(
 ): NavigationItem[] {
   const allowedPaths = new Set(
     menus
-      .filter((menu) => menu.active)
+      .filter((menu) => menu.active && !menu.hidden)
       .map((menu) => normalizeMenuPath(menu.path))
       .filter(Boolean),
   );
@@ -37,7 +37,11 @@ function filterNavigationItems(
     const children = filterNavigationItems(item.children, allowedPaths);
     const routes = filterNavigationItems(item.routes, allowedPaths);
     const path = normalizeMenuPath(item.path);
-    if (!allowedPaths.has(path) && children.length === 0 && routes.length === 0) {
+    if (
+      !allowedPaths.has(path) &&
+      children.length === 0 &&
+      routes.length === 0
+    ) {
       continue;
     }
     out.push({

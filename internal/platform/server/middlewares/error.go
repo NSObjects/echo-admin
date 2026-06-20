@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"runtime/debug"
@@ -9,11 +10,41 @@ import (
 
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
+	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
-// ErrorHandler 增强的错误处理器
+// SystemErrorInput carries one internal API failure to a persistence adapter.
+type SystemErrorInput struct {
+	Code      int
+	Message   string
+	Detail    string
+	Method    string
+	Path      string
+	IP        string
+	UserAgent string
+	RequestID string
+	UserID    string
+}
+
+// SystemErrorRecorder stores internal API failure diagnostics outside the server.
+type SystemErrorRecorder interface {
+	RecordSystemError(context.Context, SystemErrorInput) error
+}
+
+// ErrorHandler renders API errors without persistent system error recording.
 func ErrorHandler(c *echo.Context, err error) {
+	handleError(c, err, nil)
+}
+
+// ErrorHandlerWithRecorder renders API errors and records internal failures.
+func ErrorHandlerWithRecorder(recorder SystemErrorRecorder) echo.HTTPErrorHandler {
+	return func(c *echo.Context, err error) {
+		handleError(c, err, recorder)
+	}
+}
+
+func handleError(c *echo.Context, err error, recorder SystemErrorRecorder) {
 	if response, unwrapErr := echo.UnwrapResponse(c.Response()); unwrapErr == nil && response.Committed {
 		return
 	}
@@ -21,6 +52,7 @@ func ErrorHandler(c *echo.Context, err error) {
 	normalized := normalizeError(err)
 	info := apperr.NewInfo(normalized)
 	logAPIError(c, info)
+	recordSystemError(c, info, recorder)
 	if renderErr := httpresp.APIError(c, normalized); renderErr != nil {
 		logging.FromContext(c.Request().Context()).
 			Error().
@@ -102,7 +134,31 @@ func logAPIError(c *echo.Context, info apperr.Info) {
 	event.Msg("API business error")
 }
 
-// ErrorRecovery 错误恢复中间件
+func recordSystemError(c *echo.Context, info apperr.Info, recorder SystemErrorRecorder) {
+	if recorder == nil || !info.IsInternal() {
+		return
+	}
+	input := SystemErrorInput{
+		Code:      info.Code,
+		Message:   info.Message,
+		Detail:    info.Detail,
+		Method:    c.Request().Method,
+		Path:      requestPath(c),
+		IP:        c.RealIP(),
+		UserAgent: c.Request().UserAgent(),
+		RequestID: httpresp.RequestID(c),
+		UserID:    requestctx.GetUserID(c.Request().Context()),
+	}
+	if err := recorder.RecordSystemError(c.Request().Context(), input); err != nil {
+		logging.FromContext(c.Request().Context()).
+			Error().
+			Err(err).
+			Str("request_id", input.RequestID).
+			Msg("system error record failed")
+	}
+}
+
+// ErrorRecovery recovers panics at the HTTP boundary.
 func ErrorRecovery() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
@@ -112,7 +168,7 @@ func ErrorRecovery() echo.MiddlewareFunc {
 						fmt.Errorf("panic recovered: %v\n%s", r, debug.Stack()),
 						"internal server error",
 					)
-					ErrorHandler(c, err)
+					c.Echo().HTTPErrorHandler(c, err)
 				}
 			}()
 

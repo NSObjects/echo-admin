@@ -1,4 +1,4 @@
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
@@ -7,6 +7,7 @@ import {
   Input,
   Modal,
   message,
+  Popconfirm,
   Space,
   Switch,
   Table,
@@ -15,7 +16,12 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import React, { useEffect, useState } from 'react';
 
-import { listConfigs, type SystemConfig, upsertConfig } from '@/services/admin';
+import {
+  deleteConfig,
+  listConfigs,
+  type SystemConfig,
+  upsertConfig,
+} from '@/services/admin';
 
 type ConfigFormValues = {
   key: string;
@@ -70,6 +76,12 @@ const Configs: React.FC = () => {
     await loadData();
   };
 
+  const removeConfig = async (record: SystemConfig) => {
+    await deleteConfig(record.key);
+    message.success('配置已删除');
+    await loadData();
+  };
+
   const columns: ColumnsType<SystemConfig> = [
     { title: '键', dataIndex: 'key' },
     { title: '名称', dataIndex: 'name' },
@@ -84,12 +96,33 @@ const Configs: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, record) =>
-        access.canConfigUpdate ? (
-          <Button type="link" onClick={() => openEdit(record)}>
-            编辑
-          </Button>
-        ) : null,
+      render: (_, record) => {
+        const actions: React.ReactNode[] = [];
+        if (access.canConfigUpdate) {
+          actions.push(
+            <Button key="edit" type="link" onClick={() => openEdit(record)}>
+              编辑
+            </Button>,
+          );
+        }
+        if (access.canConfigDelete && record.key !== 'site_name') {
+          actions.push(
+            <Popconfirm
+              key="delete"
+              title="删除配置"
+              description={`确认删除 ${record.key}？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void removeConfig(record)}
+            >
+              <Button danger type="link" icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>,
+          );
+        }
+        return actions.length > 0 ? <Space>{actions}</Space> : '-';
+      },
     },
   ];
 

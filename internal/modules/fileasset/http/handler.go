@@ -32,7 +32,7 @@ const (
 
 // Authorizer checks whether the current request can perform an action.
 type Authorizer interface {
-	RequirePermission(context.Context, string) error
+	RequireRoutePermission(context.Context, string, string, string) error
 }
 
 // OperationRecorder records file mutations for audit.
@@ -55,9 +55,113 @@ func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder, uplo
 
 // Register mounts file routes on group.
 func Register(group *echo.Group, handler *Handler) {
+	group.GET("/file-categories", handler.ListCategories)
+	group.POST("/file-categories", handler.CreateCategory)
+	group.PATCH("/file-categories/:id", handler.UpdateCategory)
+	group.DELETE("/file-categories/:id", handler.DeleteCategory)
 	group.GET("/files", handler.ListFiles)
 	group.POST("/files", handler.UploadFile)
+	group.POST("/files/import-url", handler.ImportURL)
+	group.PATCH("/files/:id/name", handler.RenameFile)
+	group.DELETE("/files/:id", handler.DeleteFile)
 	group.Static("/uploads", handler.uploadDir)
+}
+
+// ListCategories returns the category tree used by file management.
+func (h *Handler) ListCategories(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileRead); err != nil {
+		return err
+	}
+	categories, err := h.usecase.ListCategories(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return httpresp.OK(c, categories)
+}
+
+// CreateCategory adds one file category.
+func (h *Handler) CreateCategory(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileCategoryCreate); err != nil {
+		return err
+	}
+	var req categoryRequest
+	if err := httpreq.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+	category, err := h.usecase.CreateCategory(c.Request().Context(), usecase.CategoryInput{
+		Name:     req.Name,
+		ParentID: req.ParentID,
+	})
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(
+		c,
+		"create",
+		"file_category",
+		strconv.FormatInt(category.ID, 10),
+		"created file category",
+	); err != nil {
+		return err
+	}
+	return httpresp.Created(c, category)
+}
+
+// UpdateCategory changes one file category.
+func (h *Handler) UpdateCategory(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileCategoryUpdate); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "file category")
+	if err != nil {
+		return err
+	}
+	var req categoryRequest
+	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
+		return bindErr
+	}
+	category, err := h.usecase.UpdateCategory(c.Request().Context(), usecase.UpdateCategoryInput{
+		ID:       id,
+		Name:     req.Name,
+		ParentID: req.ParentID,
+	})
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(
+		c,
+		"update",
+		"file_category",
+		strconv.FormatInt(category.ID, 10),
+		"updated file category",
+	); err != nil {
+		return err
+	}
+	return httpresp.OK(c, category)
+}
+
+// DeleteCategory removes one file category without deleting files.
+func (h *Handler) DeleteCategory(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileCategoryDelete); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "file category")
+	if err != nil {
+		return err
+	}
+	if err := h.usecase.DeleteCategory(c.Request().Context(), id); err != nil {
+		return err
+	}
+	if err := h.recordOperation(
+		c,
+		"delete",
+		"file_category",
+		strconv.FormatInt(id, 10),
+		"deleted file category",
+	); err != nil {
+		return err
+	}
+	return httpresp.OK(c, deletedResponse{ID: id})
 }
 
 // ListFiles returns uploaded file records.
@@ -85,12 +189,20 @@ func (h *Handler) UploadFile(c *echo.Context) error {
 	if err != nil {
 		return apperr.WrapBadRequest(err, "file is required")
 	}
+	categoryID, err := formInt64(c, "category_id")
+	if err != nil {
+		return err
+	}
 	saved, err := h.saveUploadedFile(c, header)
 	if err != nil {
 		return err
 	}
+	saved.CategoryID = categoryID
 	file, err := h.usecase.CreateFile(c.Request().Context(), saved)
 	if err != nil {
+		if cleanupErr := h.removeLocalUpload(usecase.FileObject{URL: saved.URL}); cleanupErr != nil {
+			return errors.Join(err, cleanupErr)
+		}
 		return err
 	}
 	if err := h.recordOperation(c, "upload", "file", file.URL, "uploaded file"); err != nil {
@@ -99,11 +211,86 @@ func (h *Handler) UploadFile(c *echo.Context) error {
 	return httpresp.Created(c, file)
 }
 
+// ImportURL registers an external HTTP(S) URL as a file asset.
+func (h *Handler) ImportURL(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileUpload); err != nil {
+		return err
+	}
+	var req importURLRequest
+	if err := httpreq.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+	file, err := h.usecase.ImportURL(c.Request().Context(), usecase.URLImportInput{
+		Name:       req.Name,
+		URL:        req.URL,
+		CategoryID: req.CategoryID,
+	})
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "import_url", "file", file.URL, "imported file url"); err != nil {
+		return err
+	}
+	return httpresp.Created(c, file)
+}
+
+// RenameFile updates one file display name.
+func (h *Handler) RenameFile(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileUpdate); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "file")
+	if err != nil {
+		return err
+	}
+	var req renameFileRequest
+	err = httpreq.BindAndValidate(c, &req)
+	if err != nil {
+		return err
+	}
+	file, err := h.usecase.RenameFile(c.Request().Context(), usecase.RenameInput{
+		ID:   id,
+		Name: req.Name,
+	})
+	if err != nil {
+		return err
+	}
+	err = h.recordOperation(c, "rename", "file", strconv.FormatInt(file.ID, 10), "renamed file")
+	if err != nil {
+		return err
+	}
+	return httpresp.OK(c, file)
+}
+
+// DeleteFile removes one file metadata record and its local upload when present.
+func (h *Handler) DeleteFile(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileDelete); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "file")
+	if err != nil {
+		return err
+	}
+	file, err := h.usecase.DeleteFile(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	err = h.removeLocalUpload(file)
+	if err != nil {
+		return err
+	}
+	err = h.recordOperation(c, "delete", "file", strconv.FormatInt(file.ID, 10), "deleted file")
+	if err != nil {
+		return err
+	}
+	return httpresp.OK(c, deletedResponse{ID: file.ID})
+}
+
 func (h *Handler) authorize(c *echo.Context, permission string) error {
 	if err := h.ready(); err != nil {
 		return err
 	}
-	return h.auth.RequirePermission(c.Request().Context(), permission)
+	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
 }
 
 func (h *Handler) saveUploadedFile(c *echo.Context, header *multipart.FileHeader) (usecase.FileInput, error) {
@@ -147,6 +334,22 @@ func (h *Handler) saveUploadedFile(c *echo.Context, header *multipart.FileHeader
 	}, nil
 }
 
+func (h *Handler) removeLocalUpload(file usecase.FileObject) error {
+	const uploadURLPrefix = "/api/uploads/"
+	if !strings.HasPrefix(file.URL, uploadURLPrefix) {
+		return nil
+	}
+	storedName := strings.TrimPrefix(file.URL, uploadURLPrefix)
+	if storedName == "" || filepath.Base(storedName) != storedName {
+		return fmt.Errorf("remove upload file: invalid stored name")
+	}
+	targetPath := filepath.Join(h.uploadDir, storedName)
+	if err := os.Remove(targetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove upload file: %w", err)
+	}
+	return nil
+}
+
 func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
 	actorID, err := strconv.ParseInt(requestctx.GetUserID(c.Request().Context()), 10, 64)
 	if err != nil {
@@ -179,7 +382,23 @@ func listInput(c *echo.Context) (usecase.ListInput, error) {
 	if err != nil {
 		return usecase.ListInput{}, err
 	}
-	return usecase.ListInput{Page: page, PageSize: pageSize}, nil
+	categoryID, err := httpreq.QueryInt64(c, "category_id", 0)
+	if err != nil {
+		return usecase.ListInput{}, err
+	}
+	return usecase.ListInput{Page: page, PageSize: pageSize, CategoryID: categoryID}, nil
+}
+
+func formInt64(c *echo.Context, name string) (int64, error) {
+	raw := strings.TrimSpace(c.FormValue(name))
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 0 {
+		return 0, apperr.NewBadRequest("invalid " + name)
+	}
+	return value, nil
 }
 
 func paginated(c *echo.Context, items interface{}, page, pageSize, total int) error {
@@ -242,4 +461,8 @@ func contentType(header *multipart.FileHeader) string {
 		return value
 	}
 	return http.DetectContentType(nil)
+}
+
+type deletedResponse struct {
+	ID int64 `json:"id"`
 }

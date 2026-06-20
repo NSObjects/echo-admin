@@ -11,7 +11,7 @@
 
 `/api/info` 只返回静态配置里的 `app.name`、`app.version` 和当前时间。
 
-它不 import 业务模块。业务路由只在 `internal/boot` 里显式组装。
+它不 import 业务模块。业务路由只在 `internal/boot` 里显式组装。API Token 认证通过 `WithAPIKeyVerifier` 传入一个小接口；server 只读取 `X-API-Token`、写入 request context，不知道 token 表、哈希策略或业务模块。JWT 黑名单通过 `WithJWTBlocklistChecker` 注入，server 只把验签后的 raw JWT 交给 checker，不知道黑名单表结构。内部错误记录通过 `WithSystemErrorRecorder` 注入，server 只在统一错误边界产生诊断事件，不知道审计表结构。
 
 ## API
 

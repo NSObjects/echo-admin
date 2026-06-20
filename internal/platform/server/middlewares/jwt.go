@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,6 +22,12 @@ type JWTConfig struct {
 	SigningKey []byte
 	SkipPaths  []string
 	Enabled    bool
+	Blocklist  JWTBlocklistChecker
+}
+
+// JWTBlocklistChecker reports whether a raw JWT has been revoked.
+type JWTBlocklistChecker interface {
+	TokenBlocked(context.Context, string) (bool, error)
 }
 
 // DefaultJWTConfig returns disabled JWT verification defaults.
@@ -51,6 +58,9 @@ func JWT(config *JWTConfig) (echo.MiddlewareFunc, error) {
 		SigningKey: config.SigningKey,
 		ContextKey: jwtContextKey,
 		Skipper: func(c *echo.Context) bool {
+			if requestctx.GetUserID(c.Request().Context()) != "" {
+				return true
+			}
 			path := c.Path()
 
 			for _, skipPath := range config.SkipPaths {
@@ -66,7 +76,12 @@ func JWT(config *JWTConfig) (echo.MiddlewareFunc, error) {
 		ErrorHandler: func(_ *echo.Context, err error) error {
 			return apperr.WrapUnauthorized(err, "")
 		},
-		SuccessHandler: storeJWTSubject,
+		SuccessHandler: func(c *echo.Context) error {
+			if err := rejectBlacklistedJWT(c, config.Blocklist); err != nil {
+				return err
+			}
+			return storeJWTSubject(c)
+		},
 	}), nil
 }
 
@@ -101,6 +116,24 @@ func storeJWTSubject(c *echo.Context) error {
 	}
 	logger := logging.FromContext(ctx).With().Str("user_id", subject).Str("role_id", roleID).Logger()
 	c.SetRequest(request.WithContext(logger.WithContext(ctx)))
+	return nil
+}
+
+func rejectBlacklistedJWT(c *echo.Context, blocklist JWTBlocklistChecker) error {
+	if blocklist == nil {
+		return nil
+	}
+	token, ok := c.Get(jwtContextKey).(*jwt.Token)
+	if !ok || token == nil || strings.TrimSpace(token.Raw) == "" {
+		return apperr.New(apperr.ErrUnauthorized, "")
+	}
+	blocked, err := blocklist.TokenBlocked(c.Request().Context(), token.Raw)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return apperr.New(apperr.ErrUnauthorized, "")
+	}
 	return nil
 }
 

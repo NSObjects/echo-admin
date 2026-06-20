@@ -20,7 +20,7 @@ const defaultPageSize = 20
 
 // Authorizer checks whether the current request can perform an action.
 type Authorizer interface {
-	RequirePermission(context.Context, string) error
+	RequireRoutePermission(context.Context, string, string, string) error
 }
 
 // OperationRecorder records administrator mutations for audit.
@@ -46,6 +46,8 @@ func Register(group *echo.Group, handler *Handler) {
 	group.POST("/admins", handler.CreateAdmin)
 	group.PATCH("/admins/:id", handler.UpdateAdmin)
 	group.DELETE("/admins/:id", handler.DeleteAdmin)
+	group.GET("/roles/:id/admins", handler.ListRoleAdmins)
+	group.PUT("/roles/:id/admins", handler.SetRoleAdmins)
 }
 
 // ListAdmins returns administrators.
@@ -140,11 +142,53 @@ func (h *Handler) DeleteAdmin(c *echo.Context) error {
 	return httpresp.OK(c, deletedResponse{ID: id})
 }
 
+// ListRoleAdmins returns administrator ids assigned to a role.
+func (h *Handler) ListRoleAdmins(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionRoleRead); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "role")
+	if err != nil {
+		return err
+	}
+	adminIDs, err := h.usecase.RoleAdminIDs(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	return httpresp.OK(c, adminIDsResponse{AdminIDs: adminIDs})
+}
+
+// SetRoleAdmins replaces administrator assignments for a role.
+func (h *Handler) SetRoleAdmins(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionRoleUpdate); err != nil {
+		return err
+	}
+	id, err := httpreq.PathID(c, "id", "role")
+	if err != nil {
+		return err
+	}
+	var req adminIDsRequest
+	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
+		return bindErr
+	}
+	adminIDs, err := h.usecase.SetRoleAdmins(c.Request().Context(), usecase.RoleAdminsInput{
+		RoleID:   id,
+		AdminIDs: req.AdminIDs,
+	})
+	if err != nil {
+		return err
+	}
+	if err := h.recordOperation(c, "set_admins", "role", strconv.FormatInt(id, 10), "updated role admins"); err != nil {
+		return err
+	}
+	return httpresp.OK(c, adminIDsResponse{AdminIDs: adminIDs})
+}
+
 func (h *Handler) authorize(c *echo.Context, permission string) error {
 	if err := h.ready(); err != nil {
 		return err
 	}
-	return h.auth.RequirePermission(c.Request().Context(), permission)
+	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
 }
 
 func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
@@ -192,4 +236,8 @@ func paginated(c *echo.Context, items interface{}, page, pageSize, total int) er
 
 type deletedResponse struct {
 	ID int64 `json:"id"`
+}
+
+type adminIDsResponse struct {
+	AdminIDs []int64 `json:"admin_ids"`
 }

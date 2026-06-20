@@ -16,9 +16,18 @@ const (
 // Store persists operation and login logs.
 type Store interface {
 	RecordOperation(context.Context, domain.OperationLog) (domain.OperationLog, error)
+	FindOperationLog(context.Context, int64) (domain.OperationLog, error)
 	ListOperationLogs(context.Context, ListFilter) ([]domain.OperationLog, int, error)
+	DeleteOperationLogs(context.Context, []int64) error
 	RecordLogin(context.Context, domain.LoginLog) (domain.LoginLog, error)
+	FindLoginLog(context.Context, int64) (domain.LoginLog, error)
 	ListLoginLogs(context.Context, ListFilter) ([]domain.LoginLog, int, error)
+	DeleteLoginLogs(context.Context, []int64) error
+	RecordSystemError(context.Context, domain.SystemErrorLog) (domain.SystemErrorLog, error)
+	FindSystemErrorLog(context.Context, int64) (domain.SystemErrorLog, error)
+	ListSystemErrorLogs(context.Context, ListFilter) ([]domain.SystemErrorLog, int, error)
+	UpdateSystemErrorLog(context.Context, domain.SystemErrorLog) (domain.SystemErrorLog, error)
+	DeleteSystemErrorLogs(context.Context, []int64) error
 }
 
 // Usecase coordinates audit log rules.
@@ -55,6 +64,26 @@ type LoginInput struct {
 	Reason    string
 }
 
+// SystemErrorInput carries an internal API failure record from the server boundary.
+type SystemErrorInput struct {
+	Code      int
+	Message   string
+	Detail    string
+	Method    string
+	Path      string
+	IP        string
+	UserAgent string
+	RequestID string
+	UserID    string
+}
+
+// ResolveSystemErrorInput carries a resolution decision for one error log.
+type ResolveSystemErrorInput struct {
+	ID         int64
+	ResolverID int64
+	Note       string
+}
+
 // ListInput carries pagination for audit lists.
 type ListInput struct {
 	Page     int
@@ -80,6 +109,14 @@ type OperationListOutput struct {
 // LoginListOutput is a paginated login log result.
 type LoginListOutput struct {
 	Items    []LoginLog
+	Page     int
+	PageSize int
+	Total    int
+}
+
+// SystemErrorListOutput is a paginated system error log result.
+type SystemErrorListOutput struct {
+	Items    []SystemErrorLog
 	Page     int
 	PageSize int
 	Total    int
@@ -111,4 +148,23 @@ type LoginLog struct {
 	Success   bool      `json:"success"`
 	Reason    string    `json:"reason"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// SystemErrorLog is the adapter-facing system error log DTO.
+type SystemErrorLog struct {
+	ID          int64      `json:"id"`
+	Code        int        `json:"code"`
+	Message     string     `json:"message"`
+	Detail      string     `json:"detail"`
+	Method      string     `json:"method"`
+	Path        string     `json:"path"`
+	IP          string     `json:"ip"`
+	UserAgent   string     `json:"user_agent"`
+	RequestID   string     `json:"request_id"`
+	UserID      string     `json:"user_id"`
+	Resolved    bool       `json:"resolved"`
+	ResolveNote string     `json:"resolve_note"`
+	ResolvedBy  int64      `json:"resolved_by"`
+	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }

@@ -95,7 +95,7 @@ const Login: React.FC = () => {
                 size: 'large',
                 prefix: <LockOutlined />,
               }}
-              placeholder="密码：admin123"
+              placeholder="密码：123456"
               rules={[{ required: true, message: '请输入密码' }]}
             />
           </LoginForm>

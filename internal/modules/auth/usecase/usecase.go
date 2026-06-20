@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
@@ -93,6 +95,29 @@ func (u *Usecase) CurrentUser(ctx context.Context) (CurrentUser, error) {
 	return u.userSnapshot(ctx, admin, activeRoleID)
 }
 
+// UpdateProfile changes the current administrator's display fields only.
+func (u *Usecase) UpdateProfile(ctx context.Context, input UpdateProfileInput) (CurrentUser, error) {
+	if err := u.ready(); err != nil {
+		return CurrentUser{}, err
+	}
+	admin, activeRoleID, err := u.currentAdminAndRole(ctx)
+	if err != nil {
+		return CurrentUser{}, err
+	}
+	if !admin.Active {
+		return CurrentUser{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+	}
+	updated, err := admin.UpdateProfile(input.DisplayName, input.Email, admin.RoleIDs, admin.ActiveRoleID, admin.Active)
+	if err != nil {
+		return CurrentUser{}, apperr.NewBadRequest("invalid profile")
+	}
+	saved, err := u.admins.Update(ctx, updated)
+	if err != nil {
+		return CurrentUser{}, err
+	}
+	return u.userSnapshot(ctx, saved, activeRoleID)
+}
+
 // SwitchRole persists a new active role and returns a token scoped to that role.
 func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSwitchOutput, error) {
 	if err := u.ready(); err != nil {
@@ -128,6 +153,93 @@ func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSw
 	return RoleSwitchOutput{Token: token, User: user}, nil
 }
 
+// ChangePassword verifies the current password, stores the new hash, and
+// revokes the token used for the password-changing request.
+func (u *Usecase) ChangePassword(ctx context.Context, input ChangePasswordInput) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	adminID, err := currentAdminID(ctx)
+	if err != nil {
+		return err
+	}
+	admin, err := u.admins.FindByID(ctx, adminID)
+	if err != nil {
+		return err
+	}
+	if !admin.Active {
+		return apperr.New(apperr.ErrAccountDisabled, "account disabled")
+	}
+	if compareErr := bcrypt.CompareHashAndPassword(admin.PasswordHash, []byte(input.CurrentPassword)); compareErr != nil {
+		return apperr.New(apperr.ErrUnauthorized, "invalid current password")
+	}
+	hash, err := hashPassword(input.NewPassword)
+	if err != nil {
+		return err
+	}
+	updated, err := admin.ReplacePassword(hash)
+	if err != nil {
+		return apperr.NewBadRequest("invalid password")
+	}
+	if _, err := u.admins.Update(ctx, updated); err != nil {
+		return err
+	}
+	return u.blacklistTokenForAdmin(ctx, input.RawToken, adminID)
+}
+
+// Logout revokes the current JWT so it cannot be reused after the client leaves.
+func (u *Usecase) Logout(ctx context.Context, rawToken string) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	adminID, err := currentAdminID(ctx)
+	if err != nil {
+		return err
+	}
+	return u.blacklistTokenForAdmin(ctx, rawToken, adminID)
+}
+
+func (u *Usecase) blacklistTokenForAdmin(ctx context.Context, rawToken string, adminID int64) error {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return apperr.NewUnauthorized()
+	}
+	claims := jwt.MapClaims{}
+	token, err := jwt.NewParser(jwt.WithTimeFunc(u.now)).ParseWithClaims(rawToken, claims, func(token *jwt.Token) (interface{}, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, apperr.NewUnauthorized()
+		}
+		return u.jwtSecret, nil
+	})
+	if err != nil || token == nil || !token.Valid {
+		return apperr.NewUnauthorized()
+	}
+	subject, err := claims.GetSubject()
+	if err != nil || subject != strconv.FormatInt(adminID, 10) {
+		return apperr.NewUnauthorized()
+	}
+	expiresAt, err := claims.GetExpirationTime()
+	if err != nil || expiresAt == nil {
+		return apperr.NewUnauthorized()
+	}
+	return u.jwtBlacklist.AddJWTBlacklist(ctx, JWTBlacklistEntry{
+		TokenHash: jwtTokenHash(rawToken),
+		ExpiresAt: expiresAt.UTC(),
+	})
+}
+
+// TokenBlocked reports whether a raw JWT has been revoked and has not expired.
+func (u *Usecase) TokenBlocked(ctx context.Context, rawToken string) (bool, error) {
+	if err := u.ready(); err != nil {
+		return false, err
+	}
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return false, nil
+	}
+	return u.jwtBlacklist.JWTBlacklisted(ctx, jwtTokenHash(rawToken), u.now())
+}
+
 // RequirePermission verifies that the current admin has permission through the active role.
 func (u *Usecase) RequirePermission(ctx context.Context, permission string) error {
 	if err := u.ready(); err != nil {
@@ -141,18 +253,37 @@ func (u *Usecase) RequirePermission(ctx context.Context, permission string) erro
 	if err != nil {
 		return err
 	}
-	allowed, err := enforcePermission(snapshot.enforcer, snapshot.user, permission)
+	return requirePermission(snapshot, permission)
+}
+
+// RequireRoutePermission verifies both the semantic permission token and the
+// managed API route grant for the active role. The route check is intentionally
+// tied to Echo's registered route pattern, not the raw URL, so IDs and other
+// path parameters do not need to be persisted as concrete values.
+func (u *Usecase) RequireRoutePermission(ctx context.Context, permission, method, path string) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	admin, activeRoleID, err := u.currentAdminAndRole(ctx)
 	if err != nil {
 		return err
 	}
-	if !allowed {
-		return apperr.NewPermissionDenied("admin", permission)
+	snapshot, err := u.casbinSnapshot(ctx, admin, activeRoleID)
+	if err != nil {
+		return err
 	}
-	return nil
+	api, err := u.findRouteAPI(ctx, method, path)
+	if err != nil {
+		return err
+	}
+	if err := requireDeclaredRoutePermissions(snapshot, permission, api.Permission); err != nil {
+		return err
+	}
+	return requireAssignedRouteAPI(snapshot.activeRole, api)
 }
 
 func (u *Usecase) ready() error {
-	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.logins == nil {
+	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.apis == nil || u.logins == nil || u.jwtBlacklist == nil {
 		return apperr.New(apperr.ErrInternalServer, "auth dependencies are not configured")
 	}
 	if len(u.jwtSecret) == 0 {
@@ -210,6 +341,7 @@ func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin
 	roleIDs := admin.RoleIDs
 	roles := make([]Role, 0, len(roleIDs))
 	var menuIDSet map[int64]struct{}
+	var buttonIDSet map[int64]struct{}
 	enforcer, err := newCasbinEnforcer()
 	if err != nil {
 		return rbacSnapshot{}, err
@@ -232,7 +364,7 @@ func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin
 		}
 		activeFound = true
 		activeRole = dto
-		menuIDSet, err = addActiveRoleGrants(enforcer, user, role)
+		menuIDSet, buttonIDSet, err = addActiveRoleGrants(enforcer, user, role)
 		if err != nil {
 			return rbacSnapshot{}, err
 		}
@@ -244,28 +376,72 @@ func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin
 	if err != nil {
 		return rbacSnapshot{}, err
 	}
-	return rbacSnapshot{enforcer: enforcer, user: user, activeRole: activeRole, roles: roles, permissions: permissions, menuIDSet: menuIDSet}, nil
+	return rbacSnapshot{enforcer: enforcer, user: user, activeRole: activeRole, roles: roles, permissions: permissions, menuIDSet: menuIDSet, buttonIDSet: buttonIDSet}, nil
 }
 
-func addActiveRoleGrants(enforcer *casbin.Enforcer, user string, role accessdomain.Role) (map[int64]struct{}, error) {
+func addActiveRoleGrants(enforcer *casbin.Enforcer, user string, role accessdomain.Role) (map[int64]struct{}, map[int64]struct{}, error) {
 	roleName := roleSubject(role.Code)
 	if _, err := enforcer.AddRoleForUser(user, roleName); err != nil {
-		return nil, fmt.Errorf("add casbin role: %w", err)
+		return nil, nil, fmt.Errorf("add casbin role: %w", err)
 	}
 	for _, permission := range role.Permissions {
 		obj, act, splitErr := splitPermission(permission)
 		if splitErr != nil {
-			return nil, splitErr
+			return nil, nil, splitErr
 		}
 		if _, err := enforcer.AddPolicy(roleName, obj, act); err != nil {
-			return nil, fmt.Errorf("add casbin policy: %w", err)
+			return nil, nil, fmt.Errorf("add casbin policy: %w", err)
 		}
 	}
 	menuIDSet := make(map[int64]struct{}, len(role.MenuIDs))
 	for _, menuID := range role.MenuIDs {
 		menuIDSet[menuID] = struct{}{}
 	}
-	return menuIDSet, nil
+	buttonIDSet := make(map[int64]struct{}, len(role.ButtonIDs))
+	for _, buttonID := range role.ButtonIDs {
+		buttonIDSet[buttonID] = struct{}{}
+	}
+	return menuIDSet, buttonIDSet, nil
+}
+
+func (u *Usecase) findRouteAPI(ctx context.Context, method, path string) (accessdomain.API, error) {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	if method == "" || path == "" {
+		return accessdomain.API{}, apperr.NewPermissionDenied("api", "route")
+	}
+	apis, err := u.apis.ListAPIs(ctx)
+	if err != nil {
+		return accessdomain.API{}, err
+	}
+	for _, api := range apis {
+		if api.Method == method && api.Path == path {
+			return api, nil
+		}
+	}
+	return accessdomain.API{}, apperr.NewPermissionDenied("api", path)
+}
+
+func requireDeclaredRoutePermissions(snapshot rbacSnapshot, handlerPermission, apiPermission string) error {
+	if apiPermission != "" {
+		if err := requirePermission(snapshot, apiPermission); err != nil {
+			return err
+		}
+	}
+	if handlerPermission == "" || handlerPermission == apiPermission {
+		return nil
+	}
+	return requirePermission(snapshot, handlerPermission)
+}
+
+func requireAssignedRouteAPI(role Role, api accessdomain.API) error {
+	if api.Public || role.Code == accessdomain.RoleCodeSuperAdmin {
+		return nil
+	}
+	if containsInt64(role.APIIDs, api.ID) {
+		return nil
+	}
+	return apperr.NewPermissionDenied("api", api.Path)
 }
 
 func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Menu, error) {
@@ -290,7 +466,7 @@ func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Me
 				continue
 			}
 		}
-		out = append(out, fromMenu(menu))
+		out = append(out, fromMenu(menu, visibleButtons(menu.Buttons, snapshot)))
 	}
 	return out, nil
 }
@@ -315,6 +491,22 @@ func (u *Usecase) issueToken(adminID int64, username string, activeRoleID int64,
 
 func (u *Usecase) recordLogin(ctx context.Context, record LoginRecord) error {
 	return u.logins.RecordLogin(ctx, record)
+}
+
+func hashPassword(password string) ([]byte, error) {
+	if len(password) < 8 || len(password) > 72 {
+		return nil, apperr.NewBadRequest("invalid password")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	return hash, nil
+}
+
+func jwtTokenHash(rawToken string) string {
+	sum := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(sum[:])
 }
 
 func currentAdminID(ctx context.Context) (int64, error) {
@@ -346,6 +538,9 @@ func fromRole(role accessdomain.Role) Role {
 		Name:        role.Name,
 		Permissions: role.Permissions,
 		MenuIDs:     role.MenuIDs,
+		APIIDs:      role.APIIDs,
+		ButtonIDs:   role.ButtonIDs,
+		DataRoleIDs: role.DataRoleIDs,
 		DefaultPath: role.DefaultPath,
 		Active:      role.Active,
 		CreatedAt:   role.CreatedAt,
@@ -353,19 +548,57 @@ func fromRole(role accessdomain.Role) Role {
 	}
 }
 
-func fromMenu(menu accessdomain.Menu) Menu {
+func fromMenu(menu accessdomain.Menu, buttons []accessdomain.MenuButton) Menu {
 	return Menu{
-		ID:         menu.ID,
-		ParentID:   menu.ParentID,
-		Name:       menu.Name,
-		Path:       menu.Path,
-		Icon:       menu.Icon,
+		ID:        menu.ID,
+		ParentID:  menu.ParentID,
+		Name:      menu.Name,
+		Path:      menu.Path,
+		Icon:      menu.Icon,
+		Hidden:    menu.Hidden,
+		Component: menu.Component,
+		Meta: MenuMeta{
+			ActiveName:     menu.Meta.ActiveName,
+			KeepAlive:      menu.Meta.KeepAlive,
+			DefaultMenu:    menu.Meta.DefaultMenu,
+			CloseTab:       menu.Meta.CloseTab,
+			TransitionType: menu.Meta.TransitionType,
+		},
 		Permission: menu.Permission,
 		Sort:       menu.Sort,
 		Active:     menu.Active,
+		Buttons:    fromButtons(buttons),
 		CreatedAt:  menu.CreatedAt,
 		UpdatedAt:  menu.UpdatedAt,
 	}
+}
+
+func visibleButtons(buttons []accessdomain.MenuButton, snapshot rbacSnapshot) []accessdomain.MenuButton {
+	if snapshot.activeRole.Code == accessdomain.RoleCodeSuperAdmin {
+		return buttons
+	}
+	out := make([]accessdomain.MenuButton, 0, len(buttons))
+	for _, button := range buttons {
+		if _, ok := snapshot.buttonIDSet[button.ID]; ok {
+			out = append(out, button)
+		}
+	}
+	return out
+}
+
+func fromButtons(buttons []accessdomain.MenuButton) []Button {
+	out := make([]Button, 0, len(buttons))
+	for _, button := range buttons {
+		out = append(out, Button{
+			ID:          button.ID,
+			MenuID:      button.MenuID,
+			Name:        button.Name,
+			Description: button.Description,
+			CreatedAt:   button.CreatedAt,
+			UpdatedAt:   button.UpdatedAt,
+		})
+	}
+	return out
 }
 
 func sortedKeys(set map[string]struct{}) []string {
@@ -398,6 +631,7 @@ type rbacSnapshot struct {
 	roles       []Role
 	permissions []string
 	menuIDSet   map[int64]struct{}
+	buttonIDSet map[int64]struct{}
 }
 
 func newCasbinEnforcer() (*casbin.Enforcer, error) {
@@ -438,6 +672,26 @@ func enforcePermission(enforcer *casbin.Enforcer, user, permission string) (bool
 		return false, fmt.Errorf("enforce casbin permission: %w", err)
 	}
 	return allowed, nil
+}
+
+func requirePermission(snapshot rbacSnapshot, permission string) error {
+	allowed, err := enforcePermission(snapshot.enforcer, snapshot.user, permission)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return apperr.NewPermissionDenied("admin", permission)
+	}
+	return nil
+}
+
+func containsInt64(values []int64, want int64) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func splitPermission(permission string) (string, string, error) {

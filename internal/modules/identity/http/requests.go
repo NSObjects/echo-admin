@@ -18,3 +18,7 @@ type updateAdminRequest struct {
 	ActiveRoleID *int64  `json:"active_role_id" validate:"omitempty,gt=0"`
 	Active       *bool   `json:"active"`
 }
+
+type adminIDsRequest struct {
+	AdminIDs []int64 `json:"admin_ids" validate:"omitempty,dive,gt=0"`
+}

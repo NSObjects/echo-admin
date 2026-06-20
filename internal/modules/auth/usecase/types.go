@@ -26,19 +26,33 @@ type MenuReader interface {
 	ListMenus(context.Context) ([]accessdomain.Menu, error)
 }
 
+// APIReader reads managed backend routes needed for API-level authorization.
+type APIReader interface {
+	ListAPIs(context.Context) ([]accessdomain.API, error)
+}
+
 // LoginRecorder stores sign-in attempts without exposing audit storage details.
 type LoginRecorder interface {
 	RecordLogin(context.Context, LoginRecord) error
 }
 
+// JWTBlacklistStore stores revoked JWT identifiers without persisting the raw
+// bearer token. Logout and middleware lookup share the same hash contract.
+type JWTBlacklistStore interface {
+	AddJWTBlacklist(context.Context, JWTBlacklistEntry) error
+	JWTBlacklisted(context.Context, string, time.Time) (bool, error)
+}
+
 // Usecase coordinates sign-in, current user, and permission checks.
 type Usecase struct {
-	admins    AdminReader
-	roles     RoleReader
-	menus     MenuReader
-	logins    LoginRecorder
-	jwtSecret []byte
-	now       func() time.Time
+	admins       AdminReader
+	roles        RoleReader
+	menus        MenuReader
+	apis         APIReader
+	logins       LoginRecorder
+	jwtBlacklist JWTBlacklistStore
+	jwtSecret    []byte
+	now          func() time.Time
 }
 
 // Option customizes the auth usecase.
@@ -53,15 +67,18 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
-// New creates an auth usecase with its required readers and JWT secret.
-func New(admins AdminReader, roles RoleReader, menus MenuReader, logins LoginRecorder, jwtSecret string, opts ...Option) *Usecase {
+// New creates an auth usecase with its required readers, JWT revocation store,
+// and JWT secret.
+func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader, jwtBlacklist JWTBlacklistStore, logins LoginRecorder, jwtSecret string, opts ...Option) *Usecase {
 	u := &Usecase{
-		admins:    admins,
-		roles:     roles,
-		menus:     menus,
-		logins:    logins,
-		jwtSecret: []byte(jwtSecret),
-		now:       func() time.Time { return time.Now().UTC() },
+		admins:       admins,
+		roles:        roles,
+		menus:        menus,
+		apis:         apis,
+		logins:       logins,
+		jwtBlacklist: jwtBlacklist,
+		jwtSecret:    []byte(jwtSecret),
+		now:          func() time.Time { return time.Now().UTC() },
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -90,6 +107,19 @@ type RoleSwitchInput struct {
 	RoleID int64
 }
 
+// ChangePasswordInput carries current-user password rotation data.
+type ChangePasswordInput struct {
+	CurrentPassword string
+	NewPassword     string
+	RawToken        string
+}
+
+// UpdateProfileInput carries current-user profile fields.
+type UpdateProfileInput struct {
+	DisplayName string
+	Email       string
+}
+
 // RoleSwitchOutput is returned after the active role changes.
 type RoleSwitchOutput struct {
 	Token string      `json:"token"`
@@ -104,6 +134,12 @@ type LoginRecord struct {
 	UserAgent string
 	Success   bool
 	Reason    string
+}
+
+// JWTBlacklistEntry is the persistence contract for one revoked bearer token.
+type JWTBlacklistEntry struct {
+	TokenHash string
+	ExpiresAt time.Time
 }
 
 // Admin is the current-user administrator DTO.
@@ -141,6 +177,9 @@ type Role struct {
 	Name        string    `json:"name"`
 	Permissions []string  `json:"permissions"`
 	MenuIDs     []int64   `json:"menu_ids"`
+	APIIDs      []int64   `json:"api_ids"`
+	ButtonIDs   []int64   `json:"button_ids"`
+	DataRoleIDs []int64   `json:"data_role_ids"`
 	DefaultPath string    `json:"default_path"`
 	Active      bool      `json:"active"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -154,9 +193,32 @@ type Menu struct {
 	Name       string    `json:"name"`
 	Path       string    `json:"path"`
 	Icon       string    `json:"icon"`
+	Hidden     bool      `json:"hidden"`
+	Component  string    `json:"component"`
+	Meta       MenuMeta  `json:"meta"`
 	Permission string    `json:"permission"`
 	Sort       int       `json:"sort"`
 	Active     bool      `json:"active"`
+	Buttons    []Button  `json:"buttons"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// MenuMeta is router metadata returned with the current-user menu tree.
+type MenuMeta struct {
+	ActiveName     string `json:"active_name"`
+	KeepAlive      bool   `json:"keep_alive"`
+	DefaultMenu    bool   `json:"default_menu"`
+	CloseTab       bool   `json:"close_tab"`
+	TransitionType string `json:"transition_type"`
+}
+
+// Button is a page-level operation key returned with the current user's menu.
+type Button struct {
+	ID          int64     `json:"id"`
+	MenuID      int64     `json:"menu_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

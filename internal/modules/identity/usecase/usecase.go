@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -28,11 +29,11 @@ func (u *Usecase) List(ctx context.Context, input ListInput) (ListOutput, error)
 	if err != nil {
 		return ListOutput{}, err
 	}
-	assignable, err := u.assignableRoleSet(ctx)
+	visibleRoleIDs, err := u.visibleRoleSet(ctx)
 	if err != nil {
 		return ListOutput{}, err
 	}
-	scoped := filterAdminsByRoles(admins, assignable)
+	scoped := filterAdminsByRoles(admins, visibleRoleIDs)
 	pageAdmins := paginateAdmins(scoped, filter)
 	return ListOutput{
 		Items:    mapAdmins(pageAdmins),
@@ -109,6 +110,137 @@ func (u *Usecase) Delete(ctx context.Context, id int64) error {
 	return u.store.Delete(ctx, existing.ID)
 }
 
+// RoleAdminIDs returns visible administrators currently assigned to one role.
+func (u *Usecase) RoleAdminIDs(ctx context.Context, roleID int64) ([]int64, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	if roleID <= 0 {
+		return nil, apperr.NewBadRequest("invalid role id")
+	}
+	visibleRoleIDs, err := u.visibleRoleSet(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := visibleRoleIDs[roleID]; !ok {
+		return nil, apperr.NewPermissionDenied("role", strconv.FormatInt(roleID, 10))
+	}
+	admins, err := u.store.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return adminIDsWithRole(admins, roleID, visibleRoleIDs), nil
+}
+
+// SetRoleAdmins replaces visible administrator membership for one assignable role.
+func (u *Usecase) SetRoleAdmins(ctx context.Context, input RoleAdminsInput) ([]int64, error) {
+	assignment, err := u.prepareRoleAdminAssignment(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	admins, err := u.applyRoleAdminAssignment(ctx, assignment)
+	if err != nil {
+		return nil, err
+	}
+	return adminIDsWithRole(admins, assignment.roleID, assignment.visibleRoleIDs), nil
+}
+
+type roleAdminAssignment struct {
+	roleID         int64
+	adminIDs       []int64
+	admins         []domain.Admin
+	visibleRoleIDs map[int64]struct{}
+	currentAdminID int64
+}
+
+func (u *Usecase) prepareRoleAdminAssignment(ctx context.Context, input RoleAdminsInput) (roleAdminAssignment, error) {
+	if err := u.ready(); err != nil {
+		return roleAdminAssignment{}, err
+	}
+	if input.RoleID <= 0 {
+		return roleAdminAssignment{}, apperr.NewBadRequest("invalid role id")
+	}
+	ensureErr := u.roles.EnsureAssignableRoles(ctx, []int64{input.RoleID})
+	if ensureErr != nil {
+		return roleAdminAssignment{}, ensureErr
+	}
+	adminIDs, err := normalizeRequestedAdminIDs(input.AdminIDs)
+	if err != nil {
+		return roleAdminAssignment{}, err
+	}
+	admins, err := u.store.ListAll(ctx)
+	if err != nil {
+		return roleAdminAssignment{}, err
+	}
+	visibleRoleIDs, err := u.visibleRoleSet(ctx)
+	if err != nil {
+		return roleAdminAssignment{}, err
+	}
+	visibilityErr := ensureAdminsVisible(admins, adminIDs, visibleRoleIDs)
+	if visibilityErr != nil {
+		return roleAdminAssignment{}, visibilityErr
+	}
+	currentID, err := currentAdminID(ctx)
+	if err != nil {
+		return roleAdminAssignment{}, err
+	}
+	return roleAdminAssignment{
+		roleID:         input.RoleID,
+		adminIDs:       adminIDs,
+		admins:         admins,
+		visibleRoleIDs: visibleRoleIDs,
+		currentAdminID: currentID,
+	}, nil
+}
+
+func (u *Usecase) applyRoleAdminAssignment(ctx context.Context, assignment roleAdminAssignment) ([]domain.Admin, error) {
+	wanted := idSet(assignment.adminIDs)
+	admins := assignment.admins
+	for index, admin := range admins {
+		if !allRolesAllowed(admin.RoleIDs, assignment.visibleRoleIDs) {
+			continue
+		}
+		shouldHaveRole := hasID(wanted, admin.ID)
+		updated, changed, err := roleAdminProfile(admin, assignment.roleID, shouldHaveRole, assignment.currentAdminID)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			continue
+		}
+		saved, updateErr := u.store.Update(ctx, updated)
+		if updateErr != nil {
+			return nil, updateErr
+		}
+		admins[index] = saved
+	}
+	return admins, nil
+}
+
+func roleAdminProfile(admin domain.Admin, roleID int64, shouldHaveRole bool, currentAdminID int64) (domain.Admin, bool, error) {
+	if admin.HasRole(roleID) == shouldHaveRole {
+		return domain.Admin{}, false, nil
+	}
+	if !shouldHaveRole && admin.ID == currentAdminID {
+		return domain.Admin{}, false, apperr.NewBadRequest("cannot remove current admin from role")
+	}
+	nextRoleIDs := admin.RoleIDs
+	activeRoleID := admin.ActiveRoleID
+	if shouldHaveRole {
+		nextRoleIDs = appendRoleID(nextRoleIDs, roleID)
+	} else {
+		nextRoleIDs = removeRoleID(nextRoleIDs, roleID)
+		if activeRoleID == roleID {
+			activeRoleID = 0
+		}
+	}
+	updated, err := admin.UpdateProfile(admin.DisplayName, admin.Email, nextRoleIDs, activeRoleID, admin.Active)
+	if err != nil {
+		return domain.Admin{}, false, mapDomainError(err)
+	}
+	return updated, true, nil
+}
+
 func (u *Usecase) ready() error {
 	if u == nil || u.store == nil || u.roles == nil {
 		return apperr.New(apperr.ErrInternalServer, "identity dependencies are not configured")
@@ -157,8 +289,8 @@ func (u *Usecase) updateAdmin(ctx context.Context, existing domain.Admin, input 
 	return updated, nil
 }
 
-func (u *Usecase) assignableRoleSet(ctx context.Context) (map[int64]struct{}, error) {
-	ids, err := u.roles.AssignableRoleIDs(ctx)
+func (u *Usecase) visibleRoleSet(ctx context.Context) (map[int64]struct{}, error) {
+	ids, err := u.roles.VisibleRoleIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -260,11 +392,89 @@ func allRolesAllowed(roleIDs []int64, allowed map[int64]struct{}) bool {
 	return true
 }
 
+func adminIDsWithRole(admins []domain.Admin, roleID int64, visibleRoleIDs map[int64]struct{}) []int64 {
+	out := make([]int64, 0, len(admins))
+	for _, admin := range admins {
+		if admin.HasRole(roleID) && allRolesAllowed(admin.RoleIDs, visibleRoleIDs) {
+			out = append(out, admin.ID)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func ensureAdminsVisible(admins []domain.Admin, adminIDs []int64, visibleRoleIDs map[int64]struct{}) error {
+	byID := make(map[int64]domain.Admin, len(admins))
+	for _, admin := range admins {
+		byID[admin.ID] = admin
+	}
+	for _, adminID := range adminIDs {
+		admin, ok := byID[adminID]
+		if !ok {
+			return apperr.NewNotFound("admin")
+		}
+		if !allRolesAllowed(admin.RoleIDs, visibleRoleIDs) {
+			return apperr.NewPermissionDenied("admin", strconv.FormatInt(adminID, 10))
+		}
+	}
+	return nil
+}
+
 func coalesceIDs(next, fallback []int64) []int64 {
 	if next == nil {
 		return fallback
 	}
 	return next
+}
+
+func normalizeRequestedAdminIDs(ids []int64) ([]int64, error) {
+	out := make([]int64, 0, len(ids))
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, apperr.NewBadRequest("invalid admin id")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
+func idSet(ids []int64) map[int64]struct{} {
+	out := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+func hasID(ids map[int64]struct{}, want int64) bool {
+	_, ok := ids[want]
+	return ok
+}
+
+func appendRoleID(roleIDs []int64, roleID int64) []int64 {
+	if containsID(roleIDs, roleID) {
+		return roleIDs
+	}
+	out := append([]int64(nil), roleIDs...)
+	out = append(out, roleID)
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func removeRoleID(roleIDs []int64, roleID int64) []int64 {
+	out := make([]int64, 0, len(roleIDs))
+	for _, assignedID := range roleIDs {
+		if assignedID != roleID {
+			out = append(out, assignedID)
+		}
+	}
+	return out
 }
 
 func containsID(ids []int64, want int64) bool {

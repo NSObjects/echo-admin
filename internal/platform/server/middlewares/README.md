@@ -26,6 +26,7 @@ type JWTConfig struct {
     SigningKey []byte
     SkipPaths  []string
     Enabled    bool
+    Blocklist  JWTBlocklistChecker
 }
 ```
 
@@ -34,6 +35,7 @@ type JWTConfig struct {
 - 可配置签名密钥
 - 可启用或禁用
 - 统一错误处理
+- 可注入 JWT 黑名单 checker，验签成功后拒绝已撤销 token
 - 验证成功后把标准 `sub` claim 写入 `requestctx.UserID`；业务需要其他身份语义时，应由真实 auth 模块显式转换
 
 ### 3. 错误处理中间件 (`error.go`)

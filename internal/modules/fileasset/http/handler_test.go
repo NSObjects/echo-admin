@@ -56,6 +56,21 @@ func TestUploadFileStoresBytesMetadataAndOperation(t *testing.T) {
 	}
 }
 
+func TestUploadFileAssignsCategory(t *testing.T) {
+	e, store, _, _, _ := newFileEcho(t, nil)
+	store.categories = []filedomain.FileCategory{mustCategory(t, 5, 0, "合同")}
+
+	rec := doMultipartWithFields(t, e, "/api/files", "hello.txt", "hello", "7", map[string]string{
+		"category_id": "5",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if store.created.CategoryID != 5 {
+		t.Fatalf("created category id = %d, want 5", store.created.CategoryID)
+	}
+}
+
 func TestUploadFileRejectsUnauthorizedBeforeStore(t *testing.T) {
 	e, store, recorder, _, _ := newFileEcho(t, apperr.NewPermissionDenied("file", "upload"))
 
@@ -65,6 +80,156 @@ func TestUploadFileRejectsUnauthorizedBeforeStore(t *testing.T) {
 	}
 	if store.createCalls != 0 {
 		t.Fatalf("createCalls = %d, want 0", store.createCalls)
+	}
+	if len(recorder.records) != 0 {
+		t.Fatalf("operation records = %d, want 0", len(recorder.records))
+	}
+}
+
+func TestImportURLStoresMetadataAndOperation(t *testing.T) {
+	e, store, recorder, auth, _ := newFileEcho(t, nil)
+
+	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"https://cdn.example.com/manual.pdf?version=1"}`, "7")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("import url status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileUpload {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileUpload)
+	}
+	if store.createCalls != 1 {
+		t.Fatalf("createCalls = %d, want 1", store.createCalls)
+	}
+	if store.created.Name != "manual.pdf" {
+		t.Fatalf("created name = %q, want manual.pdf", store.created.Name)
+	}
+	if store.created.URL != "https://cdn.example.com/manual.pdf?version=1" {
+		t.Fatalf("created URL = %q, want imported url", store.created.URL)
+	}
+	if store.created.Size != 0 {
+		t.Fatalf("created size = %d, want 0 for metadata-only URL import", store.created.Size)
+	}
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	if recorder.records[0].Action != "import_url" {
+		t.Fatalf("operation action = %q, want import_url", recorder.records[0].Action)
+	}
+}
+
+func TestImportURLRejectsUnsafeURLBeforeStore(t *testing.T) {
+	e, store, recorder, _, _ := newFileEcho(t, nil)
+
+	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"javascript:alert(1)"}`, "7")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("import unsafe url status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if store.createCalls != 0 {
+		t.Fatalf("createCalls = %d, want 0", store.createCalls)
+	}
+	if len(recorder.records) != 0 {
+		t.Fatalf("operation records = %d, want 0", len(recorder.records))
+	}
+}
+
+func TestListFilesPassesCategoryFilter(t *testing.T) {
+	e, store, _, auth, _ := newFileEcho(t, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/files?category_id=5", nil)
+	req = req.WithContext(requestctx.WithUserID(req.Context(), "7"))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list files status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
+	}
+	if store.listFilter.CategoryID != 5 {
+		t.Fatalf("category filter = %d, want 5", store.listFilter.CategoryID)
+	}
+}
+
+func TestRenameFileUpdatesMetadataAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth, _ := newFileEcho(t, nil)
+	store.file = mustFile(t, 9, "old.txt", "https://cdn.example.com/old.txt")
+
+	rec := doJSON(t, e, http.MethodPatch, "/api/files/9/name", `{"name":"new.txt"}`, "7")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rename file status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileUpdate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileUpdate)
+	}
+	if store.updated.Name != "new.txt" {
+		t.Fatalf("updated name = %q, want new.txt", store.updated.Name)
+	}
+	if got := onlyOperation(t, recorder).Action; got != "rename" {
+		t.Fatalf("operation action = %q, want rename", got)
+	}
+}
+
+func TestDeleteFileRemovesMetadataLocalUploadAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth, uploadDir := newFileEcho(t, nil)
+	storedName := "stored.txt"
+	target := filepath.Join(uploadDir, storedName)
+	if err := os.WriteFile(target, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write uploaded file fixture: %v", err)
+	}
+	store.file = mustFile(t, 9, "hello.txt", "/api/uploads/"+storedName)
+
+	rec := doJSON(t, e, http.MethodDelete, "/api/files/9", "", "7")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete file status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileDelete {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileDelete)
+	}
+	if store.deletedID != 9 {
+		t.Fatalf("deleted id = %d, want 9", store.deletedID)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("stat deleted upload error = %v, want not exist", err)
+	}
+	if got := onlyOperation(t, recorder).Action; got != "delete" {
+		t.Fatalf("operation action = %q, want delete", got)
+	}
+}
+
+func TestCreateCategoryStoresMetadataAndRecordsOperation(t *testing.T) {
+	e, store, recorder, auth, _ := newFileEcho(t, nil)
+
+	rec := doJSON(t, e, http.MethodPost, "/api/file-categories", `{"name":"合同"}`, "7")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create category status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileCategoryCreate {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileCategoryCreate)
+	}
+	if store.createdCategory.Name != "合同" {
+		t.Fatalf("created category name = %q, want 合同", store.createdCategory.Name)
+	}
+	if got := onlyOperation(t, recorder).Resource; got != "file_category" {
+		t.Fatalf("operation resource = %q, want file_category", got)
+	}
+}
+
+func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
+	e, store, recorder, auth, _ := newFileEcho(t, nil)
+	store.categories = []filedomain.FileCategory{
+		mustCategory(t, 1, 0, "合同"),
+		mustCategory(t, 2, 1, "采购合同"),
+	}
+
+	rec := doJSON(t, e, http.MethodDelete, "/api/file-categories/1", "", "7")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("delete category status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileCategoryDelete {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileCategoryDelete)
+	}
+	if store.deletedCategoryID != 0 {
+		t.Fatalf("deleted category id = %d, want 0", store.deletedCategoryID)
 	}
 	if len(recorder.records) != 0 {
 		t.Fatalf("operation records = %d, want 0", len(recorder.records))
@@ -89,6 +254,11 @@ func newFileEcho(t *testing.T, authErr error) (*echo.Echo, *fileStore, *operatio
 
 func doMultipart(t *testing.T, e *echo.Echo, path, filename, body, userID string) *httptest.ResponseRecorder {
 	t.Helper()
+	return doMultipartWithFields(t, e, path, filename, body, userID, nil)
+}
+
+func doMultipartWithFields(t *testing.T, e *echo.Echo, path, filename, body, userID string, fields map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
 	var payload bytes.Buffer
 	writer := multipart.NewWriter(&payload)
 	part, err := writer.CreateFormFile("file", filename)
@@ -97,6 +267,11 @@ func doMultipart(t *testing.T, e *echo.Echo, path, filename, body, userID string
 	}
 	if _, err := part.Write([]byte(body)); err != nil {
 		t.Fatalf("write multipart file: %v", err)
+	}
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatalf("write multipart field %s: %v", key, err)
+		}
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("close multipart writer: %v", err)
@@ -110,9 +285,28 @@ func doMultipart(t *testing.T, e *echo.Echo, path, filename, body, userID string
 	return rec
 }
 
+func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req = req.WithContext(requestctx.WithUserID(req.Context(), userID))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
 type fileStore struct {
-	createCalls int
-	created     filedomain.FileObject
+	createCalls       int
+	created           filedomain.FileObject
+	file              filedomain.FileObject
+	updated           filedomain.FileObject
+	deletedID         int64
+	listFilter        fileusecase.ListFilter
+	categories        []filedomain.FileCategory
+	createdCategory   filedomain.FileCategory
+	updatedCategory   filedomain.FileCategory
+	deletedCategoryID int64
+	categoryNameTaken bool
 }
 
 func (s *fileStore) CreateFile(ctx context.Context, file filedomain.FileObject) (filedomain.FileObject, error) {
@@ -121,14 +315,88 @@ func (s *fileStore) CreateFile(ctx context.Context, file filedomain.FileObject) 
 	}
 	s.createCalls++
 	s.created = file
-	return filedomain.RestoreFileObject(1, file.Name, file.URL, file.Size, file.ContentType, time.Unix(1_800_000_000, 0).UTC())
+	return filedomain.RestoreFileObject(1, file.Name, file.URL, file.Size, file.ContentType, file.CategoryID, time.Unix(1_800_000_000, 0).UTC())
 }
 
-func (s *fileStore) ListFiles(ctx context.Context, _ fileusecase.ListFilter) ([]filedomain.FileObject, int, error) {
+func (s *fileStore) ListFiles(ctx context.Context, filter fileusecase.ListFilter) ([]filedomain.FileObject, int, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, 0, err
 	}
+	s.listFilter = filter
 	return nil, 0, nil
+}
+
+func (s *fileStore) FindFileByID(ctx context.Context, _ int64) (filedomain.FileObject, error) {
+	if err := ctx.Err(); err != nil {
+		return filedomain.FileObject{}, err
+	}
+	return s.file, nil
+}
+
+func (s *fileStore) UpdateFile(ctx context.Context, file filedomain.FileObject) (filedomain.FileObject, error) {
+	if err := ctx.Err(); err != nil {
+		return filedomain.FileObject{}, err
+	}
+	s.updated = file
+	return file, nil
+}
+
+func (s *fileStore) DeleteFile(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.deletedID = id
+	return nil
+}
+
+func (s *fileStore) CreateCategory(ctx context.Context, category filedomain.FileCategory) (filedomain.FileCategory, error) {
+	if err := ctx.Err(); err != nil {
+		return filedomain.FileCategory{}, err
+	}
+	s.createdCategory = category
+	return filedomain.RestoreFileCategory(11, category.ParentID, category.Name, time.Unix(1_800_000_000, 0).UTC(), time.Unix(1_800_000_000, 0).UTC())
+}
+
+func (s *fileStore) UpdateCategory(ctx context.Context, category filedomain.FileCategory) (filedomain.FileCategory, error) {
+	if err := ctx.Err(); err != nil {
+		return filedomain.FileCategory{}, err
+	}
+	s.updatedCategory = category
+	return category, nil
+}
+
+func (s *fileStore) FindCategoryByID(ctx context.Context, id int64) (filedomain.FileCategory, error) {
+	if err := ctx.Err(); err != nil {
+		return filedomain.FileCategory{}, err
+	}
+	for _, category := range s.categories {
+		if category.ID == id {
+			return category, nil
+		}
+	}
+	return filedomain.FileCategory{}, apperr.NewNotFound("file category")
+}
+
+func (s *fileStore) ListCategories(ctx context.Context) ([]filedomain.FileCategory, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.categories, nil
+}
+
+func (s *fileStore) DeleteCategory(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.deletedCategoryID = id
+	return nil
+}
+
+func (s *fileStore) CategoryNameExists(ctx context.Context, _ string, _, _ int64) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return s.categoryNameTaken, nil
 }
 
 type fileAuthorizer struct {
@@ -136,7 +404,7 @@ type fileAuthorizer struct {
 	permissions []string
 }
 
-func (a *fileAuthorizer) RequirePermission(_ context.Context, permission string) error {
+func (a *fileAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
 	a.permissions = append(a.permissions, permission)
 	return a.err
 }
@@ -148,4 +416,30 @@ type operationRecorder struct {
 func (r *operationRecorder) RecordOperation(_ context.Context, input auditusecase.OperationInput) (auditusecase.OperationLog, error) {
 	r.records = append(r.records, input)
 	return auditusecase.OperationLog{}, nil
+}
+
+func mustFile(t *testing.T, id int64, name, url string) filedomain.FileObject {
+	t.Helper()
+	file, err := filedomain.RestoreFileObject(id, name, url, 5, "text/plain", 0, time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatalf("RestoreFileObject() error = %v", err)
+	}
+	return file
+}
+
+func mustCategory(t *testing.T, id, parentID int64, name string) filedomain.FileCategory {
+	t.Helper()
+	category, err := filedomain.RestoreFileCategory(id, parentID, name, time.Unix(1_800_000_000, 0).UTC(), time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatalf("RestoreFileCategory() error = %v", err)
+	}
+	return category
+}
+
+func onlyOperation(t *testing.T, recorder *operationRecorder) auditusecase.OperationInput {
+	t.Helper()
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1", len(recorder.records))
+	}
+	return recorder.records[0]
 }

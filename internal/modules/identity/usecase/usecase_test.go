@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -40,10 +41,99 @@ func TestDeleteRemovesScopedAdmin(t *testing.T) {
 	}
 }
 
+func TestListFiltersAdminsByVisibleRoles(t *testing.T) {
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdminWithRoles(t, 7, "operator", []int64{1}),
+		8: newAdminWithRoles(t, 8, "auditor", []int64{2}),
+	}}
+	uc := usecase.New(store, roleScopeSpy{visibleIDs: []int64{2}})
+
+	output, err := uc.List(context.Background(), usecase.ListInput{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if output.Total != 1 {
+		t.Fatalf("List() total = %d, want 1", output.Total)
+	}
+	if len(output.Items) != 1 || output.Items[0].Username != "auditor" {
+		t.Fatalf("List() items = %+v, want auditor only", output.Items)
+	}
+}
+
+func TestRoleAdminIDsFiltersAdminsByVisibleRoles(t *testing.T) {
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdminWithRoles(t, 7, "operator", []int64{1}),
+		8: newAdminWithRoles(t, 8, "auditor", []int64{2}),
+		9: newAdminWithRoles(t, 9, "mixed", []int64{1, 2}),
+	}}
+	uc := usecase.New(store, roleScopeSpy{visibleIDs: []int64{1}})
+
+	got, err := uc.RoleAdminIDs(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RoleAdminIDs() error = %v", err)
+	}
+	want := []int64{7}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RoleAdminIDs() = %v, want %v", got, want)
+	}
+}
+
+func TestSetRoleAdminsReplacesVisibleRoleMembership(t *testing.T) {
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdminWithRoles(t, 7, "operator", []int64{1, 2}),
+		8: newAdminWithRoles(t, 8, "auditor", []int64{1}),
+		9: newAdminWithRoles(t, 9, "reviewer", []int64{1, 2}),
+	}}
+	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{1, 2}})
+
+	got, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), "42"), usecase.RoleAdminsInput{
+		RoleID:   2,
+		AdminIDs: []int64{8},
+	})
+	if err != nil {
+		t.Fatalf("SetRoleAdmins() error = %v", err)
+	}
+	want := []int64{8}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SetRoleAdmins() = %v, want %v", got, want)
+	}
+	if store.admins[7].HasRole(2) {
+		t.Fatal("admin 7 still has role 2, want removed")
+	}
+	if !store.admins[8].HasRole(2) {
+		t.Fatal("admin 8 does not have role 2, want assigned")
+	}
+	if store.admins[9].HasRole(2) {
+		t.Fatal("admin 9 still has role 2, want removed")
+	}
+}
+
+func TestSetRoleAdminsRejectsRemovingOnlyRole(t *testing.T) {
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdminWithRoles(t, 7, "operator", []int64{2}),
+	}}
+	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{2}})
+
+	_, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), "42"), usecase.RoleAdminsInput{
+		RoleID: 2,
+	})
+	if err == nil {
+		t.Fatal("SetRoleAdmins(removing only role) error = nil, want bad request")
+	}
+	if !store.admins[7].HasRole(2) {
+		t.Fatal("admin 7 role changed after failed SetRoleAdmins")
+	}
+}
+
 func newAdmin(t *testing.T, id int64, username string) identitydomain.Admin {
 	t.Helper()
+	return newAdminWithRoles(t, id, username, []int64{1})
+}
+
+func newAdminWithRoles(t *testing.T, id int64, username string, roleIDs []int64) identitydomain.Admin {
+	t.Helper()
 	now := time.Unix(1_800_000_000, 0).UTC()
-	admin, err := identitydomain.RestoreAdmin(id, username, username, username+"@example.com", []byte("hash"), []int64{1}, 1, true, now, now)
+	admin, err := identitydomain.RestoreAdmin(id, username, username, username+"@example.com", []byte("hash"), roleIDs, roleIDs[0], true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAdmin() error = %v", err)
 	}
@@ -80,6 +170,9 @@ func (s *storeSpy) Create(_ context.Context, admin identitydomain.Admin) (identi
 }
 
 func (s *storeSpy) Update(_ context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
+	if s.admins != nil {
+		s.admins[admin.ID] = admin
+	}
 	return admin, nil
 }
 
@@ -88,12 +181,40 @@ func (s *storeSpy) Delete(_ context.Context, id int64) error {
 	return nil
 }
 
-type roleScopeSpy struct{}
-
-func (roleScopeSpy) AssignableRoleIDs(context.Context) ([]int64, error) {
-	return []int64{1}, nil
+type roleScopeSpy struct {
+	assignableIDs []int64
+	visibleIDs    []int64
 }
 
-func (roleScopeSpy) EnsureAssignableRoles(context.Context, []int64) error {
+func (s roleScopeSpy) AssignableRoleIDs(context.Context) ([]int64, error) {
+	return idsOrDefault(s.assignableIDs), nil
+}
+
+func (s roleScopeSpy) VisibleRoleIDs(context.Context) ([]int64, error) {
+	return idsOrDefault(s.visibleIDs), nil
+}
+
+func (s roleScopeSpy) EnsureAssignableRoles(_ context.Context, roleIDs []int64) error {
+	allowed := testIDSet(idsOrDefault(s.assignableIDs))
+	for _, roleID := range roleIDs {
+		if _, ok := allowed[roleID]; !ok {
+			return apperr.NewPermissionDenied("role", "")
+		}
+	}
 	return nil
+}
+
+func idsOrDefault(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return []int64{1}
+	}
+	return ids
+}
+
+func testIDSet(ids []int64) map[int64]struct{} {
+	out := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
 }

@@ -22,6 +22,8 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
+const testRequestID = "req-123"
+
 func TestDefaultMiddlewareConfig(t *testing.T) {
 	config := DefaultMiddlewareConfig()
 
@@ -31,6 +33,8 @@ func TestDefaultMiddlewareConfig(t *testing.T) {
 	assert.True(t, config.EnableLogger)
 	assert.True(t, config.EnableGzip)
 	assert.False(t, config.EnableCORS)
+	assert.False(t, config.EnableAPIKey)
+	assert.NotNil(t, config.APIKey)
 	assert.False(t, config.EnableJWT)
 	assert.NotNil(t, config.JWT)
 }
@@ -84,6 +88,62 @@ func TestApplyMiddlewares(t *testing.T) {
 	assert.NotNil(t, e)
 }
 
+func TestAPIKeyAuthenticationRunsBeforeJWT(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	config := DefaultMiddlewareConfig()
+	config.EnableAPIKey = true
+	config.APIKey = &APIKeyConfig{
+		Header:   APIKeyHeader,
+		Verifier: staticAPIKeyVerifier{},
+		Enabled:  true,
+	}
+	config.EnableJWT = true
+	config.JWT = CreateJWTConfig("test-secret", nil, true)
+
+	assert.NoError(t, ApplyMiddlewares(e, config))
+	e.GET("/private", func(c *echo.Context) error {
+		if got := requestctx.GetUserID(c.Request().Context()); got != "42" {
+			t.Fatalf("UserID = %q, want 42", got)
+		}
+		if got := requestctx.GetRoleID(c.Request().Context()); got != "7" {
+			t.Fatalf("RoleID = %q, want 7", got)
+		}
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/private", nil)
+	req.Header.Set(APIKeyHeader, "ea_known_secret")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestAPIKeyAuthenticationRejectsInvalidToken(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	config := DefaultMiddlewareConfig()
+	config.EnableAPIKey = true
+	config.APIKey = &APIKeyConfig{
+		Header:   APIKeyHeader,
+		Verifier: staticAPIKeyVerifier{},
+		Enabled:  true,
+	}
+
+	assert.NoError(t, ApplyMiddlewares(e, config))
+	e.GET("/private", func(c *echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/private", nil)
+	req.Header.Set(APIKeyHeader, "wrong")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
 func TestRequestLoggerPreservesRenderedApplicationErrorStatus(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
@@ -111,8 +171,8 @@ func TestRequestContextMiddlewareStoresMetadata(t *testing.T) {
 		if !ok {
 			t.Fatal("request context metadata missing")
 		}
-		if info.RequestID != "req-123" {
-			t.Fatalf("RequestID = %q, want req-123", info.RequestID)
+		if info.RequestID != testRequestID {
+			t.Fatalf("RequestID = %q, want %s", info.RequestID, testRequestID)
 		}
 		if info.TraceID != "trace-123" {
 			t.Fatalf("TraceID = %q, want trace-123", info.TraceID)
@@ -124,7 +184,7 @@ func TestRequestContextMiddlewareStoresMetadata(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	req.Header.Set(headerRequestID, "req-123")
+	req.Header.Set(headerRequestID, testRequestID)
 	req.Header.Set(headerTraceID, "trace-123")
 	req.Header.Set("X-User-ID", "user-123")
 	rec := httptest.NewRecorder()
@@ -132,7 +192,7 @@ func TestRequestContextMiddlewareStoresMetadata(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
-	assert.Equal(t, "req-123", rec.Header().Get(headerRequestID))
+	assert.Equal(t, testRequestID, rec.Header().Get(headerRequestID))
 }
 
 func TestRequestContextMiddlewareCleansUntrustedMetadata(t *testing.T) {
@@ -180,7 +240,7 @@ func TestRequestLoggerIncludesActiveTraceMetadata(t *testing.T) {
 		assert.NoError(t, tracerProvider.Shutdown(context.Background()))
 	}()
 
-	ctx := requestctx.WithInfo(context.Background(), requestctx.Info{RequestID: "req-123"})
+	ctx := requestctx.WithInfo(context.Background(), requestctx.Info{RequestID: testRequestID})
 	base := zerolog.New(&bytes.Buffer{})
 	ctx = base.WithContext(ctx)
 	ctx, span := tracerProvider.Tracer("test").Start(ctx, "request")
@@ -195,8 +255,8 @@ func TestRequestLoggerIncludesActiveTraceMetadata(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("decode log event: %v", err)
 	}
-	if got["request_id"] != "req-123" {
-		t.Fatalf("request_id = %v, want req-123", got["request_id"])
+	if got["request_id"] != testRequestID {
+		t.Fatalf("request_id = %v, want %s", got["request_id"], testRequestID)
 	}
 	if got["trace_id"] == "" {
 		t.Fatal("trace_id is empty, want active span trace id")
@@ -207,7 +267,7 @@ func TestRequestLoggerIncludesActiveTraceMetadata(t *testing.T) {
 }
 
 func TestRequestLoggerOmitsTraceMetadataWithoutActiveSpan(t *testing.T) {
-	ctx := requestctx.WithInfo(context.Background(), requestctx.Info{RequestID: "req-123"})
+	ctx := requestctx.WithInfo(context.Background(), requestctx.Info{RequestID: testRequestID})
 	base := zerolog.New(&bytes.Buffer{})
 	ctx = base.WithContext(ctx)
 
@@ -264,6 +324,41 @@ func TestJWTStoresSubjectAndRoleAsAuthenticatedContext(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestJWTRejectsBlacklistedToken(t *testing.T) {
+	const secret = "test-secret"
+
+	signedToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "user-123",
+	}).SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	config := CreateJWTConfig(secret, nil, true)
+	config.Blocklist = staticJWTBlocklist{blocked: true}
+	jwtMiddleware, err := JWT(config)
+	if err != nil {
+		t.Fatalf("JWT() error = %v", err)
+	}
+
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	e.Use(RequestContext())
+	e.Use(jwtMiddleware)
+	e.GET("/me", func(c *echo.Context) error {
+		t.Fatal("handler reached with blacklisted token")
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assertErrorPayload(t, rec, apperr.ErrUnauthorized, "Unauthorized")
 }
 
 func TestJWTMissingTokenReturnsGenericUnauthorized(t *testing.T) {
@@ -384,6 +479,55 @@ func TestErrorHandlerNormalizesEchoHTTPClientErrors(t *testing.T) {
 	}
 }
 
+func TestErrorHandlerRecordsInternalSystemError(t *testing.T) {
+	recorder := &systemErrorRecorderSpy{}
+	handler := ErrorHandlerWithRecorder(recorder)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	req.Header.Set(headerRequestID, testRequestID)
+	req.Header.Set("User-Agent", "test-agent")
+	req = req.WithContext(requestctx.WithUserID(req.Context(), "42"))
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/users")
+
+	handler(c, errors.New("database failed"))
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	if len(recorder.records) != 1 {
+		t.Fatalf("system error records = %d, want 1", len(recorder.records))
+	}
+	got := recorder.records[0]
+	if got.Code != apperr.ErrInternalServer {
+		t.Fatalf("Code = %d, want %d", got.Code, apperr.ErrInternalServer)
+	}
+	if got.Path != "/users" {
+		t.Fatalf("Path = %q, want /users", got.Path)
+	}
+	if got.RequestID != testRequestID {
+		t.Fatalf("RequestID = %q, want %s", got.RequestID, testRequestID)
+	}
+	if got.UserID != "42" {
+		t.Fatalf("UserID = %q, want 42", got.UserID)
+	}
+}
+
+func TestErrorHandlerDoesNotRecordClientErrors(t *testing.T) {
+	recorder := &systemErrorRecorderSpy{}
+	handler := ErrorHandlerWithRecorder(recorder)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	handler(c, echo.NewHTTPError(http.StatusBadRequest, "bad query"))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	if len(recorder.records) != 0 {
+		t.Fatalf("system error records = %d, want 0", len(recorder.records))
+	}
+}
+
 func TestErrorHandlerSkipsCommittedResponse(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
@@ -462,6 +606,32 @@ func assertErrorPayload(t *testing.T, rec *httptest.ResponseRecorder, wantCode i
 	if got["message"] != wantMessage {
 		t.Fatalf("message = %v, want %q", got["message"], wantMessage)
 	}
+}
+
+type staticAPIKeyVerifier struct{}
+
+func (staticAPIKeyVerifier) VerifyAPIKey(_ context.Context, secret string) (APIKeyIdentity, error) {
+	if secret != "ea_known_secret" {
+		return APIKeyIdentity{}, apperr.NewUnauthorized()
+	}
+	return APIKeyIdentity{UserID: "42", RoleID: "7"}, nil
+}
+
+type staticJWTBlocklist struct {
+	blocked bool
+}
+
+func (b staticJWTBlocklist) TokenBlocked(context.Context, string) (bool, error) {
+	return b.blocked, nil
+}
+
+type systemErrorRecorderSpy struct {
+	records []SystemErrorInput
+}
+
+func (r *systemErrorRecorderSpy) RecordSystemError(_ context.Context, input SystemErrorInput) error {
+	r.records = append(r.records, input)
+	return nil
 }
 
 func assertErrorHandlerNormalizes(

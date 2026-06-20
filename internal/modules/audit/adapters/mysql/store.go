@@ -26,7 +26,7 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	if db == nil {
 		return nil, errors.New("create audit store: nil db")
 	}
-	if err := db.WithContext(ctx).AutoMigrate(&operationLogModel{}, &loginLogModel{}); err != nil {
+	if err := db.WithContext(ctx).AutoMigrate(&operationLogModel{}, &loginLogModel{}, &systemErrorLogModel{}); err != nil {
 		return nil, apperr.WrapDatabase(err, "migrate audit tables")
 	}
 	return &Store{db: db}, nil
@@ -52,6 +52,22 @@ func (s *Store) ListOperationLogs(ctx context.Context, filter usecase.ListFilter
 	return listAuditRows(ctx, s.db, &operationLogModel{}, filter, "count operation logs", "list operation logs", operationLogModel.toDomain)
 }
 
+// FindOperationLog returns one operation log by id.
+func (s *Store) FindOperationLog(ctx context.Context, id int64) (domain.OperationLog, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.OperationLog{}, err
+	}
+	return findAuditRow(ctx, s.db, id, "operation log", "find operation log", operationLogModel.toDomain)
+}
+
+// DeleteOperationLogs removes operation logs by id.
+func (s *Store) DeleteOperationLogs(ctx context.Context, ids []int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return deleteAuditRows(ctx, s.db, &operationLogModel{}, ids, "delete operation logs")
+}
+
 // RecordLogin inserts one login log.
 func (s *Store) RecordLogin(ctx context.Context, log domain.LoginLog) (domain.LoginLog, error) {
 	if err := ctx.Err(); err != nil {
@@ -70,6 +86,74 @@ func (s *Store) ListLoginLogs(ctx context.Context, filter usecase.ListFilter) ([
 		return nil, 0, err
 	}
 	return listAuditRows(ctx, s.db, &loginLogModel{}, filter, "count login logs", "list login logs", loginLogModel.toDomain)
+}
+
+// FindLoginLog returns one login log by id.
+func (s *Store) FindLoginLog(ctx context.Context, id int64) (domain.LoginLog, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.LoginLog{}, err
+	}
+	return findAuditRow(ctx, s.db, id, "login log", "find login log", loginLogModel.toDomain)
+}
+
+// DeleteLoginLogs removes login logs by id.
+func (s *Store) DeleteLoginLogs(ctx context.Context, ids []int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return deleteAuditRows(ctx, s.db, &loginLogModel{}, ids, "delete login logs")
+}
+
+// RecordSystemError inserts one internal API failure log.
+func (s *Store) RecordSystemError(ctx context.Context, log domain.SystemErrorLog) (domain.SystemErrorLog, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemErrorLog{}, err
+	}
+	model := systemErrorLogModelFromDomain(log, time.Now().UTC())
+	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return domain.SystemErrorLog{}, apperr.WrapDatabase(err, "record system error log")
+	}
+	return model.toDomain()
+}
+
+// ListSystemErrorLogs returns system error logs ordered by id descending.
+func (s *Store) ListSystemErrorLogs(ctx context.Context, filter usecase.ListFilter) ([]domain.SystemErrorLog, int, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	return listAuditRows(ctx, s.db, &systemErrorLogModel{}, filter, "count system error logs", "list system error logs", systemErrorLogModel.toDomain)
+}
+
+// FindSystemErrorLog returns one system error log by id.
+func (s *Store) FindSystemErrorLog(ctx context.Context, id int64) (domain.SystemErrorLog, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemErrorLog{}, err
+	}
+	return findAuditRow(ctx, s.db, id, "system error log", "find system error log", systemErrorLogModel.toDomain)
+}
+
+// UpdateSystemErrorLog replaces mutable handling fields on one system error.
+func (s *Store) UpdateSystemErrorLog(ctx context.Context, log domain.SystemErrorLog) (domain.SystemErrorLog, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.SystemErrorLog{}, err
+	}
+	model := systemErrorLogModelFromDomain(log, time.Now().UTC())
+	result := s.db.WithContext(ctx).Save(&model)
+	if result.Error != nil {
+		return domain.SystemErrorLog{}, apperr.WrapDatabase(result.Error, "update system error log")
+	}
+	if result.RowsAffected == 0 {
+		return domain.SystemErrorLog{}, apperr.NewNotFound("system error log")
+	}
+	return model.toDomain()
+}
+
+// DeleteSystemErrorLogs removes system error logs by id.
+func (s *Store) DeleteSystemErrorLogs(ctx context.Context, ids []int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return deleteAuditRows(ctx, s.db, &systemErrorLogModel{}, ids, "delete system error logs")
 }
 
 type operationLogModel struct {
@@ -144,6 +228,61 @@ func (m loginLogModel) toDomain() (domain.LoginLog, error) {
 	return domain.RestoreLoginLog(m.ID, m.AdminID, m.Username, m.IP, m.UserAgent, m.Success, m.Reason, m.CreatedAt)
 }
 
+type systemErrorLogModel struct {
+	ID          int64      `gorm:"primaryKey"`
+	Code        int        `gorm:"not null;index"`
+	Message     string     `gorm:"type:varchar(255);not null"`
+	Detail      string     `gorm:"type:text;not null"`
+	Method      string     `gorm:"type:varchar(16);not null"`
+	Path        string     `gorm:"type:varchar(255);not null;index"`
+	IP          string     `gorm:"type:varchar(64);not null"`
+	UserAgent   string     `gorm:"type:varchar(255);not null"`
+	RequestID   string     `gorm:"type:varchar(128);not null;index"`
+	UserID      string     `gorm:"type:varchar(64);not null;index"`
+	Resolved    bool       `gorm:"not null;index"`
+	ResolveNote string     `gorm:"type:text;not null"`
+	ResolvedBy  int64      `gorm:"not null;index"`
+	ResolvedAt  *time.Time `gorm:"index"`
+	CreatedAt   time.Time  `gorm:"not null;index"`
+}
+
+func (systemErrorLogModel) TableName() string {
+	return "audit_system_error_logs"
+}
+
+func systemErrorLogModelFromDomain(log domain.SystemErrorLog, createdAt time.Time) systemErrorLogModel {
+	var resolvedAt *time.Time
+	if !log.ResolvedAt.IsZero() {
+		value := log.ResolvedAt
+		resolvedAt = &value
+	}
+	return systemErrorLogModel{
+		ID:          log.ID,
+		Code:        log.Code,
+		Message:     log.Message,
+		Detail:      log.Detail,
+		Method:      log.Method,
+		Path:        log.Path,
+		IP:          log.IP,
+		UserAgent:   log.UserAgent,
+		RequestID:   log.RequestID,
+		UserID:      log.UserID,
+		Resolved:    log.Resolved,
+		ResolveNote: log.ResolveNote,
+		ResolvedBy:  log.ResolvedBy,
+		ResolvedAt:  resolvedAt,
+		CreatedAt:   coalesceTime(log.CreatedAt, createdAt),
+	}
+}
+
+func (m systemErrorLogModel) toDomain() (domain.SystemErrorLog, error) {
+	resolvedAt := time.Time{}
+	if m.ResolvedAt != nil {
+		resolvedAt = *m.ResolvedAt
+	}
+	return domain.RestoreSystemErrorLog(m.ID, m.Code, m.Message, m.Detail, m.Method, m.Path, m.IP, m.UserAgent, m.RequestID, m.UserID, m.Resolved, m.ResolveNote, m.ResolvedBy, resolvedAt, m.CreatedAt)
+}
+
 func coalesceTime(value, fallback time.Time) time.Time {
 	if value.IsZero() {
 		return fallback
@@ -179,4 +318,35 @@ func listAuditRows[M, D any](
 		items = append(items, item)
 	}
 	return items, int(total), nil
+}
+
+func findAuditRow[M, D any](
+	ctx context.Context,
+	db *gorm.DB,
+	id int64,
+	resource string,
+	operation string,
+	convert func(M) (D, error),
+) (D, error) {
+	var model M
+	err := db.WithContext(ctx).First(&model, "id = ?", id).Error
+	if err != nil {
+		var zero D
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return zero, apperr.NewNotFound(resource)
+		}
+		return zero, apperr.WrapDatabase(err, operation)
+	}
+	return convert(model)
+}
+
+func deleteAuditRows(ctx context.Context, db *gorm.DB, model any, ids []int64, operation string) error {
+	result := db.WithContext(ctx).Where("id IN ?", ids).Delete(model)
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, operation)
+	}
+	if result.RowsAffected == 0 {
+		return apperr.NewNotFound("log")
+	}
+	return nil
 }

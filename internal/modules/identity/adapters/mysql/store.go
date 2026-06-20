@@ -15,7 +15,9 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysqljson"
 )
 
-const defaultAdminPassword = "admin123"
+// defaultAdminPassword mirrors gin-vue-admin's local bootstrap credential. The
+// seed path never reapplies it over an operator-changed password.
+const defaultAdminPassword = "123456"
 
 // Store persists administrators in MySQL.
 type Store struct {

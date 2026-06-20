@@ -35,6 +35,10 @@ type MiddlewareConfig struct {
 
 	CORS middleware.CORSConfig
 
+	EnableAPIKey bool
+
+	APIKey *APIKeyConfig
+
 	EnableJWT bool
 
 	JWT *JWTConfig
@@ -48,6 +52,8 @@ func DefaultMiddlewareConfig() *MiddlewareConfig {
 		EnableLogger:         true,
 		EnableGzip:           true,
 		EnableCORS:           false,
+		EnableAPIKey:         false,
+		APIKey:               DefaultAPIKeyConfig(),
 		EnableJWT:            false,
 		JWT:                  DefaultJWTConfig(),
 	}
@@ -79,21 +85,50 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 		e.Use(middleware.Gzip())
 	}
 
-	if config.EnableCORS {
-		corsConfig, err := normalizedCORSConfig(config.CORS)
-		if err != nil {
-			return err
-		}
-		e.Use(middleware.CORSWithConfig(corsConfig))
+	if err := installCORS(e, config); err != nil {
+		return err
 	}
 
-	if config.EnableJWT && config.JWT != nil {
-		jwtMiddleware, err := JWT(config.JWT)
-		if err != nil {
-			return err
-		}
-		e.Use(jwtMiddleware)
+	if err := installAPIKey(e, config); err != nil {
+		return err
 	}
+
+	return installJWT(e, config)
+}
+
+func installCORS(e *echo.Echo, config *MiddlewareConfig) error {
+	if !config.EnableCORS {
+		return nil
+	}
+	corsConfig, err := normalizedCORSConfig(config.CORS)
+	if err != nil {
+		return err
+	}
+	e.Use(middleware.CORSWithConfig(corsConfig))
+	return nil
+}
+
+func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
+	if !config.EnableAPIKey || config.APIKey == nil {
+		return nil
+	}
+	apiKeyMiddleware, err := APIKey(config.APIKey)
+	if err != nil {
+		return err
+	}
+	e.Use(apiKeyMiddleware)
+	return nil
+}
+
+func installJWT(e *echo.Echo, config *MiddlewareConfig) error {
+	if !config.EnableJWT || config.JWT == nil {
+		return nil
+	}
+	jwtMiddleware, err := JWT(config.JWT)
+	if err != nil {
+		return err
+	}
+	e.Use(jwtMiddleware)
 	return nil
 }
 
@@ -210,6 +245,7 @@ func normalizedCORSConfig(config middleware.CORSConfig) (middleware.CORSConfig, 
 			echo.HeaderContentType,
 			echo.HeaderAccept,
 			echo.HeaderAuthorization,
+			APIKeyHeader,
 		}
 	}
 	if len(config.AllowMethods) == 0 {

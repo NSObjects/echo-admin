@@ -1,6 +1,6 @@
 import { request } from '@umijs/max';
 
-import { clearAuthToken, setAuthToken } from './auth-token';
+import { clearAuthToken, getAuthToken, setAuthToken } from './auth-token';
 
 export type Envelope<T> = {
   code: number;
@@ -19,6 +19,29 @@ export type PageMeta = {
 export type ListParams = {
   page?: number;
   page_size?: number;
+};
+
+export type FileListParams = ListParams & {
+  category_id?: number;
+};
+
+export type AppInfo = {
+  name: string;
+  version: string;
+  time: string;
+};
+
+export type CapabilityStatus = {
+  name: string;
+  enabled: boolean;
+  available: boolean;
+  state: string;
+  message?: string;
+};
+
+export type CapabilitiesResult = {
+  capabilities: CapabilityStatus[];
+  time: string;
 };
 
 export type LoginResult = {
@@ -58,6 +81,9 @@ export type Role = {
   name: string;
   permissions: string[];
   menu_ids: number[];
+  api_ids: number[];
+  button_ids: number[];
+  data_role_ids: number[];
   default_path: string;
   active: boolean;
   created_at: string;
@@ -77,9 +103,73 @@ export type Menu = {
   name: string;
   path: string;
   icon: string;
+  hidden: boolean;
+  component: string;
+  meta: MenuMeta;
   permission: string;
   sort: number;
   active: boolean;
+  buttons: MenuButton[];
+};
+
+export type MenuMeta = {
+  active_name: string;
+  keep_alive: boolean;
+  default_menu: boolean;
+  close_tab: boolean;
+  transition_type: string;
+};
+
+export type MenuButton = {
+  id: number;
+  menu_id: number;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type APIResource = {
+  id: number;
+  method: string;
+  path: string;
+  description: string;
+  group: string;
+  permission: string;
+  public: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type APIToken = {
+  id: number;
+  admin_id: number;
+  role_id: number;
+  name: string;
+  description: string;
+  prefix: string;
+  active: boolean;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type APITokenCreateResult = {
+  token: APIToken;
+  secret: string;
+};
+
+export type RoleIDsResult = {
+  role_ids: number[];
+};
+
+export type AdminIDsResult = {
+  admin_ids: number[];
+};
+
+export type APIGroupsResult = {
+  groups: string[];
 };
 
 export type SystemConfig = {
@@ -88,6 +178,98 @@ export type SystemConfig = {
   value: string;
   public: boolean;
   updated_at: string;
+};
+
+export type SystemParam = {
+  id: number;
+  name: string;
+  key: string;
+  value: string;
+  desc: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SystemVersion = {
+  id: number;
+  version: string;
+  name: string;
+  description: string;
+  published_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VersionBundle = {
+  version: VersionInfo;
+  menus?: VersionMenu[];
+  apis?: VersionAPI[];
+  dictionaries?: VersionDictionary[];
+};
+
+export type VersionInfo = {
+  name: string;
+  code: string;
+  description?: string;
+  export_time?: string;
+};
+
+export type VersionMenu = {
+  name: string;
+  path: string;
+  icon?: string;
+  hidden?: boolean;
+  component: string;
+  meta?: VersionMenuMeta;
+  permission?: string;
+  sort?: number;
+  active?: boolean;
+  buttons?: VersionButton[];
+  children?: VersionMenu[];
+};
+
+export type VersionMenuMeta = {
+  active_name?: string;
+  keep_alive?: boolean;
+  default_menu?: boolean;
+  close_tab?: boolean;
+  transition_type?: string;
+};
+
+export type VersionButton = {
+  name: string;
+  description?: string;
+};
+
+export type VersionAPI = {
+  method: string;
+  path: string;
+  description: string;
+  group: string;
+  permission?: string;
+  public?: boolean;
+};
+
+export type VersionDictionary = {
+  code: string;
+  name: string;
+  items?: VersionDictionaryItem[];
+};
+
+export type VersionDictionaryItem = {
+  parent_id?: number;
+  label: string;
+  value: string;
+  extend?: string;
+  sort?: number;
+  active?: boolean;
+  level?: number;
+  path?: string;
+};
+
+export type DictionaryBundle = {
+  export_time?: string;
+  dictionaries: VersionDictionary[];
 };
 
 export type Dictionary = {
@@ -99,10 +281,15 @@ export type Dictionary = {
 
 export type DictionaryItem = {
   id: number;
+  parent_id: number;
   label: string;
   value: string;
+  extend: string;
   sort: number;
   active: boolean;
+  level: number;
+  path: string;
+  children: DictionaryItem[];
 };
 
 export type FileObject = {
@@ -111,7 +298,17 @@ export type FileObject = {
   url: string;
   size: number;
   content_type: string;
+  category_id: number;
   created_at: string;
+};
+
+export type FileCategory = {
+  id: number;
+  parent_id: number;
+  name: string;
+  children: FileCategory[];
+  created_at: string;
+  updated_at: string;
 };
 
 export type OperationLog = {
@@ -123,6 +320,7 @@ export type OperationLog = {
   method: string;
   path: string;
   ip: string;
+  user_agent: string;
   success: boolean;
   message: string;
   created_at: string;
@@ -133,8 +331,27 @@ export type LoginLog = {
   admin_id: number;
   username: string;
   ip: string;
+  user_agent: string;
   success: boolean;
   reason: string;
+  created_at: string;
+};
+
+export type SystemErrorLog = {
+  id: number;
+  code: number;
+  message: string;
+  detail: string;
+  method: string;
+  path: string;
+  ip: string;
+  user_agent: string;
+  request_id: string;
+  user_id: string;
+  resolved: boolean;
+  resolve_note: string;
+  resolved_by: number;
+  resolved_at?: string | null;
   created_at: string;
 };
 
@@ -163,6 +380,9 @@ export type RoleCreateInput = {
   name: string;
   permissions: string[];
   menu_ids?: number[];
+  api_ids?: number[];
+  button_ids?: number[];
+  data_role_ids?: number[];
   default_path?: string;
   active: boolean;
 };
@@ -172,6 +392,9 @@ export type RoleUpdateInput = {
   name?: string;
   permissions?: string[];
   menu_ids?: number[];
+  api_ids?: number[];
+  button_ids?: number[];
+  data_role_ids?: number[];
   default_path?: string;
   active?: boolean;
 };
@@ -189,15 +412,75 @@ export type MenuInput = {
   name: string;
   path: string;
   icon?: string;
+  hidden: boolean;
+  component: string;
+  meta: MenuMetaInput;
   permission?: string;
   sort: number;
   active: boolean;
+  buttons?: MenuButtonInput[];
+};
+
+export type MenuMetaInput = {
+  active_name?: string;
+  keep_alive: boolean;
+  default_menu: boolean;
+  close_tab: boolean;
+  transition_type?: string;
+};
+
+export type MenuButtonInput = {
+  id?: number;
+  name: string;
+  description?: string;
+};
+
+export type APIInput = {
+  method: string;
+  path: string;
+  description: string;
+  group: string;
+  permission?: string;
+  public: boolean;
+};
+
+export type APITokenInput = {
+  admin_id?: number;
+  role_id?: number;
+  name: string;
+  description?: string;
+  active: boolean;
+  days?: number;
+  expires_at?: string | null;
 };
 
 export type ConfigInput = {
   name: string;
   value: string;
   public: boolean;
+};
+
+export type ParamInput = {
+  name: string;
+  key: string;
+  value: string;
+  desc?: string;
+};
+
+export type VersionInput = {
+  version: string;
+  name: string;
+  description?: string;
+  published_at?: string;
+};
+
+export type ExportVersionInput = {
+  version: string;
+  name: string;
+  description?: string;
+  menu_ids?: number[];
+  api_ids?: number[];
+  dictionary_ids?: number[];
 };
 
 export type DictionaryCreateInput = {
@@ -210,11 +493,21 @@ export type DictionaryUpdateInput = {
 };
 
 export type DictionaryItemInput = {
+  parent_id?: number;
   label: string;
   value: string;
+  extend?: string;
   sort: number;
   active: boolean;
 };
+
+export async function appInfo(): Promise<AppInfo> {
+  return request<AppInfo>('/api/info');
+}
+
+export async function capabilities(): Promise<CapabilitiesResult> {
+  return request<CapabilitiesResult>('/api/capabilities');
+}
 
 export async function login(body: {
   username: string;
@@ -229,7 +522,16 @@ export async function login(body: {
 }
 
 export async function logout(): Promise<void> {
-  clearAuthToken();
+ try {
+		if (getAuthToken()) {
+			await request('/api/auth/logout', { method: 'POST' });
+		}
+	} catch {
+		// Local logout must still complete when the revocation request cannot
+		// reach the server, otherwise the UI can trap an operator in a stale session.
+	} finally {
+		clearAuthToken();
+	}
 }
 
 export async function currentUser(): Promise<CurrentUser> {
@@ -239,13 +541,35 @@ export async function currentUser(): Promise<CurrentUser> {
   return response.data;
 }
 
-export async function switchRole(roleID: number): Promise<LoginResult> {
-  const response = await request<Envelope<LoginResult>>('/api/auth/role', {
-    method: 'POST',
-    data: { role_id: roleID },
+export async function updateCurrentUserProfile(body: {
+  display_name: string;
+  email?: string;
+}): Promise<CurrentUser> {
+  const response = await request<Envelope<CurrentUser>>('/api/auth/me', {
+    method: 'PATCH',
+    data: body,
   });
-  setAuthToken(response.data.token);
   return response.data;
+}
+
+export async function switchRole(roleID: number): Promise<LoginResult> {
+	const response = await request<Envelope<LoginResult>>('/api/auth/role', {
+		method: 'POST',
+		data: { role_id: roleID },
+	});
+	setAuthToken(response.data.token);
+	return response.data;
+}
+
+export async function changePassword(body: {
+	current_password: string;
+	new_password: string;
+}): Promise<void> {
+	await request('/api/auth/password', {
+		method: 'POST',
+		data: body,
+	});
+	clearAuthToken();
 }
 
 export async function listAdmins(
@@ -300,8 +624,112 @@ export async function copyRole(id: number, body: RoleCopyInput): Promise<void> {
   await request(`/api/roles/${id}/copy`, { method: 'POST', data: body });
 }
 
+export async function listRoleAdmins(id: number): Promise<number[]> {
+  const response = await request<Envelope<AdminIDsResult>>(
+    `/api/roles/${id}/admins`,
+  );
+  return response.data.admin_ids;
+}
+
+export async function setRoleAdmins(
+  id: number,
+  adminIDs: number[],
+): Promise<number[]> {
+  const response = await request<Envelope<AdminIDsResult>>(
+    `/api/roles/${id}/admins`,
+    { method: 'PUT', data: { admin_ids: adminIDs } },
+  );
+  return response.data.admin_ids;
+}
+
+export async function listAPIs(
+  params?: ListParams,
+): Promise<Envelope<APIResource[]>> {
+  return request<Envelope<APIResource[]>>('/api/apis', { params });
+}
+
+export async function listAPIGroups(): Promise<string[]> {
+  const response =
+    await request<Envelope<APIGroupsResult>>('/api/apis/groups');
+  return response.data.groups;
+}
+
+export async function readAPI(id: number): Promise<APIResource> {
+  const response = await request<Envelope<APIResource>>(`/api/apis/${id}`);
+  return response.data;
+}
+
+export async function createAPI(body: APIInput): Promise<void> {
+  await request('/api/apis', { method: 'POST', data: body });
+}
+
+export async function updateAPI(id: number, body: APIInput): Promise<void> {
+  await request(`/api/apis/${id}`, { method: 'PATCH', data: body });
+}
+
+export async function deleteAPI(id: number): Promise<void> {
+  await request(`/api/apis/${id}`, { method: 'DELETE' });
+}
+
+export async function batchDeleteAPIs(ids: number[]): Promise<void> {
+  await request('/api/apis/batch-delete', {
+    method: 'POST',
+    data: { ids },
+  });
+}
+
+export async function listAPIRoles(id: number): Promise<number[]> {
+  const response = await request<Envelope<RoleIDsResult>>(
+    `/api/apis/${id}/roles`,
+  );
+  return response.data.role_ids;
+}
+
+export async function setAPIRoles(
+  id: number,
+  roleIDs: number[],
+): Promise<number[]> {
+  const response = await request<Envelope<RoleIDsResult>>(
+    `/api/apis/${id}/roles`,
+    { method: 'PUT', data: { role_ids: roleIDs } },
+  );
+  return response.data.role_ids;
+}
+
+export async function listAPITokens(
+  params?: ListParams,
+): Promise<Envelope<APIToken[]>> {
+  return request<Envelope<APIToken[]>>('/api/api-tokens', { params });
+}
+
+export async function createAPIToken(
+  body: APITokenInput,
+): Promise<APITokenCreateResult> {
+  const response = await request<Envelope<APITokenCreateResult>>(
+    '/api/api-tokens',
+    { method: 'POST', data: body },
+  );
+  return response.data;
+}
+
+export async function updateAPIToken(
+  id: number,
+  body: APITokenInput,
+): Promise<void> {
+  await request(`/api/api-tokens/${id}`, { method: 'PATCH', data: body });
+}
+
+export async function deleteAPIToken(id: number): Promise<void> {
+  await request(`/api/api-tokens/${id}`, { method: 'DELETE' });
+}
+
 export async function listMenus(): Promise<Menu[]> {
   const response = await request<Envelope<Menu[]>>('/api/menus');
+  return response.data;
+}
+
+export async function readMenu(id: number): Promise<Menu> {
+  const response = await request<Envelope<Menu>>(`/api/menus/${id}`);
   return response.data;
 }
 
@@ -317,6 +745,24 @@ export async function deleteMenu(id: number): Promise<void> {
   await request(`/api/menus/${id}`, { method: 'DELETE' });
 }
 
+export async function listMenuRoles(id: number): Promise<number[]> {
+  const response = await request<Envelope<RoleIDsResult>>(
+    `/api/menus/${id}/roles`,
+  );
+  return response.data.role_ids;
+}
+
+export async function setMenuRoles(
+  id: number,
+  roleIDs: number[],
+): Promise<number[]> {
+  const response = await request<Envelope<RoleIDsResult>>(
+    `/api/menus/${id}/roles`,
+    { method: 'PUT', data: { role_ids: roleIDs } },
+  );
+  return response.data.role_ids;
+}
+
 export async function listConfigs(): Promise<SystemConfig[]> {
   const response = await request<Envelope<SystemConfig[]>>('/api/system/configs');
   return response.data;
@@ -329,8 +775,147 @@ export async function upsertConfig(key: string, body: ConfigInput): Promise<void
   });
 }
 
+export async function deleteConfig(key: string): Promise<void> {
+  await request(`/api/system/configs/${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function listParams(
+  params?: ListParams & { name?: string; key?: string },
+): Promise<Envelope<SystemParam[]>> {
+  return request<Envelope<SystemParam[]>>('/api/system/params', { params });
+}
+
+export async function readParam(id: number): Promise<SystemParam> {
+  const response = await request<Envelope<SystemParam>>(
+    `/api/system/params/${id}`,
+  );
+  return response.data;
+}
+
+export async function readParamByKey(key: string): Promise<SystemParam> {
+  const response = await request<Envelope<SystemParam>>(
+    `/api/system/params/key/${encodeURIComponent(key)}`,
+  );
+  return response.data;
+}
+
+export async function createParam(body: ParamInput): Promise<void> {
+  await request('/api/system/params', { method: 'POST', data: body });
+}
+
+export async function updateParam(
+  id: number,
+  body: ParamInput,
+): Promise<void> {
+  await request(`/api/system/params/${id}`, { method: 'PATCH', data: body });
+}
+
+export async function deleteParam(id: number): Promise<void> {
+  await request(`/api/system/params/${id}`, { method: 'DELETE' });
+}
+
+export async function batchDeleteParams(ids: number[]): Promise<void> {
+  await request('/api/system/params/batch-delete', {
+    method: 'POST',
+    data: { ids },
+  });
+}
+
+export async function listVersions(): Promise<SystemVersion[]> {
+  const response = await request<Envelope<SystemVersion[]>>(
+    '/api/system/versions',
+  );
+  return response.data;
+}
+
+export async function readVersion(id: number): Promise<SystemVersion> {
+  const response = await request<Envelope<SystemVersion>>(
+    `/api/system/versions/${id}`,
+  );
+  return response.data;
+}
+
+export async function createVersion(body: VersionInput): Promise<void> {
+  await request('/api/system/versions', { method: 'POST', data: body });
+}
+
+export async function exportVersion(
+  body: ExportVersionInput,
+): Promise<SystemVersion> {
+  const response = await request<Envelope<SystemVersion>>(
+    '/api/system/versions/export',
+    { method: 'POST', data: body },
+  );
+  return response.data;
+}
+
+export async function importVersion(
+  body: VersionBundle,
+): Promise<SystemVersion> {
+  const response = await request<Envelope<SystemVersion>>(
+    '/api/system/versions/import',
+    { method: 'POST', data: body },
+  );
+  return response.data;
+}
+
+export async function updateVersion(
+  id: number,
+  body: VersionInput,
+): Promise<void> {
+  await request(`/api/system/versions/${id}`, {
+    method: 'PATCH',
+    data: body,
+  });
+}
+
+export async function deleteVersion(id: number): Promise<void> {
+  await request(`/api/system/versions/${id}`, { method: 'DELETE' });
+}
+
+export async function batchDeleteVersions(ids: number[]): Promise<void> {
+  await request('/api/system/versions/batch-delete', {
+    method: 'POST',
+    data: { ids },
+  });
+}
+
+export async function downloadVersionJSON(id: number): Promise<Blob> {
+  const token = getAuthToken();
+  const response = await fetch(`/api/system/versions/${id}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    throw new Error('download version json failed');
+  }
+  return response.blob();
+}
+
 export async function listDictionaries(): Promise<Dictionary[]> {
   const response = await request<Envelope<Dictionary[]>>('/api/dictionaries');
+  return response.data;
+}
+
+export async function exportDictionaries(): Promise<Blob> {
+  const token = getAuthToken();
+  const response = await fetch('/api/dictionaries/export', {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    throw new Error('export dictionaries failed');
+  }
+  return response.blob();
+}
+
+export async function importDictionaries(
+  body: DictionaryBundle,
+): Promise<Dictionary[]> {
+  const response = await request<Envelope<Dictionary[]>>(
+    '/api/dictionaries/import',
+    { method: 'POST', data: body },
+  );
   return response.data;
 }
 
@@ -387,20 +972,88 @@ export async function deleteDictionaryItem(
   );
 }
 
+export async function listFileCategories(): Promise<FileCategory[]> {
+  const response =
+    await request<Envelope<FileCategory[]>>('/api/file-categories');
+  return response.data;
+}
+
+export async function createFileCategory(body: {
+  name: string;
+  parent_id?: number;
+}): Promise<FileCategory> {
+  const response = await request<Envelope<FileCategory>>(
+    '/api/file-categories',
+    {
+      method: 'POST',
+      data: body,
+    },
+  );
+  return response.data;
+}
+
+export async function updateFileCategory(
+  id: number,
+  body: { name: string; parent_id?: number },
+): Promise<FileCategory> {
+  const response = await request<Envelope<FileCategory>>(
+    `/api/file-categories/${id}`,
+    {
+      method: 'PATCH',
+      data: body,
+    },
+  );
+  return response.data;
+}
+
+export async function deleteFileCategory(id: number): Promise<void> {
+  await request(`/api/file-categories/${id}`, { method: 'DELETE' });
+}
+
 export async function listFiles(
-  params?: ListParams,
+  params?: FileListParams,
 ): Promise<Envelope<FileObject[]>> {
   return request<Envelope<FileObject[]>>('/api/files', { params });
 }
 
-export async function uploadFile(file: File): Promise<FileObject> {
+export async function uploadFile(
+  file: File,
+  categoryID?: number,
+): Promise<FileObject> {
   const body = new FormData();
   body.append('file', file);
+  if (categoryID) {
+    body.append('category_id', String(categoryID));
+  }
   const response = await request<Envelope<FileObject>>('/api/files', {
     method: 'POST',
     data: body,
   });
   return response.data;
+}
+
+export async function importFileURL(body: {
+  name?: string;
+  url: string;
+  category_id?: number;
+}): Promise<FileObject> {
+  const response = await request<Envelope<FileObject>>('/api/files/import-url', {
+    method: 'POST',
+    data: body,
+  });
+  return response.data;
+}
+
+export async function renameFile(id: number, name: string): Promise<FileObject> {
+  const response = await request<Envelope<FileObject>>(`/api/files/${id}/name`, {
+    method: 'PATCH',
+    data: { name },
+  });
+  return response.data;
+}
+
+export async function deleteFile(id: number): Promise<void> {
+  await request(`/api/files/${id}`, { method: 'DELETE' });
 }
 
 export async function listOperationLogs(
@@ -409,8 +1062,85 @@ export async function listOperationLogs(
   return request<Envelope<OperationLog[]>>('/api/logs/operations', { params });
 }
 
+export async function readOperationLog(id: number): Promise<OperationLog> {
+  const response = await request<Envelope<OperationLog>>(
+    `/api/logs/operations/${id}`,
+  );
+  return response.data;
+}
+
+export async function deleteOperationLog(id: number): Promise<void> {
+  await request(`/api/logs/operations/${id}`, { method: 'DELETE' });
+}
+
+export async function batchDeleteOperationLogs(ids: number[]): Promise<void> {
+  await request('/api/logs/operations/batch-delete', {
+    method: 'POST',
+    data: { ids },
+  });
+}
+
 export async function listLoginLogs(
   params?: ListParams,
 ): Promise<Envelope<LoginLog[]>> {
   return request<Envelope<LoginLog[]>>('/api/logs/logins', { params });
+}
+
+export async function readLoginLog(id: number): Promise<LoginLog> {
+  const response = await request<Envelope<LoginLog>>(`/api/logs/logins/${id}`);
+  return response.data;
+}
+
+export async function deleteLoginLog(id: number): Promise<void> {
+  await request(`/api/logs/logins/${id}`, { method: 'DELETE' });
+}
+
+export async function batchDeleteLoginLogs(ids: number[]): Promise<void> {
+  await request('/api/logs/logins/batch-delete', {
+    method: 'POST',
+    data: { ids },
+  });
+}
+
+export async function listSystemErrorLogs(
+  params?: ListParams,
+): Promise<Envelope<SystemErrorLog[]>> {
+  return request<Envelope<SystemErrorLog[]>>('/api/logs/errors', { params });
+}
+
+export async function readSystemErrorLog(id: number): Promise<SystemErrorLog> {
+  const response = await request<Envelope<SystemErrorLog>>(
+    `/api/logs/errors/${id}`,
+  );
+  return response.data;
+}
+
+export async function deleteSystemErrorLog(id: number): Promise<void> {
+  await request(`/api/logs/errors/${id}`, { method: 'DELETE' });
+}
+
+export async function batchDeleteSystemErrorLogs(ids: number[]): Promise<void> {
+  await request('/api/logs/errors/batch-delete', {
+    method: 'POST',
+    data: { ids },
+  });
+}
+
+export async function resolveSystemErrorLog(
+  id: number,
+  note?: string,
+): Promise<SystemErrorLog> {
+  const response = await request<Envelope<SystemErrorLog>>(
+    `/api/logs/errors/${id}/resolve`,
+    { method: 'POST', data: { note } },
+  );
+  return response.data;
+}
+
+export async function reopenSystemErrorLog(id: number): Promise<SystemErrorLog> {
+  const response = await request<Envelope<SystemErrorLog>>(
+    `/api/logs/errors/${id}/resolve`,
+    { method: 'DELETE' },
+  );
+  return response.data;
 }
