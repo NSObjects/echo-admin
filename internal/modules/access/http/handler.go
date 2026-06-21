@@ -68,11 +68,12 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListPermissions returns grant metadata.
 func (h *Handler) ListPermissions(c *echo.Context) error {
-	if err := h.ready(); err != nil {
+	if err := h.authorize(c, accessdomain.PermissionRoleRead); err != nil {
 		return err
 	}
-	// The catalog is non-secret metadata used by role and menu editors. JWT still
-	// protects the route; reading the catalog never grants a permission.
+	// The catalog feeds role editors. Route authorization keeps disabled
+	// identities, unassigned API tokens, and non-role-management users from
+	// enumerating the grant surface.
 	permissions, err := h.usecase.ListPermissions(c.Request().Context())
 	if err != nil {
 		return err

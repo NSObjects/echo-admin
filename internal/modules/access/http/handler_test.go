@@ -87,6 +87,30 @@ func TestListMenusRejectsUnauthorizedBeforeStore(t *testing.T) {
 	}
 }
 
+func TestListPermissionsRequiresRoleReadPermission(t *testing.T) {
+	e, _, _, auth := newAccessEcho(nil)
+
+	rec := doJSON(t, e, http.MethodGet, "/api/permissions", "", "42")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list permissions status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleRead)
+	}
+}
+
+func TestListPermissionsRejectsUnauthorizedBeforeCatalog(t *testing.T) {
+	e, _, _, auth := newAccessEcho(apperr.NewPermissionDenied("role", "read"))
+
+	rec := doJSON(t, e, http.MethodGet, "/api/permissions", "", "42")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("list permissions status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleRead)
+	}
+}
+
 func TestCreateMenuAcceptsMetaAndButtons(t *testing.T) {
 	e, store, recorder, auth := newAccessEcho(nil)
 

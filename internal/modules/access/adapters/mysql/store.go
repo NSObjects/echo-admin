@@ -684,7 +684,7 @@ var apiSeeds = []apiSeed{
 	{method: "POST", path: "/api/roles/:id/copy", description: "复制角色", group: "role", permission: domain.PermissionRoleCreate},
 	{method: "GET", path: "/api/roles/:id/admins", description: "角色关联管理员", group: "role", permission: domain.PermissionRoleRead},
 	{method: "PUT", path: "/api/roles/:id/admins", description: "更新角色关联管理员", group: "role", permission: domain.PermissionRoleUpdate},
-	{method: "GET", path: "/api/permissions", description: "权限目录元数据", group: "access"},
+	{method: "GET", path: "/api/permissions", description: "权限目录元数据", group: "access", permission: domain.PermissionRoleRead},
 	{method: "GET", path: "/api/apis", description: "API列表", group: "api", permission: domain.PermissionAPIRead},
 	{method: "GET", path: "/api/apis/groups", description: "API分组", group: "api", permission: domain.PermissionAPIRead},
 	{method: "POST", path: "/api/apis", description: "创建API", group: "api", permission: domain.PermissionAPICreate},

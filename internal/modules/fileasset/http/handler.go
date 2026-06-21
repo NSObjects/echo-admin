@@ -64,7 +64,7 @@ func Register(group *echo.Group, handler *Handler) {
 	group.POST("/files/import-url", handler.ImportURL)
 	group.PATCH("/files/:id/name", handler.RenameFile)
 	group.DELETE("/files/:id", handler.DeleteFile)
-	group.Static("/uploads", handler.uploadDir)
+	group.GET("/uploads/*", handler.ServeUpload)
 }
 
 // ListCategories returns the category tree used by file management.
@@ -286,6 +286,19 @@ func (h *Handler) DeleteFile(c *echo.Context) error {
 	return httpresp.OK(c, deletedResponse{ID: file.ID})
 }
 
+// ServeUpload returns one local uploaded file after the same route/API grant
+// check used by file metadata reads.
+func (h *Handler) ServeUpload(c *echo.Context) error {
+	if err := h.authorize(c, accessdomain.PermissionFileRead); err != nil {
+		return err
+	}
+	storedName, err := cleanStoredUploadName(c.Param("*"))
+	if err != nil {
+		return err
+	}
+	return c.FileFS(storedName, os.DirFS(h.uploadDir))
+}
+
 func (h *Handler) authorize(c *echo.Context, permission string) error {
 	if err := h.ready(); err != nil {
 		return err
@@ -454,6 +467,14 @@ func cleanUploadName(name string) (string, error) {
 		return "", apperr.NewBadRequest("invalid file name")
 	}
 	return cleaned, nil
+}
+
+func cleanStoredUploadName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || filepath.Base(name) != name || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return "", apperr.NewBadRequest("invalid upload file")
+	}
+	return name, nil
 }
 
 func contentType(header *multipart.FileHeader) string {

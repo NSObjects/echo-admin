@@ -150,6 +150,54 @@ func TestListFilesPassesCategoryFilter(t *testing.T) {
 	}
 }
 
+func TestServeUploadRequiresFileReadPermission(t *testing.T) {
+	e, _, _, auth, uploadDir := newFileEcho(t, nil)
+	if err := os.WriteFile(filepath.Join(uploadDir, "stored.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write uploaded file fixture: %v", err)
+	}
+
+	rec := doJSON(t, e, http.MethodGet, "/api/uploads/stored.txt", "", "7")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if rec.Body.String() != "hello" {
+		t.Fatalf("served upload body = %q, want hello", rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
+	}
+	if len(auth.paths) != 1 || auth.paths[0] != "/api/uploads/*" {
+		t.Fatalf("authorized paths = %v, want [/api/uploads/*]", auth.paths)
+	}
+}
+
+func TestServeUploadRejectsUnauthorizedBeforeStaticFile(t *testing.T) {
+	e, _, _, auth, uploadDir := newFileEcho(t, apperr.NewPermissionDenied("file", "read"))
+	if err := os.WriteFile(filepath.Join(uploadDir, "stored.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write uploaded file fixture: %v", err)
+	}
+
+	rec := doJSON(t, e, http.MethodGet, "/api/uploads/stored.txt", "", "7")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
+	}
+}
+
+func TestServeUploadRejectsNestedPath(t *testing.T) {
+	e, _, _, auth, _ := newFileEcho(t, nil)
+
+	rec := doJSON(t, e, http.MethodGet, "/api/uploads/nested/stored.txt", "", "7")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
+		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
+	}
+}
+
 func TestRenameFileUpdatesMetadataAndRecordsOperation(t *testing.T) {
 	e, store, recorder, auth, _ := newFileEcho(t, nil)
 	store.file = mustFile(t, 9, "old.txt", "https://cdn.example.com/old.txt")
@@ -402,10 +450,12 @@ func (s *fileStore) CategoryNameExists(ctx context.Context, _ string, _, _ int64
 type fileAuthorizer struct {
 	err         error
 	permissions []string
+	paths       []string
 }
 
-func (a *fileAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
+func (a *fileAuthorizer) RequireRoutePermission(_ context.Context, permission, _, path string) error {
 	a.permissions = append(a.permissions, permission)
+	a.paths = append(a.paths, path)
 	return a.err
 }
 
