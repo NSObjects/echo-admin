@@ -49,26 +49,28 @@ func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, err
 		return LoginOutput{}, err
 	}
 	username := strings.ToLower(strings.TrimSpace(input.Username))
+	now := u.now()
+	attemptKey := loginAttemptKey(username, input.IP)
+	if err := u.ensureLoginAttemptAllowed(ctx, attemptKey, now, username, input); err != nil {
+		return LoginOutput{}, err
+	}
 	admin, err := u.admins.FindByUsername(ctx, username)
 	if err != nil {
-		if recordErr := u.recordLogin(ctx, loginRecordFromInput(0, username, input, false, "invalid credentials")); recordErr != nil {
-			return LoginOutput{}, recordErr
-		}
-		return LoginOutput{}, apperr.New(apperr.ErrUnauthorized, "invalid username or password")
+		record := loginRecordFromInput(0, username, input, false, "invalid credentials")
+		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrUnauthorized, "invalid username or password"))
 	}
 	if !admin.Active {
-		if recordErr := u.recordLogin(ctx, loginRecordFromInput(admin.ID, username, input, false, "account disabled")); recordErr != nil {
-			return LoginOutput{}, recordErr
-		}
-		return LoginOutput{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+		record := loginRecordFromInput(admin.ID, username, input, false, "account disabled")
+		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrAccountDisabled, "account disabled"))
 	}
 	if compareErr := bcrypt.CompareHashAndPassword(admin.PasswordHash, []byte(input.Password)); compareErr != nil {
-		if recordErr := u.recordLogin(ctx, loginRecordFromInput(admin.ID, username, input, false, "invalid credentials")); recordErr != nil {
-			return LoginOutput{}, recordErr
-		}
-		return LoginOutput{}, apperr.New(apperr.ErrUnauthorized, "invalid username or password")
+		record := loginRecordFromInput(admin.ID, username, input, false, "invalid credentials")
+		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrUnauthorized, "invalid username or password"))
 	}
 
+	if resetErr := u.loginLimiter.ResetLoginAttempts(ctx, attemptKey); resetErr != nil {
+		return LoginOutput{}, resetErr
+	}
 	user, err := u.userSnapshot(ctx, admin, admin.ActiveRoleID)
 	if err != nil {
 		return LoginOutput{}, err
@@ -283,7 +285,7 @@ func (u *Usecase) RequireRoutePermission(ctx context.Context, permission, method
 }
 
 func (u *Usecase) ready() error {
-	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.apis == nil || u.logins == nil || u.jwtBlacklist == nil {
+	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.apis == nil || u.logins == nil || u.jwtBlacklist == nil || u.loginLimiter == nil {
 		return apperr.New(apperr.ErrInternalServer, "auth dependencies are not configured")
 	}
 	if len(u.jwtSecret) == 0 {
@@ -493,6 +495,31 @@ func (u *Usecase) recordLogin(ctx context.Context, record LoginRecord) error {
 	return u.logins.RecordLogin(ctx, record)
 }
 
+func (u *Usecase) ensureLoginAttemptAllowed(ctx context.Context, attemptKey string, now time.Time, username string, input LoginInput) error {
+	err := u.loginLimiter.CheckLoginAttempt(ctx, attemptKey, now)
+	if err == nil {
+		return nil
+	}
+	if !isTooManyLoginAttempts(err) {
+		return err
+	}
+	record := loginRecordFromInput(0, username, input, false, "too many login attempts")
+	if recordErr := u.recordLogin(ctx, record); recordErr != nil {
+		return recordErr
+	}
+	return err
+}
+
+func (u *Usecase) rejectLogin(ctx context.Context, attemptKey string, now time.Time, record LoginRecord, loginErr error) (LoginOutput, error) {
+	if recordErr := u.recordLogin(ctx, record); recordErr != nil {
+		return LoginOutput{}, recordErr
+	}
+	if limitErr := u.loginLimiter.RecordLoginFailure(ctx, attemptKey, now); limitErr != nil {
+		return LoginOutput{}, limitErr
+	}
+	return LoginOutput{}, loginErr
+}
+
 func hashPassword(password string) ([]byte, error) {
 	if len(password) < 8 || len(password) > 72 {
 		return nil, apperr.NewBadRequest("invalid password")
@@ -506,6 +533,20 @@ func hashPassword(password string) ([]byte, error) {
 
 func jwtTokenHash(rawToken string) string {
 	sum := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(sum[:])
+}
+
+func isTooManyLoginAttempts(err error) bool {
+	appErr, ok := apperr.Parse(err)
+	return ok && appErr.Code() == apperr.ErrTooManyAttempts
+}
+
+func loginAttemptKey(username, ip string) string {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		ip = "unknown"
+	}
+	sum := sha256.Sum256([]byte(username + "\x00" + ip))
 	return hex.EncodeToString(sum[:])
 }
 

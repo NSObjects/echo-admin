@@ -112,7 +112,7 @@ func TestUpdateProfileReturnsCurrentUser(t *testing.T) {
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
 	store := newAuthStore(t)
-	uc := authusecase.New(store, store, store, store, store, &loginRecorder{}, "test-secret")
+	uc := authusecase.New(store, store, store, store, store, store, &loginRecorder{}, "test-secret")
 	handler := authhttp.New(uc)
 
 	e := echo.New()
@@ -212,6 +212,18 @@ func (s *authStore) AddJWTBlacklist(_ context.Context, entry authusecase.JWTBlac
 func (s *authStore) JWTBlacklisted(_ context.Context, tokenHash string, now time.Time) (bool, error) {
 	expiresAt, ok := s.blacklisted[tokenHash]
 	return ok && now.Before(expiresAt), nil
+}
+
+func (s *authStore) CheckLoginAttempt(context.Context, string, time.Time) error {
+	return nil
+}
+
+func (s *authStore) RecordLoginFailure(context.Context, string, time.Time) error {
+	return nil
+}
+
+func (s *authStore) ResetLoginAttempts(context.Context, string) error {
+	return nil
 }
 
 type loginRecorder struct{}

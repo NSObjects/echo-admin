@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	envOnlyPort      = ":9999"
-	envOnlyJWTSecret = "env-secret"
+	envOnlyPort              = ":9999"
+	envOnlyJWTSecret         = "env-secret-with-at-least-32-bytes"
+	envOnlyBootstrapPassword = "bootstrap-admin-secret"
 )
 
 func TestDecodeConfigWithEnvKeepsFileSourceOverrides(t *testing.T) {
@@ -53,6 +54,22 @@ func TestDecodeConfigWithEnvAppliesJWTOverride(t *testing.T) {
 	}
 	if cfg.JWT.Secret != envOnlyJWTSecret {
 		t.Fatalf("JWT.Secret = %q, want %s", cfg.JWT.Secret, envOnlyJWTSecret)
+	}
+}
+
+func TestDecodeConfigWithEnvAppliesAdminBootstrapPassword(t *testing.T) {
+	t.Setenv("ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD", envOnlyBootstrapPassword)
+
+	cfg, err := decodeConfigWithEnv([]byte(`
+	[admin]
+	upload_dir = "uploads"
+	`), "toml", true)
+	if err != nil {
+		t.Fatalf("decodeConfigWithEnv() error = %v", err)
+	}
+
+	if cfg.Admin.BootstrapPassword != envOnlyBootstrapPassword {
+		t.Fatalf("Admin.BootstrapPassword = %q, want env-only bootstrap password", cfg.Admin.BootstrapPassword)
 	}
 }
 
@@ -351,6 +368,48 @@ func TestValidateRejectsInvalidLogConfig(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Validate() error = nil, want invalid log output error")
+	}
+}
+
+func TestValidateRejectsUnsafeJWTSecrets(t *testing.T) {
+	tests := []struct {
+		name   string
+		secret string
+		want   string
+	}{
+		{name: "removed default", secret: insecureDevelopmentJWTSecret, want: "removed development default"},
+		{name: "too short", secret: "short-secret", want: "at least 32"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(Config{
+				JWT: JWTConfig{
+					Enabled: true,
+					Secret:  tt.secret,
+				},
+			})
+			if err == nil {
+				t.Fatal("Validate() error = nil, want JWT secret validation error")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %q, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateRejectsUnsafeBootstrapAdminPassword(t *testing.T) {
+	err := Validate(Config{
+		Admin: AdminConfig{
+			BootstrapPassword: "123456",
+		},
+	})
+	if err == nil {
+		t.Fatal("Validate() error = nil, want bootstrap password validation error")
+	}
+	if !strings.Contains(err.Error(), "removed default") {
+		t.Fatalf("Validate() error = %q, want removed default identified", err)
 	}
 }
 

@@ -79,7 +79,8 @@ type Config struct {
 
 // AdminConfig controls back-office foundation behavior.
 type AdminConfig struct {
-	UploadDir string `mapstructure:"upload_dir"`
+	UploadDir         string `mapstructure:"upload_dir"`
+	BootstrapPassword string `mapstructure:"bootstrap_password"`
 }
 
 // AppConfig controls process identity exposed by system routes.

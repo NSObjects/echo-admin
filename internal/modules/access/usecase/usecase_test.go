@@ -107,6 +107,11 @@ func TestCreateRoleRejectsButtonGrantOutsideActiveRoleScope(t *testing.T) {
 }
 
 func scopedManagerUsecase(t *testing.T) (*usecase.Usecase, context.Context) {
+	uc, ctx, _ := scopedManagerUsecaseWithStore(t)
+	return uc, ctx
+}
+
+func scopedManagerUsecaseWithStore(t *testing.T) (*usecase.Usecase, context.Context, *storeSpy) {
 	t.Helper()
 	now := time.Unix(1_800_000_000, 0).UTC()
 	manager, err := accessdomain.RestoreRole(2, 1, "manager", "经理", []string{accessdomain.PermissionAdminRead}, []int64{1}, []int64{1}, []int64{1}, []int64{2}, "/admins", true, now, now)
@@ -117,11 +122,12 @@ func scopedManagerUsecase(t *testing.T) (*usecase.Usecase, context.Context) {
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
-	uc := usecase.New(&storeSpy{roles: []accessdomain.Role{root, manager}}, adminRoleReaderSpy{
+	store := &storeSpy{roles: []accessdomain.Role{root, manager}}
+	uc := usecase.New(store, adminRoleReaderSpy{
 		state: usecase.AdminRoleState{RoleIDs: []int64{2}, ActiveRoleID: 2},
 	})
 	ctx := requestctx.WithUserID(context.Background(), "42")
-	return uc, requestctx.WithRoleID(ctx, "2")
+	return uc, requestctx.WithRoleID(ctx, "2"), store
 }
 
 func TestVisibleRoleIDsUsesDataAuthorityInsideDelegationScope(t *testing.T) {
@@ -380,6 +386,67 @@ func TestSetAPIRolesRejectsAPIOutsideActiveGrantScope(t *testing.T) {
 	}
 }
 
+func TestCreateAPIRejectsPublicRouteForScopedRole(t *testing.T) {
+	uc, ctx, store := scopedManagerUsecaseWithStore(t)
+
+	_, err := uc.CreateAPI(ctx, usecase.APIInput{
+		Method:      "GET",
+		Path:        "/api/public-secret",
+		Description: "Public secret",
+		Group:       "system",
+		Permission:  accessdomain.PermissionAPIRead,
+		Public:      true,
+	})
+	if err == nil {
+		t.Fatal("CreateAPI(public scoped role) error = nil, want permission denied")
+	}
+	if store.createdAPI.Path != "" {
+		t.Fatalf("createdAPI.Path = %q, want empty", store.createdAPI.Path)
+	}
+}
+
+func TestUpdateAPIRejectsAPIOutsideActiveGrantScope(t *testing.T) {
+	uc, ctx, store := scopedManagerUsecaseWithStore(t)
+	store.apis = []accessdomain.API{restoreAPITest(t, 2, "GET", "/api/secret", accessdomain.PermissionAPIRead, false)}
+
+	_, err := uc.UpdateAPI(ctx, usecase.UpdateAPIInput{
+		ID:          2,
+		Method:      "GET",
+		Path:        "/api/secret",
+		Description: "Secret",
+		Group:       "system",
+		Permission:  accessdomain.PermissionAPIRead,
+		Public:      false,
+	})
+	if err == nil {
+		t.Fatal("UpdateAPI(outside grant) error = nil, want permission denied")
+	}
+	if store.createdAPI.Path != "" {
+		t.Fatalf("updated API path = %q, want empty", store.createdAPI.Path)
+	}
+}
+
+func TestUpdateAPIRejectsPublicRouteForScopedRole(t *testing.T) {
+	uc, ctx, store := scopedManagerUsecaseWithStore(t)
+	store.apis = []accessdomain.API{restoreAPITest(t, 1, "GET", "/api/managed", accessdomain.PermissionAPIRead, false)}
+
+	_, err := uc.UpdateAPI(ctx, usecase.UpdateAPIInput{
+		ID:          1,
+		Method:      "GET",
+		Path:        "/api/managed",
+		Description: "Managed",
+		Group:       "system",
+		Permission:  accessdomain.PermissionAPIRead,
+		Public:      true,
+	})
+	if err == nil {
+		t.Fatal("UpdateAPI(public scoped role) error = nil, want permission denied")
+	}
+	if store.createdAPI.Path != "" {
+		t.Fatalf("updated API path = %q, want empty", store.createdAPI.Path)
+	}
+}
+
 func TestAPIGroupsReturnsSortedUniqueGroups(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员", "admin", accessdomain.PermissionAdminRead, false, now, now)
@@ -474,6 +541,15 @@ func TestDeleteAPIDeletesUnassignedAPI(t *testing.T) {
 func superAdminContext() context.Context {
 	ctx := requestctx.WithUserID(context.Background(), "42")
 	return requestctx.WithRoleID(ctx, "1")
+}
+
+func restoreAPITest(t *testing.T, id int64, method, path, permission string, public bool) accessdomain.API {
+	t.Helper()
+	api, err := accessdomain.RestoreAPI(id, method, path, "API", "system", permission, public, time.Now(), time.Now())
+	if err != nil {
+		t.Fatalf("RestoreAPI() error = %v", err)
+	}
+	return api
 }
 
 type storeSpy struct {

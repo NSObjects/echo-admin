@@ -4,6 +4,7 @@ package mysql
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	drivermysql "github.com/go-sql-driver/mysql"
@@ -14,10 +15,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysqljson"
 )
-
-// defaultAdminPassword mirrors gin-vue-admin's local bootstrap credential. The
-// seed path never reapplies it over an operator-changed password.
-const defaultAdminPassword = "123456"
 
 // Store persists administrators in MySQL.
 type Store struct {
@@ -38,9 +35,10 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// SeedDefaultAdmin creates or repairs the local bootstrap administrator without
-// resetting an operator-changed password.
-func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64) error {
+// SeedDefaultAdmin creates or repairs the local bootstrap administrator. The
+// bootstrap password is consumed only when the admin row does not exist; an
+// existing operator-managed password is never reset by startup repair.
+func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64, bootstrapPassword string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -62,7 +60,11 @@ func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64) error {
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return apperr.WrapDatabase(err, "find seed admin")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(defaultAdminPassword), bcrypt.DefaultCost)
+	password, err := normalizeBootstrapAdminPassword(bootstrapPassword)
+	if err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -76,6 +78,20 @@ func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64) error {
 		return apperr.WrapDatabase(err, "create seed admin")
 	}
 	return nil
+}
+
+func normalizeBootstrapAdminPassword(password string) (string, error) {
+	password = strings.TrimSpace(password)
+	if password == "" {
+		return "", errors.New("admin bootstrap_password is required for first bootstrap")
+	}
+	if password == "123456" {
+		return "", errors.New("admin bootstrap_password must not use the removed default password")
+	}
+	if len(password) < 8 || len(password) > 72 {
+		return "", errors.New("admin bootstrap_password must be 8 to 72 characters")
+	}
+	return password, nil
 }
 
 // FindByUsername returns an admin by normalized username.

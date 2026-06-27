@@ -23,6 +23,7 @@ func TestConfigDefaults(t *testing.T) {
 	assert.Equal(t, []string{"/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"}, cfg.JWT.SkipPaths)
 
 	assert.Equal(t, DefaultUploadDir, cfg.Admin.UploadDir)
+	assert.Equal(t, "", cfg.Admin.BootstrapPassword)
 
 	assert.False(t, cfg.MySQL.Enabled)
 	assert.Equal(t, "", cfg.MySQL.DSN)

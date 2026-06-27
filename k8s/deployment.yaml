@@ -71,6 +71,12 @@ spec:
                   name: echo-admin-secrets
                   key: jwt-secret
                   optional: false
+            - name: ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: echo-admin-secrets
+                  key: bootstrap-admin-password
+                  optional: false
             - name: ECHO_ADMIN_MYSQL_DSN
               valueFrom:
                 secretKeyRef:

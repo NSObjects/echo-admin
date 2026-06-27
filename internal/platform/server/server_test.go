@@ -19,6 +19,8 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
+const testJWTSecret = "test-secret-with-at-least-32-bytes"
+
 func TestServerEcho(t *testing.T) {
 	server := mustNewServer(t, configs.Config{})
 
@@ -91,7 +93,7 @@ func TestServerMiddlewareConfigEnablesJWTFromConfig(t *testing.T) {
 		appConfig: configs.Config{
 			JWT: configs.JWTConfig{
 				Enabled:   true,
-				Secret:    "test-secret",
+				Secret:    testJWTSecret,
 				SkipPaths: []string{"/api/health"},
 			},
 		},
@@ -102,7 +104,7 @@ func TestServerMiddlewareConfigEnablesJWTFromConfig(t *testing.T) {
 	assert.True(t, config.EnableJWT)
 	assert.NotNil(t, config.JWT)
 	assert.True(t, config.JWT.Enabled)
-	assert.Equal(t, []byte("test-secret"), config.JWT.SigningKey)
+	assert.Equal(t, []byte(testJWTSecret), config.JWT.SigningKey)
 	assert.Equal(t, []string{"/api/health"}, config.JWT.SkipPaths)
 }
 
@@ -331,7 +333,7 @@ func TestServerNew(t *testing.T) {
 		},
 		JWT: configs.JWTConfig{
 			Enabled:   true,
-			Secret:    "test-secret",
+			Secret:    testJWTSecret,
 			SkipPaths: []string{"/api/health"},
 		},
 	}

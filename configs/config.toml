@@ -29,13 +29,15 @@ expose_headers = []
 max_age_seconds = 0
 
 [jwt]
-# Local development only. Override with ECHO_ADMIN_JWT_SECRET in real deployments.
+# Set ECHO_ADMIN_JWT_SECRET to a deployment-owned value before starting.
 enabled = true
-secret = "dev-only-echo-admin-secret-change-me"
+secret = ""
 skip_paths = ["/api/health","/api/info","/api/ready","/api/capabilities","/api/auth/login"]
 
 [admin]
 upload_dir = "uploads"
+# Required only when the first admin account has not been created yet.
+bootstrap_password = ""
 
 [mysql]
 enabled = true

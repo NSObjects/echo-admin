@@ -513,6 +513,11 @@ func (u *Usecase) CreateAPI(ctx context.Context, input APIInput) (API, error) {
 	if err != nil {
 		return API{}, mapDomainError(err)
 	}
+	if input.Public {
+		if mutationErr := u.ensureAPIMutationAllowed(ctx, 0, input.Public); mutationErr != nil {
+			return API{}, mutationErr
+		}
+	}
 	created, err := u.store.CreateAPI(ctx, api)
 	if err != nil {
 		return API{}, err
@@ -529,6 +534,9 @@ func (u *Usecase) UpdateAPI(ctx context.Context, input UpdateAPIInput) (API, err
 	if err != nil {
 		return API{}, err
 	}
+	if mutationErr := u.ensureAPIMutationAllowed(ctx, existing.ID, input.Public); mutationErr != nil {
+		return API{}, mutationErr
+	}
 	api, err := domain.RestoreAPI(existing.ID, input.Method, input.Path, input.Description, input.Group, input.Permission, input.Public, existing.CreatedAt, time.Time{})
 	if err != nil {
 		return API{}, mapDomainError(err)
@@ -538,6 +546,25 @@ func (u *Usecase) UpdateAPI(ctx context.Context, input UpdateAPIInput) (API, err
 		return API{}, err
 	}
 	return fromAPI(updated), nil
+}
+
+func (u *Usecase) ensureAPIMutationAllowed(ctx context.Context, apiID int64, public bool) error {
+	scope, err := u.roleScope(ctx)
+	if err != nil {
+		return err
+	}
+	if scope.super {
+		return nil
+	}
+	if apiID > 0 {
+		if err := scope.ensureAPIGrantReadable(apiID); err != nil {
+			return err
+		}
+	}
+	if public {
+		return apperr.NewPermissionDenied("api", "public")
+	}
+	return nil
 }
 
 // DeleteAPI removes an API route only when no role grant still references it.

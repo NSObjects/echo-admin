@@ -41,11 +41,12 @@ max_age_seconds = 0
 
 [jwt]
 enabled = true
-secret = "dev-only-echo-admin-secret-change-me"
+secret = ""
 skip_paths = ["/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"]
 
 [admin]
 upload_dir = "uploads"
+bootstrap_password = ""
 
 [mysql]
 enabled = true
@@ -67,7 +68,7 @@ protocol = "grpc" # grpc, http
 insecure = true
 ```
 
-HTTP middleware、MySQL、Redis、MongoDB、JWT、Jaeger tracing 和 admin upload directory 都是 configured resources。后台基础能力运行期依赖 MySQL；启用 Redis、MongoDB、tracing 等可选外部依赖后也必须提供连接配置，并会进入 `/api/ready` 和 `/api/capabilities`。
+HTTP middleware、MySQL、Redis、MongoDB、JWT、Jaeger tracing、admin upload directory 和首次启动管理员密码都是 configured resources。后台基础能力运行期依赖 MySQL；启用 Redis、MongoDB、tracing 等可选外部依赖后也必须提供连接配置，并会进入 `/api/ready` 和 `/api/capabilities`。
 
 业务代码放在 `internal/modules/<module>`，平台运行时代码放在 `internal/platform`。业务 adapter 复用 boot 已经加载的资源：usecase 定义 usecase-owned outbound interface，adapter 使用配置好的 MySQL/Redis/MongoDB client 实现它，然后业务 module 用 `boot.NewModule`、`boot.Provide` 和 `boot.Route` 声明 adapter、usecase、handler 和 route。
 
@@ -93,8 +94,9 @@ export ECHO_ADMIN_HTTP_CORS_ALLOW_CREDENTIALS=false
 export ECHO_ADMIN_HTTP_CORS_EXPOSE_HEADERS=
 export ECHO_ADMIN_HTTP_CORS_MAX_AGE_SECONDS=0
 export ECHO_ADMIN_JWT_ENABLED=true
-export ECHO_ADMIN_JWT_SECRET=change-me
+export ECHO_ADMIN_JWT_SECRET="$(openssl rand -base64 32)"
 export ECHO_ADMIN_ADMIN_UPLOAD_DIR=uploads
+export ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD=replace-with-a-private-password
 export ECHO_ADMIN_MYSQL_ENABLED=true
 export ECHO_ADMIN_MYSQL_DSN='echo_admin:echo_admin_dev_password@tcp(127.0.0.1:3306)/echo_admin?charset=utf8mb4&parseTime=true&loc=Local'
 export ECHO_ADMIN_REDIS_ENABLED=false
@@ -107,7 +109,7 @@ export ECHO_ADMIN_TRACING_PROTOCOL=grpc
 export ECHO_ADMIN_TRACING_INSECURE=true
 ```
 
-JWT 默认启用，本地配置里的 secret 只用于开发。正式环境必须通过 `ECHO_ADMIN_JWT_SECRET` 或 Secret 管理系统提供真实 secret，不要把真实 secret 写入 ConfigMap。
+JWT 默认启用，但仓库配置不会提供可启动的默认签名密钥。必须通过 `ECHO_ADMIN_JWT_SECRET` 或 Secret 管理系统提供至少 32 个字符的真实 secret，不要把真实 secret 写入 ConfigMap。空库首次启动还必须设置 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`；它只在 `admin` 用户不存在时使用，不会覆盖后续修改过的密码。
 
 `app.name` 和 `app.version` 会出现在 `/api/info` 响应中。`system.level` 只接受 `1` 或 `2`。`log.format` 只接受 `console` 或 `json`；`log.output` 只接受 `stdout` 或 `stderr`。`http.*_disabled` 可关闭默认安装的 HTTP middleware。
 

@@ -159,7 +159,11 @@ func newIdentityStore(i do.Injector) (*identitymysql.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := store.SeedDefaultAdmin(ctx, role.ID); err != nil {
+	cfg, err := do.Invoke[configs.Config](i)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.SeedDefaultAdmin(ctx, role.ID, cfg.Admin.BootstrapPassword); err != nil {
 		return nil, err
 	}
 	return store, nil
@@ -302,7 +306,7 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return authusecase.New(identityStore, accessStore, accessStore, accessStore, authStore, authLoginRecorder{audit: audit}, cfg.JWT.Secret), nil
+	return authusecase.New(identityStore, accessStore, accessStore, accessStore, authStore, authStore, authLoginRecorder{audit: audit}, cfg.JWT.Secret), nil
 }
 
 func newAuthStore(i do.Injector) (*authmysql.Store, error) {

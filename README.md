@@ -46,6 +46,8 @@ docker compose up mysql
 再启动 API：
 
 ```bash
+export ECHO_ADMIN_JWT_SECRET="$(openssl rand -base64 32)"
+export ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD="replace-with-a-private-password"
 go run main.go --config configs/config.toml
 ```
 
@@ -58,11 +60,11 @@ curl http://127.0.0.1:9322/api/ready
 curl http://127.0.0.1:9322/api/capabilities
 ```
 
-第一次启动会在 MySQL 中创建权限目录、API 目录、基础菜单、`super_admin` 角色、系统配置、状态字典和一个本地管理员：
+第一次启动会在 MySQL 中创建权限目录、API 目录、基础菜单、`super_admin` 角色、系统配置、状态字典和一个本地管理员。管理员账号固定为 `admin`，密码来自 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`；该密码只在管理员不存在时使用，后续启动不会重置已修改的密码。
 
 ```text
 username: admin
-password: 123456
+password: <ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD>
 ```
 
 `super_admin` 是根角色，默认拥有全部权限、全部基础菜单、全部 API、全部按钮、全部数据角色和默认入口 `/dashboard`。管理员可以拥有多个角色，JWT 会携带当前生效的 `role_id`；切换角色后后端会重新签发只包含该角色权限的新 token，前端菜单、按钮权限和数据权限也会随之刷新。退出登录会把当前 JWT 的 SHA-256 哈希写入服务端黑名单，旧 token 不能继续访问私有接口。
@@ -89,7 +91,9 @@ enabled = true
 skip_paths = ["/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"]
 ```
 
-真实环境必须通过 `ECHO_ADMIN_JWT_SECRET` 或 Secret 管理系统提供 JWT secret，不要使用示例配置里的开发 secret。
+必须通过 `ECHO_ADMIN_JWT_SECRET` 或 Secret 管理系统提供 JWT secret；仓库配置不会提供可启动的默认签名密钥。
+
+首次启动空库前必须设置 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`。该值必须是 8 到 72 个字符，且不能使用已移除的公开默认密码 `123456`。
 
 可选 capability 默认关闭：
 

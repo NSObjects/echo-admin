@@ -43,6 +43,15 @@ type JWTBlacklistStore interface {
 	JWTBlacklisted(context.Context, string, time.Time) (bool, error)
 }
 
+// LoginAttemptLimiter blocks repeated failed sign-in attempts across app
+// instances. The key is already hashed by the usecase so stores do not need to
+// persist raw usernames or client addresses.
+type LoginAttemptLimiter interface {
+	CheckLoginAttempt(context.Context, string, time.Time) error
+	RecordLoginFailure(context.Context, string, time.Time) error
+	ResetLoginAttempts(context.Context, string) error
+}
+
 // Usecase coordinates sign-in, current user, and permission checks.
 type Usecase struct {
 	admins       AdminReader
@@ -51,6 +60,7 @@ type Usecase struct {
 	apis         APIReader
 	logins       LoginRecorder
 	jwtBlacklist JWTBlacklistStore
+	loginLimiter LoginAttemptLimiter
 	jwtSecret    []byte
 	now          func() time.Time
 }
@@ -69,7 +79,7 @@ func WithClock(now func() time.Time) Option {
 
 // New creates an auth usecase with its required readers, JWT revocation store,
 // and JWT secret.
-func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader, jwtBlacklist JWTBlacklistStore, logins LoginRecorder, jwtSecret string, opts ...Option) *Usecase {
+func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader, jwtBlacklist JWTBlacklistStore, loginLimiter LoginAttemptLimiter, logins LoginRecorder, jwtSecret string, opts ...Option) *Usecase {
 	u := &Usecase{
 		admins:       admins,
 		roles:        roles,
@@ -77,6 +87,7 @@ func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader,
 		apis:         apis,
 		logins:       logins,
 		jwtBlacklist: jwtBlacklist,
+		loginLimiter: loginLimiter,
 		jwtSecret:    []byte(jwtSecret),
 		now:          func() time.Time { return time.Now().UTC() },
 	}

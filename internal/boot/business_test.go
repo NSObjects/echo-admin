@@ -23,7 +23,7 @@ func TestBusinessModulesAreSplitByFoundationCapability(t *testing.T) {
 
 func TestBusinessModulesRequireMySQLStorage(t *testing.T) {
 	app, err := NewApp(configs.Config{
-		JWT: configs.JWTConfig{Secret: "test-secret"},
+		JWT: configs.JWTConfig{Secret: "test-secret-with-at-least-32-bytes"},
 	}, WithModules(BusinessModules()...))
 	if err == nil {
 		t.Fatal("NewApp() error = nil, want disabled MySQL storage error")

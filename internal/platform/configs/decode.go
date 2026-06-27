@@ -14,6 +14,12 @@ const (
 	configFormatTOML = "toml"
 	configFormatYAML = "yaml"
 	configFormatYML  = "yml"
+
+	insecureDevelopmentJWTSecret = "dev-only-echo-admin-secret-change-me"
+	removedDefaultAdminPassword  = "123456"
+	minJWTSecretLength           = 32
+	minAdminPasswordLength       = 8
+	maxAdminPasswordLength       = 72
 )
 
 func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error) {
@@ -89,6 +95,7 @@ func normalizeLogDefaults(cfg Config) Config {
 }
 
 func normalizeJWTDefaults(cfg Config) Config {
+	cfg.JWT.Secret = strings.TrimSpace(cfg.JWT.Secret)
 	if cfg.JWT.SkipPaths == nil {
 		cfg.JWT.SkipPaths = []string{"/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"}
 	}
@@ -99,6 +106,7 @@ func normalizeAdminDefaults(cfg Config) Config {
 	if strings.TrimSpace(cfg.Admin.UploadDir) == "" {
 		cfg.Admin.UploadDir = DefaultUploadDir
 	}
+	cfg.Admin.BootstrapPassword = strings.TrimSpace(cfg.Admin.BootstrapPassword)
 	return cfg
 }
 
@@ -240,8 +248,18 @@ func validateLogConfig(cfg LogConfig) error {
 }
 
 func validateJWTConfig(cfg JWTConfig) error {
-	if cfg.Enabled && strings.TrimSpace(cfg.Secret) == "" {
+	if !cfg.Enabled {
+		return nil
+	}
+	secret := strings.TrimSpace(cfg.Secret)
+	if secret == "" {
 		return errors.New("jwt secret is required when jwt is enabled")
+	}
+	if secret == insecureDevelopmentJWTSecret {
+		return errors.New("jwt secret must not use the removed development default")
+	}
+	if len(secret) < minJWTSecretLength {
+		return errors.New("jwt secret must be at least 32 characters when jwt is enabled")
 	}
 	return nil
 }
@@ -249,6 +267,16 @@ func validateJWTConfig(cfg JWTConfig) error {
 func validateAdminConfig(cfg AdminConfig) error {
 	if strings.TrimSpace(cfg.UploadDir) == "" {
 		return errors.New("admin upload_dir is required")
+	}
+	password := strings.TrimSpace(cfg.BootstrapPassword)
+	if password == "" {
+		return nil
+	}
+	if password == removedDefaultAdminPassword {
+		return errors.New("admin bootstrap_password must not use the removed default password")
+	}
+	if len(password) < minAdminPasswordLength || len(password) > maxAdminPasswordLength {
+		return errors.New("admin bootstrap_password must be 8 to 72 characters")
 	}
 	return nil
 }
@@ -413,6 +441,7 @@ func coreEnvKeys() []string {
 func adminEnvKeys() []string {
 	return []string{
 		"admin::upload_dir",
+		"admin::bootstrap_password",
 	}
 }
 

@@ -10,11 +10,12 @@ import (
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
 func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
-	uc, recorder := newUsecase(t)
+	uc, recorder, store := newUsecaseWithStore(t)
 	output, err := uc.Login(context.Background(), authusecase.LoginInput{
 		Username: "admin",
 		Password: "123456",
@@ -22,6 +23,18 @@ func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
+	assertSuccessfulLogin(t, output, recorder, store)
+
+	ctx := requestctx.WithUserID(context.Background(), "1")
+	current, err := uc.CurrentUser(ctx)
+	if err != nil {
+		t.Fatalf("CurrentUser() error = %v", err)
+	}
+	assertCurrentUserGrants(t, current)
+}
+
+func assertSuccessfulLogin(t *testing.T, output authusecase.LoginOutput, recorder *loginRecorder, store *authStore) {
+	t.Helper()
 	if output.Token == "" {
 		t.Fatal("Login() token is empty, want signed token")
 	}
@@ -31,12 +44,13 @@ func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
 	if len(recorder.records) != 1 || !recorder.records[0].Success {
 		t.Fatalf("login records = %#v, want one success record", recorder.records)
 	}
-
-	ctx := requestctx.WithUserID(context.Background(), "1")
-	current, err := uc.CurrentUser(ctx)
-	if err != nil {
-		t.Fatalf("CurrentUser() error = %v", err)
+	if len(store.resetLoginKeys) != 1 {
+		t.Fatalf("resetLoginKeys = %d, want 1 after successful login", len(store.resetLoginKeys))
 	}
+}
+
+func assertCurrentUserGrants(t *testing.T, current authusecase.CurrentUser) {
+	t.Helper()
 	if current.Username != "admin" {
 		t.Fatalf("CurrentUser().Username = %q, want admin", current.Username)
 	}
@@ -55,7 +69,7 @@ func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
 }
 
 func TestFailedLoginRecordsLoginLog(t *testing.T) {
-	uc, recorder := newUsecase(t)
+	uc, recorder, store := newUsecaseWithStore(t)
 	_, err := uc.Login(context.Background(), authusecase.LoginInput{
 		Username: "admin",
 		Password: "wrong-password",
@@ -68,6 +82,32 @@ func TestFailedLoginRecordsLoginLog(t *testing.T) {
 	}
 	if recorder.records[0].Success {
 		t.Fatal("login record success = true, want false")
+	}
+	if len(store.recordedFailureKeys) != 1 {
+		t.Fatalf("recordedFailureKeys = %d, want 1", len(store.recordedFailureKeys))
+	}
+}
+
+func TestLoginRejectsLockedAttemptBeforeCredentialLookup(t *testing.T) {
+	uc, recorder, store := newUsecaseWithStore(t)
+	store.loginBlocked = true
+
+	_, err := uc.Login(context.Background(), authusecase.LoginInput{
+		Username: "admin",
+		Password: "123456",
+		IP:       "127.0.0.1",
+	})
+	if err == nil {
+		t.Fatal("Login(locked) error = nil, want too many attempts")
+	}
+	if store.findByUsernameCalls != 0 {
+		t.Fatalf("FindByUsername calls = %d, want 0 while locked", store.findByUsernameCalls)
+	}
+	if len(store.recordedFailureKeys) != 0 {
+		t.Fatalf("recordedFailureKeys = %d, want 0 while locked", len(store.recordedFailureKeys))
+	}
+	if len(recorder.records) != 1 || recorder.records[0].Reason != "too many login attempts" {
+		t.Fatalf("login records = %#v, want locked attempt audit", recorder.records)
 	}
 }
 
@@ -241,6 +281,11 @@ func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 }
 
 func newUsecase(t *testing.T) (*authusecase.Usecase, *loginRecorder) {
+	uc, recorder, _ := newUsecaseWithStore(t)
+	return uc, recorder
+}
+
+func newUsecaseWithStore(t *testing.T) (*authusecase.Usecase, *loginRecorder, *authStore) {
 	t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
 	if err != nil {
@@ -262,10 +307,10 @@ func newUsecase(t *testing.T) (*authusecase.Usecase, *loginRecorder) {
 		blacklisted: map[string]time.Time{},
 	}
 	recorder := &loginRecorder{}
-	uc := authusecase.New(store, store, store, store, store, recorder, "test-secret", authusecase.WithClock(func() time.Time {
+	uc := authusecase.New(store, store, store, store, store, store, recorder, "test-secret", authusecase.WithClock(func() time.Time {
 		return now
 	}))
-	return uc, recorder
+	return uc, recorder, store
 }
 
 func authRoles(t *testing.T, now time.Time) map[int64]accessdomain.Role {
@@ -335,14 +380,20 @@ func authAPIs(t *testing.T, now time.Time) []accessdomain.API {
 }
 
 type authStore struct {
-	admin       identitydomain.Admin
-	roles       map[int64]accessdomain.Role
-	menus       []accessdomain.Menu
-	apis        []accessdomain.API
-	blacklisted map[string]time.Time
+	admin               identitydomain.Admin
+	roles               map[int64]accessdomain.Role
+	menus               []accessdomain.Menu
+	apis                []accessdomain.API
+	blacklisted         map[string]time.Time
+	loginBlocked        bool
+	findByUsernameCalls int
+	checkedLoginKeys    []string
+	recordedFailureKeys []string
+	resetLoginKeys      []string
 }
 
 func (s *authStore) FindByUsername(context.Context, string) (identitydomain.Admin, error) {
+	s.findByUsernameCalls++
 	return s.admin, nil
 }
 
@@ -379,6 +430,24 @@ func (s *authStore) AddJWTBlacklist(_ context.Context, entry authusecase.JWTBlac
 func (s *authStore) JWTBlacklisted(_ context.Context, tokenHash string, now time.Time) (bool, error) {
 	expiresAt, ok := s.blacklisted[tokenHash]
 	return ok && now.Before(expiresAt), nil
+}
+
+func (s *authStore) CheckLoginAttempt(_ context.Context, key string, _ time.Time) error {
+	s.checkedLoginKeys = append(s.checkedLoginKeys, key)
+	if s.loginBlocked {
+		return apperr.New(apperr.ErrTooManyAttempts, "too many login attempts")
+	}
+	return nil
+}
+
+func (s *authStore) RecordLoginFailure(_ context.Context, key string, _ time.Time) error {
+	s.recordedFailureKeys = append(s.recordedFailureKeys, key)
+	return nil
+}
+
+func (s *authStore) ResetLoginAttempts(_ context.Context, key string) error {
+	s.resetLoginKeys = append(s.resetLoginKeys, key)
+	return nil
 }
 
 type loginRecorder struct {
