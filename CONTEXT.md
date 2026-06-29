@@ -28,6 +28,14 @@ _Avoid_: Login token, session token
 An administrator account change that requires **Session Revocation**.
 _Avoid_: Normal logout
 
+**System First Initialization**:
+The one-time setup that makes a new Echo Admin installation usable for its first **Administrator**.
+_Avoid_: Process startup, migration, seed
+
+**Installation State**:
+The persistent state that says whether **System First Initialization** has completed for an Echo Admin installation.
+_Avoid_: Admin existence check, table existence check
+
 ## Relationships
 
 - An **Administrator** may have zero or more active **Login Sessions**.
@@ -48,6 +56,9 @@ _Avoid_: Normal logout
 - A normal logout revokes only one **Login Session**.
 - Signing out from other devices revokes the other **Login Sessions** for the same **Administrator** while keeping the current **Login Session** active.
 - An unavailable **Login Session** is an authentication failure; a valid **Login Session** without route permission is an authorization failure.
+- **System First Initialization** happens before the first **Administrator** can use the administration console.
+- **Installation State** is the source of truth for whether **System First Initialization** is still allowed.
+- **System First Initialization** may be retried until **Installation State** records completion.
 
 ## Example Dialogue
 
