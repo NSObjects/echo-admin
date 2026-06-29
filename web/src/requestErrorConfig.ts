@@ -17,7 +17,9 @@ type RequestError = Error & {
 };
 
 const successCode = 100001;
+const systemUninitializedCode = 100410;
 const loginPath = '/user/login';
+const setupPath = '/setup';
 const csrfHeader = 'X-CSRF-Token';
 const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -26,7 +28,9 @@ export const errorConfig: RequestConfig = {
     errorThrower: (response) => {
       const envelope = response as ApiEnvelope;
       if (typeof envelope.code === 'number' && envelope.code !== successCode) {
-        const error = new Error(envelope.message ?? 'Request failed') as RequestError;
+        const error = new Error(
+          envelope.message ?? 'Request failed',
+        ) as RequestError;
         error.name = 'BizError';
         error.info = envelope;
         throw error;
@@ -35,11 +39,20 @@ export const errorConfig: RequestConfig = {
     errorHandler: (error: RequestError, opts) => {
       if (opts?.skipErrorHandler) throw error;
 
+      if (error.info?.code === systemUninitializedCode) {
+        if (history.location.pathname !== setupPath) {
+          history.replace(setupPath);
+        }
+        return;
+      }
+
       if (error.response?.status === 401) {
         if (history.location.pathname !== loginPath) {
           history.replace(
             `${loginPath}?redirect=${encodeURIComponent(
-              history.location.pathname + history.location.search + history.location.hash,
+              history.location.pathname +
+                history.location.search +
+                history.location.hash,
             )}`,
           );
         }

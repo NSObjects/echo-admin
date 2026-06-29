@@ -46,6 +46,18 @@ export type LoginResult = {
   user: CurrentUser;
 };
 
+export type SetupState = {
+  initialized: boolean;
+};
+
+export type SetupInput = {
+  username: string;
+  display_name: string;
+  email?: string;
+  password: string;
+  site_name?: string;
+};
+
 export type AdminUser = {
   id: number;
   username: string;
@@ -504,6 +516,21 @@ export async function appInfo(): Promise<AppInfo> {
 
 export async function capabilities(): Promise<CapabilitiesResult> {
   return request<CapabilitiesResult>('/api/capabilities');
+}
+
+export async function setupState(): Promise<SetupState> {
+  const response = await request<Envelope<SetupState>>('/api/setup/state', {
+    method: 'GET',
+  });
+  return response.data;
+}
+
+export async function submitSetup(body: SetupInput): Promise<SetupState> {
+  const response = await request<Envelope<SetupState>>('/api/setup', {
+    method: 'POST',
+    data: body,
+  });
+  return response.data;
 }
 
 export async function login(body: {

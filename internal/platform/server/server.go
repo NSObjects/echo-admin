@@ -28,6 +28,7 @@ type Server struct {
 	apiKeyVerifier middlewares.APIKeyVerifier
 	errorRecorder  middlewares.SystemErrorRecorder
 	sessionAuth    middlewares.LoginSessionAuthenticator
+	installation   middlewares.InstallationStateReader
 }
 
 type healthResponse struct {
@@ -88,6 +89,9 @@ type LoginSessionAuthenticator = middlewares.LoginSessionAuthenticator
 // LoginSessionIdentity is the authenticated browser login session identity.
 type LoginSessionIdentity = middlewares.LoginSessionIdentity
 
+// InstallationStateReader reports first-initialization state to server middleware.
+type InstallationStateReader = middlewares.InstallationStateReader
+
 // WithStatusReporter installs the readiness and capability reporter.
 func WithStatusReporter(reporter StatusReporter) Option {
 	return func(s *Server) {
@@ -113,6 +117,13 @@ func WithSystemErrorRecorder(recorder SystemErrorRecorder) Option {
 func WithLoginSessionAuthenticator(authenticator LoginSessionAuthenticator) Option {
 	return func(s *Server) {
 		s.sessionAuth = authenticator
+	}
+}
+
+// WithInstallationStateReader installs the uninitialized-system gate.
+func WithInstallationStateReader(reader InstallationStateReader) Option {
+	return func(s *Server) {
+		s.installation = reader
 	}
 }
 
@@ -188,6 +199,12 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 			Header:   middlewares.APIKeyHeader,
 			Verifier: s.apiKeyVerifier,
 			Enabled:  s.apiKeyVerifier != nil,
+		},
+		EnableInstallationGate: s.installation != nil,
+		InstallationGate: &middlewares.InstallationGateConfig{
+			Reader:    s.installation,
+			SkipPaths: middlewares.DefaultInstallationGateConfig().SkipPaths,
+			Enabled:   s.installation != nil,
 		},
 		EnableLoginSession: sessionConfig.Enabled,
 		LoginSession:       sessionConfig,

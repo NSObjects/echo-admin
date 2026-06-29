@@ -39,6 +39,10 @@ type MiddlewareConfig struct {
 
 	APIKey *APIKeyConfig
 
+	EnableInstallationGate bool
+
+	InstallationGate *InstallationGateConfig
+
 	EnableLoginSession bool
 
 	LoginSession *LoginSessionConfig
@@ -51,16 +55,18 @@ type MiddlewareConfig struct {
 // DefaultMiddlewareConfig returns the HTTP middleware defaults.
 func DefaultMiddlewareConfig() *MiddlewareConfig {
 	return &MiddlewareConfig{
-		EnableRecovery:       true,
-		EnableRequestContext: true,
-		EnableLogger:         true,
-		EnableGzip:           true,
-		EnableCORS:           false,
-		EnableAPIKey:         false,
-		APIKey:               DefaultAPIKeyConfig(),
-		EnableLoginSession:   false,
-		LoginSession:         DefaultLoginSessionConfig(),
-		EnableCSRF:           false,
+		EnableRecovery:         true,
+		EnableRequestContext:   true,
+		EnableLogger:           true,
+		EnableGzip:             true,
+		EnableCORS:             false,
+		EnableAPIKey:           false,
+		APIKey:                 DefaultAPIKeyConfig(),
+		EnableInstallationGate: false,
+		InstallationGate:       DefaultInstallationGateConfig(),
+		EnableLoginSession:     false,
+		LoginSession:           DefaultLoginSessionConfig(),
+		EnableCSRF:             false,
 	}
 }
 
@@ -91,6 +97,10 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 	}
 
 	if err := installCORS(e, config); err != nil {
+		return err
+	}
+
+	if err := installInstallationGate(e, config); err != nil {
 		return err
 	}
 
@@ -127,6 +137,18 @@ func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
 		return err
 	}
 	e.Use(apiKeyMiddleware)
+	return nil
+}
+
+func installInstallationGate(e *echo.Echo, config *MiddlewareConfig) error {
+	if !config.EnableInstallationGate || config.InstallationGate == nil {
+		return nil
+	}
+	gateMiddleware, err := InstallationGate(config.InstallationGate)
+	if err != nil {
+		return err
+	}
+	e.Use(gateMiddleware)
 	return nil
 }
 

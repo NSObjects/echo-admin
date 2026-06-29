@@ -20,7 +20,7 @@ type Store struct {
 	db *gorm.DB
 }
 
-// NewStore migrates and seeds the MySQL settings tables.
+// NewStore migrates the MySQL settings tables.
 func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	if ctx == nil {
 		return nil, errors.New("create settings store: nil context")
@@ -32,10 +32,12 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	if err := db.WithContext(ctx).AutoMigrate(&configModel{}, &paramModel{}, &dictionaryModel{}, &dictionaryItemModel{}, &versionModel{}); err != nil {
 		return nil, apperr.WrapDatabase(err, "migrate settings tables")
 	}
-	if err := store.seed(ctx); err != nil {
-		return nil, err
-	}
 	return store, nil
+}
+
+// WithDB returns a store bound to db for transaction-scoped settings operations.
+func (s *Store) WithDB(db *gorm.DB) *Store {
+	return &Store{db: db}
 }
 
 // ListConfigs returns configs ordered by key.
@@ -467,8 +469,9 @@ func (s *Store) DeleteVersions(ctx context.Context, ids []int64) error {
 	return nil
 }
 
-func (s *Store) seed(ctx context.Context) error {
-	config, err := domain.RestoreSystemConfig("site_name", "站点名称", "Echo Admin", true, time.Now().UTC())
+// InstallInitialSettings creates the settings required by a fresh installation.
+func (s *Store) InstallInitialSettings(ctx context.Context, siteName string) error {
+	config, err := domain.RestoreSystemConfig("site_name", "站点名称", siteName, true, time.Now().UTC())
 	if err != nil {
 		return err
 	}

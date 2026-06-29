@@ -60,6 +60,8 @@ func DefaultLoginSessionConfig() *LoginSessionConfig {
 			"/api/ready",
 			"/api/capabilities",
 			"/api/auth/login",
+			"/api/setup/state",
+			"/api/setup",
 		},
 	}
 }

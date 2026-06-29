@@ -14,10 +14,6 @@ const (
 	configFormatTOML = "toml"
 	configFormatYAML = "yaml"
 	configFormatYML  = "yml"
-
-	removedDefaultAdminPassword = "123456"
-	minAdminPasswordLength      = 8
-	maxAdminPasswordLength      = 72
 )
 
 func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error) {
@@ -95,7 +91,6 @@ func normalizeAdminDefaults(cfg Config) Config {
 	if strings.TrimSpace(cfg.Admin.UploadDir) == "" {
 		cfg.Admin.UploadDir = DefaultUploadDir
 	}
-	cfg.Admin.BootstrapPassword = strings.TrimSpace(cfg.Admin.BootstrapPassword)
 	return cfg
 }
 
@@ -242,16 +237,6 @@ func validateLogConfig(cfg LogConfig) error {
 func validateAdminConfig(cfg AdminConfig) error {
 	if strings.TrimSpace(cfg.UploadDir) == "" {
 		return errors.New("admin upload_dir is required")
-	}
-	password := strings.TrimSpace(cfg.BootstrapPassword)
-	if password == "" {
-		return nil
-	}
-	if password == removedDefaultAdminPassword {
-		return errors.New("admin bootstrap_password must not use the removed default password")
-	}
-	if len(password) < minAdminPasswordLength || len(password) > maxAdminPasswordLength {
-		return errors.New("admin bootstrap_password must be 8 to 72 characters")
 	}
 	return nil
 }
@@ -425,7 +410,6 @@ func coreEnvKeys() []string {
 func adminEnvKeys() []string {
 	return []string{
 		"admin::upload_dir",
-		"admin::bootstrap_password",
 	}
 }
 

@@ -53,13 +53,14 @@ const (
 
 // Common request error codes.
 const (
-	ErrBadRequest       = 100400
-	ErrUnauthorized     = 100401
-	ErrForbidden        = 100403
-	ErrNotFound         = 100404
-	ErrMethodNotAllowed = 100405
-	ErrConflict         = 100409
-	ErrInternalServer   = 100500
+	ErrBadRequest          = 100400
+	ErrUnauthorized        = 100401
+	ErrForbidden           = 100403
+	ErrNotFound            = 100404
+	ErrMethodNotAllowed    = 100405
+	ErrConflict            = 100409
+	ErrSystemUninitialized = 100410
+	ErrInternalServer      = 100500
 )
 
 // Authentication and authorization error codes.
@@ -116,7 +117,13 @@ var definitions = map[int]Definition{
 		Category: CategoryValidation,
 		Message:  "Method not allowed",
 	},
-	ErrConflict:       {Code: ErrConflict, Kind: KindConflict, Category: CategoryBusiness, Message: "Conflict"},
+	ErrConflict: {Code: ErrConflict, Kind: KindConflict, Category: CategoryBusiness, Message: "Conflict"},
+	ErrSystemUninitialized: {
+		Code:     ErrSystemUninitialized,
+		Kind:     KindConflict,
+		Category: CategorySystem,
+		Message:  "system is not initialized",
+	},
 	ErrInternalServer: {Code: ErrInternalServer, Kind: KindInternal, Category: CategorySystem, Message: "Internal server error"},
 	ErrEncrypt: {
 		Code:     ErrEncrypt,

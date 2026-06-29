@@ -4,11 +4,9 @@ package mysql
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	drivermysql "github.com/go-sql-driver/mysql"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/identity/domain"
@@ -35,63 +33,9 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// SeedDefaultAdmin creates or repairs the local bootstrap administrator. The
-// bootstrap password is consumed only when the admin row does not exist; an
-// existing operator-managed password is never reset by startup repair.
-func (s *Store) SeedDefaultAdmin(ctx context.Context, roleID int64, bootstrapPassword string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	var existing adminModel
-	err := s.db.WithContext(ctx).Where("username = ?", "admin").First(&existing).Error
-	if err == nil {
-		if existing.ActiveRoleID == 0 || !containsRoleID([]int64(existing.RoleIDs), existing.ActiveRoleID) {
-			existing.ActiveRoleID = roleID
-		}
-		if !containsRoleID([]int64(existing.RoleIDs), roleID) {
-			existing.RoleIDs = append(existing.RoleIDs, roleID)
-		}
-		existing.Active = true
-		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
-			return apperr.WrapDatabase(saveErr, "update seed admin")
-		}
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperr.WrapDatabase(err, "find seed admin")
-	}
-	password, err := normalizeBootstrapAdminPassword(bootstrapPassword)
-	if err != nil {
-		return err
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	admin, err := domain.RestoreAdmin(0, "admin", "系统管理员", "admin@example.com", hash, []int64{roleID}, roleID, true, now, now)
-	if err != nil {
-		return err
-	}
-	model := adminModelFromDomain(admin)
-	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return apperr.WrapDatabase(err, "create seed admin")
-	}
-	return nil
-}
-
-func normalizeBootstrapAdminPassword(password string) (string, error) {
-	password = strings.TrimSpace(password)
-	if password == "" {
-		return "", errors.New("admin bootstrap_password is required for first bootstrap")
-	}
-	if password == "123456" {
-		return "", errors.New("admin bootstrap_password must not use the removed default password")
-	}
-	if len(password) < 8 || len(password) > 72 {
-		return "", errors.New("admin bootstrap_password must be 8 to 72 characters")
-	}
-	return password, nil
+// WithDB returns a store bound to db for transaction-scoped identity operations.
+func (s *Store) WithDB(db *gorm.DB) *Store {
+	return &Store{db: db}
 }
 
 // FindByUsername returns an admin by normalized username.

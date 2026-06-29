@@ -20,7 +20,7 @@ type Store struct {
 	db *gorm.DB
 }
 
-// NewStore migrates and seeds the MySQL access tables.
+// NewStore migrates the MySQL access tables.
 func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	if ctx == nil {
 		return nil, errors.New("create access store: nil context")
@@ -32,10 +32,12 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	if err := db.WithContext(ctx).AutoMigrate(&roleModel{}, &menuModel{}, &menuButtonModel{}, &permissionModel{}, &apiModel{}); err != nil {
 		return nil, apperr.WrapDatabase(err, "migrate access tables")
 	}
-	if err := store.seed(ctx); err != nil {
-		return nil, err
-	}
 	return store, nil
+}
+
+// WithDB returns a store bound to db for transaction-scoped access operations.
+func (s *Store) WithDB(db *gorm.DB) *Store {
+	return &Store{db: db}
 }
 
 // FindRoleByID returns a role by id.
@@ -317,10 +319,12 @@ func (s *Store) DeleteMenu(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Store) seed(ctx context.Context) error {
-	// Access seed data is one startup invariant: the root role must not be
-	// refreshed without the permission, API, and menu catalogs it depends on.
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+// InstallRootAuthorization creates the initial authorization catalog and root role.
+func (s *Store) InstallRootAuthorization(ctx context.Context) (domain.Role, error) {
+	// Root authority is one authorization baseline: the role must be created
+	// with the permission, API, menu, and button catalog it grants.
+	var root domain.Role
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		seedStore := &Store{db: tx}
 		if err := seedStore.seedPermissions(ctx); err != nil {
 			return err
@@ -333,8 +337,20 @@ func (s *Store) seed(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		return seedStore.seedSuperAdminRole(ctx, menuIDs, apiIDs, buttonIDs)
+		if err := seedStore.seedSuperAdminRole(ctx, menuIDs, apiIDs, buttonIDs); err != nil {
+			return err
+		}
+		role, err := seedStore.FindRoleByCode(ctx, domain.RoleCodeSuperAdmin)
+		if err != nil {
+			return err
+		}
+		root = role
+		return nil
 	})
+	if err != nil {
+		return domain.Role{}, err
+	}
+	return root, nil
 }
 
 func (s *Store) seedPermissions(ctx context.Context) error {
@@ -576,9 +592,8 @@ type menuButtonSeed struct {
 	description string
 }
 
-// defaultMenuSeeds is the boot-time navigation and page-button catalog. The
-// root role is refreshed from these IDs on startup, so a new admin instance can
-// log in with a complete gin-vue-admin-style back-office surface.
+// defaultMenuSeeds is the initial navigation and page-button catalog used by
+// explicit system first initialization.
 var defaultMenuSeeds = []menuSeed{
 	{name: "工作台", path: "/dashboard", icon: "dashboard", component: "./Dashboard", sort: 10},
 	{name: "管理员管理", path: "/admins", icon: "user", component: "./Admins", permission: domain.PermissionAdminRead, sort: 20, buttons: []menuButtonSeed{
@@ -659,7 +674,7 @@ type apiSeed struct {
 	public      bool
 }
 
-// apiSeeds is the boot-time API authorization catalog. Private handler routes
+// apiSeeds is the initial API authorization catalog. Private handler routes
 // must have a matching method/path row because auth checks both the permission
 // token and the active role's assigned API ids.
 var apiSeeds = []apiSeed{
@@ -667,6 +682,8 @@ var apiSeeds = []apiSeed{
 	{method: "GET", path: "/api/info", description: "应用信息", group: "system", public: true},
 	{method: "GET", path: "/api/ready", description: "整体 readiness", group: "system", public: true},
 	{method: "GET", path: "/api/capabilities", description: "capability 状态", group: "system", public: true},
+	{method: "GET", path: "/api/setup/state", description: "系统初始化状态", group: "setup", public: true},
+	{method: "POST", path: "/api/setup", description: "系统首次初始化", group: "setup", public: true},
 	{method: "POST", path: "/api/auth/login", description: "管理员登录", group: "auth", public: true},
 	{method: "POST", path: "/api/auth/logout", description: "服务端退出当前登录会话", group: "auth"},
 	{method: "POST", path: "/api/auth/logout-others", description: "撤销其他登录会话", group: "auth"},

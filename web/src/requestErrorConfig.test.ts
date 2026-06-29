@@ -30,7 +30,7 @@ vi.mock('@/services/csrf-token', () => ({
 
 type TestError = Error & {
   response?: { status?: number };
-  info?: { message?: string };
+  info?: { code?: number; message?: string };
 };
 
 describe('requestErrorConfig', () => {
@@ -67,6 +67,17 @@ describe('requestErrorConfig', () => {
     expect(mockReplace).toHaveBeenCalledWith(
       `/user/login?redirect=${encodeURIComponent('/admins?page=1#top')}`,
     );
+  });
+
+  it('redirects to setup on system-uninitialized business errors', () => {
+    const error: TestError = new Error('system is not initialized');
+    error.name = 'BizError';
+    error.info = { code: 100410, message: 'system is not initialized' };
+
+    errorHandler?.(error, {});
+
+    expect(mockReplace).toHaveBeenCalledWith('/setup');
+    expect(message.error).not.toHaveBeenCalled();
   });
 
   it('shows business error messages', () => {

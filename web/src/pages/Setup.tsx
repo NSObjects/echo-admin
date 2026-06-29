@@ -1,20 +1,28 @@
-import { LockOutlined, UserOutlined } from '@ant-design/icons';
-import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { Helmet, history, useModel } from '@umijs/max';
+import {
+  HomeOutlined,
+  IdcardOutlined,
+  LockOutlined,
+  MailOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import { ProForm, ProFormText } from '@ant-design/pro-components';
+import { Helmet, history } from '@umijs/max';
 import { App } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
-import { flushSync } from 'react-dom';
 
 import { Footer } from '@/components';
-import { login } from '@/services/admin';
-import Settings from '../../../../config/defaultSettings';
+import { submitSetup } from '@/services/admin';
+import type { SetupInput } from '@/services/admin';
+import Settings from '../../config/defaultSettings';
+
+const loginPath = '/user/login';
 
 const useStyles = createStyles(() => ({
   container: {
     minHeight: '100dvh',
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(420px, 520px)',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(420px, 540px)',
     background: '#f5f7f6',
     color: '#18211f',
     overflow: 'hidden',
@@ -32,7 +40,7 @@ const useStyles = createStyles(() => ({
     flexDirection: 'column',
     justifyContent: 'space-between',
     backgroundImage:
-      'linear-gradient(90deg, rgba(13, 29, 28, 0.86), rgba(13, 29, 28, 0.18) 58%, rgba(245, 247, 246, 0.15)), url("/images/login-operations.png")',
+      'linear-gradient(90deg, rgba(13, 29, 28, 0.88), rgba(13, 29, 28, 0.2) 58%, rgba(245, 247, 246, 0.12)), url("/images/login-operations.png")',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     '@media (max-width: 920px)': {
@@ -97,7 +105,7 @@ const useStyles = createStyles(() => ({
   formSide: {
     position: 'relative',
     minHeight: '100dvh',
-    padding: '40px 48px',
+    padding: '36px 48px 76px',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -105,60 +113,67 @@ const useStyles = createStyles(() => ({
       'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(246,248,247,0.98) 100%)',
     '@media (max-width: 920px)': {
       minHeight: '100dvh',
-      padding: '40px 24px 72px',
-      justifyContent: 'center',
+      padding: '40px 24px 76px',
       backgroundImage:
         'linear-gradient(180deg, rgba(246,248,247,0.9), rgba(246,248,247,0.98)), url("/images/login-operations.png")',
       backgroundSize: 'cover',
       backgroundPosition: 'center left',
     },
     '@media (max-width: 520px)': {
-      padding: '72px 18px 70px',
+      padding: '56px 18px 72px',
       justifyContent: 'flex-start',
     },
   },
   panel: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 420,
     margin: '0 auto',
+  },
+  mobileBrand: {
+    display: 'none',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 30,
+    color: '#18211f',
     '@media (max-width: 920px)': {
-      maxWidth: 420,
+      display: 'flex',
     },
   },
-  formHeader: {
-    marginBottom: 28,
+  mobileMark: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    display: 'grid',
+    placeItems: 'center',
+    background: '#1d5c58',
+    color: '#f7fbf8',
+    fontSize: 16,
+    fontWeight: 700,
+    letterSpacing: 0,
   },
-  formTitle: {
+  header: {
+    marginBottom: 26,
+  },
+  title: {
     margin: 0,
     fontSize: 30,
     lineHeight: 1.18,
     fontWeight: 760,
     letterSpacing: 0,
     color: '#18211f',
-    '@media (max-width: 920px)': {
-      fontSize: 28,
-    },
     '@media (max-width: 520px)': {
       fontSize: 26,
     },
   },
-  formSubtitle: {
+  subtitle: {
     margin: '10px 0 0',
     fontSize: 14,
     lineHeight: 1.7,
     color: '#66706c',
   },
-  loginForm: {
-    '.ant-pro-form-login-container': {
-      width: '100%',
-      padding: 0,
-    },
-    '.ant-pro-form-login-main': {
-      width: '100%',
-      minWidth: 0,
-    },
-    '.ant-pro-form-login-header': {
-      display: 'none',
+  form: {
+    '.ant-pro-form-group-container': {
+      gap: 12,
     },
     '.ant-input-affix-wrapper': {
       minHeight: 46,
@@ -189,28 +204,6 @@ const useStyles = createStyles(() => ({
       background: '#174d49',
     },
   },
-  mobileBrand: {
-    display: 'none',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 32,
-    color: '#18211f',
-    '@media (max-width: 920px)': {
-      display: 'flex',
-    },
-  },
-  mobileMark: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    display: 'grid',
-    placeItems: 'center',
-    background: '#1d5c58',
-    color: '#f7fbf8',
-    fontSize: 16,
-    fontWeight: 700,
-    letterSpacing: 0,
-  },
   footer: {
     position: 'absolute',
     right: 48,
@@ -225,28 +218,14 @@ const useStyles = createStyles(() => ({
   },
 }));
 
-const loginPath = '/user/login';
-
-const safeRedirect = (redirect: string | null, fallback: string): string => {
-  if (!redirect?.startsWith('/') || redirect.startsWith('//')) return fallback;
-  try {
-    const parsed = new URL(redirect, window.location.origin);
-    if (parsed.origin !== window.location.origin) return fallback;
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return fallback;
-  }
-};
-
-const Login: React.FC = () => {
+const Setup: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
-  const { setInitialState } = useModel('@@initialState');
 
   return (
     <div className={styles.container}>
       <Helmet>
-        <title>{`登录 - ${Settings.title}`}</title>
+        <title>{`系统初始化 - ${Settings.title}`}</title>
       </Helmet>
       <section className={styles.visual} aria-hidden="true">
         <div className={styles.visualBrand}>
@@ -257,7 +236,7 @@ const Login: React.FC = () => {
           </div>
         </div>
         <div className={styles.visualCopy}>
-          <h1 className={styles.visualTitle}>统一后台管理入口</h1>
+          <h1 className={styles.visualTitle}>系统初始化</h1>
           <div className={styles.visualLine} />
         </div>
       </section>
@@ -270,39 +249,45 @@ const Login: React.FC = () => {
               <span className={styles.brandMeta}>后台管理模板</span>
             </div>
           </div>
-          <div className={styles.formHeader}>
-            <h2 className={styles.formTitle}>管理员登录</h2>
-            <p className={styles.formSubtitle}>请输入账号和密码。</p>
+          <div className={styles.header}>
+            <h2 className={styles.title}>创建首个管理员</h2>
+            <p className={styles.subtitle}>该账号拥有最高权限。</p>
           </div>
-          <LoginForm
-            className={styles.loginForm}
+          <ProForm<SetupInput>
+            className={styles.form}
+            initialValues={{ site_name: 'Echo Admin' }}
             submitter={{
+              resetButtonProps: false,
               searchConfig: {
-                submitText: '登录',
+                submitText: '完成初始化',
               },
             }}
             onFinish={async (values) => {
-              const result = await login({
+              const result = await submitSetup({
                 username: String(values.username ?? ''),
+                display_name: String(values.display_name ?? ''),
+                email: values.email ? String(values.email) : undefined,
                 password: String(values.password ?? ''),
+                site_name: values.site_name
+                  ? String(values.site_name)
+                  : undefined,
               });
-              const currentUser = result.user;
-              flushSync(() => {
-                setInitialState((state) => ({ ...state, currentUser }));
-              });
-              message.success('登录成功');
-              const redirect = new URL(window.location.href).searchParams.get(
-                'redirect',
-              );
-              const fallbackPath = currentUser?.default_path || '/dashboard';
-              history.replace(
-                safeRedirect(
-                  redirect === loginPath ? null : redirect,
-                  fallbackPath,
-                ),
-              );
+              if (result.initialized) {
+                message.success('初始化完成');
+                history.replace(loginPath);
+              }
             }}
           >
+            <ProFormText
+              name="site_name"
+              fieldProps={{
+                size: 'large',
+                prefix: <HomeOutlined />,
+                autoComplete: 'organization',
+              }}
+              placeholder="站点名称"
+              rules={[{ max: 120, message: '站点名称不能超过 120 个字符' }]}
+            />
             <ProFormText
               name="username"
               fieldProps={{
@@ -310,20 +295,53 @@ const Login: React.FC = () => {
                 prefix: <UserOutlined />,
                 autoComplete: 'username',
               }}
-              placeholder="请输入用户名"
-              rules={[{ required: true, message: '请输入用户名' }]}
+              placeholder="用户名"
+              rules={[
+                { required: true, message: '请输入用户名' },
+                { max: 64, message: '用户名不能超过 64 个字符' },
+              ]}
+            />
+            <ProFormText
+              name="display_name"
+              fieldProps={{
+                size: 'large',
+                prefix: <IdcardOutlined />,
+                autoComplete: 'name',
+              }}
+              placeholder="显示名称"
+              rules={[
+                { required: true, message: '请输入显示名称' },
+                { max: 80, message: '显示名称不能超过 80 个字符' },
+              ]}
+            />
+            <ProFormText
+              name="email"
+              fieldProps={{
+                size: 'large',
+                prefix: <MailOutlined />,
+                autoComplete: 'email',
+              }}
+              placeholder="邮箱"
+              rules={[
+                { type: 'email', message: '请输入有效邮箱' },
+                { max: 160, message: '邮箱不能超过 160 个字符' },
+              ]}
             />
             <ProFormText.Password
               name="password"
               fieldProps={{
                 size: 'large',
                 prefix: <LockOutlined />,
-                autoComplete: 'current-password',
+                autoComplete: 'new-password',
               }}
-              placeholder="请输入密码"
-              rules={[{ required: true, message: '请输入密码' }]}
+              placeholder="密码"
+              rules={[
+                { required: true, message: '请输入密码' },
+                { min: 8, message: '密码至少 8 个字符' },
+                { max: 72, message: '密码不能超过 72 个字符' },
+              ]}
             />
-          </LoginForm>
+          </ProForm>
         </div>
         <div className={styles.footer}>
           <Footer />
@@ -333,4 +351,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+export default Setup;

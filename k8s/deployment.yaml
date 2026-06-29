@@ -41,7 +41,6 @@ data:
 
     [admin]
     upload_dir = "/uploads"
-    bootstrap_password = ""
 
     [mysql]
     enabled = true
@@ -114,12 +113,6 @@ spec:
           image: echo-admin:latest
           imagePullPolicy: IfNotPresent
           env:
-            - name: ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: echo-admin-secrets
-                  key: bootstrap-admin-password
-                  optional: false
             - name: ECHO_ADMIN_MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -177,7 +170,7 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /api/ready
+              path: /api/health
               port: http
             periodSeconds: 5
       volumes:

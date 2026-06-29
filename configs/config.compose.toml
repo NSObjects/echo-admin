@@ -29,7 +29,6 @@ max_age_seconds = 0
 
 [admin]
 upload_dir = "uploads"
-bootstrap_password = ""
 
 [mysql]
 enabled = true

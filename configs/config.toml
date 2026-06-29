@@ -15,7 +15,6 @@ caller = false
 
 [admin]
 upload_dir = "uploads"
-bootstrap_password = "change-me-admin-password"
 
 [http]
 recovery_disabled = false

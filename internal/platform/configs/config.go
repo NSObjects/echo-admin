@@ -79,10 +79,9 @@ type Config struct {
 	Tracing TracingConfig `mapstructure:"tracing"`
 }
 
-// AdminConfig controls back-office foundation behavior.
+// AdminConfig controls back-office runtime behavior.
 type AdminConfig struct {
-	UploadDir         string `mapstructure:"upload_dir"`
-	BootstrapPassword string `mapstructure:"bootstrap_password"`
+	UploadDir string `mapstructure:"upload_dir"`
 }
 
 // AppConfig controls process identity exposed by system routes.

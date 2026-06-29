@@ -141,6 +141,10 @@ func provideServer(i do.Injector) {
 		if err != nil {
 			return nil, err
 		}
+		options, err = appendOptionalInstallationStateReader(i, options)
+		if err != nil {
+			return nil, err
+		}
 		srv, err := server.New(cfg, options...)
 		if err != nil {
 			return nil, fmt.Errorf("create server: %w", err)
@@ -175,6 +179,17 @@ func appendOptionalLoginSessionAuthenticator(i do.Injector, options []server.Opt
 	authenticator, err := do.InvokeAs[server.LoginSessionAuthenticator](i)
 	if err == nil {
 		return append(options, server.WithLoginSessionAuthenticator(authenticator)), nil
+	}
+	if optionalServiceMissing(err) {
+		return options, nil
+	}
+	return nil, err
+}
+
+func appendOptionalInstallationStateReader(i do.Injector, options []server.Option) ([]server.Option, error) {
+	reader, err := do.InvokeAs[server.InstallationStateReader](i)
+	if err == nil {
+		return append(options, server.WithInstallationStateReader(reader)), nil
 	}
 	if optionalServiceMissing(err) {
 		return options, nil

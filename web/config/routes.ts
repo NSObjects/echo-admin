@@ -1,5 +1,10 @@
 export default [
   {
+    path: '/setup',
+    layout: false,
+    component: './Setup',
+  },
+  {
     path: '/user',
     layout: false,
     routes: [

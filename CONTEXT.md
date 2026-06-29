@@ -36,6 +36,10 @@ _Avoid_: Process startup, migration, seed
 The persistent state that says whether **System First Initialization** has completed for an Echo Admin installation.
 _Avoid_: Admin existence check, table existence check
 
+**Root Role**:
+The highest-authority administrator role created during **System First Initialization**.
+_Avoid_: Custom setup role, normal role
+
 ## Relationships
 
 - An **Administrator** may have zero or more active **Login Sessions**.
@@ -57,6 +61,7 @@ _Avoid_: Admin existence check, table existence check
 - Signing out from other devices revokes the other **Login Sessions** for the same **Administrator** while keeping the current **Login Session** active.
 - An unavailable **Login Session** is an authentication failure; a valid **Login Session** without route permission is an authorization failure.
 - **System First Initialization** happens before the first **Administrator** can use the administration console.
+- **System First Initialization** creates the first **Administrator** with the **Root Role**.
 - **Installation State** is the source of truth for whether **System First Initialization** is still allowed.
 - **System First Initialization** may be retried until **Installation State** records completion.
 

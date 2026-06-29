@@ -21,7 +21,6 @@ func TestConfigDefaults(t *testing.T) {
 	assert.False(t, cfg.HTTP.SecureCookies)
 
 	assert.Equal(t, DefaultUploadDir, cfg.Admin.UploadDir)
-	assert.Equal(t, "", cfg.Admin.BootstrapPassword)
 
 	assert.False(t, cfg.MySQL.Enabled)
 	assert.Equal(t, "", cfg.MySQL.Host)

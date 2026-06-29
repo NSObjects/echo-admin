@@ -1,21 +1,23 @@
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockHistory, mockQueryCurrentUser, mockReplace } = vi.hoisted(() => {
-  const replace = vi.fn();
-  return {
-    mockHistory: {
-      location: {
-        pathname: '/dashboard',
-        search: '',
-        hash: '',
+const { mockHistory, mockQueryCurrentUser, mockQuerySetupState, mockReplace } =
+  vi.hoisted(() => {
+    const replace = vi.fn();
+    return {
+      mockHistory: {
+        location: {
+          pathname: '/dashboard',
+          search: '',
+          hash: '',
+        },
+        replace,
       },
-      replace,
-    },
-    mockQueryCurrentUser: vi.fn(),
-    mockReplace: replace,
-  };
-});
+      mockQueryCurrentUser: vi.fn(),
+      mockQuerySetupState: vi.fn(),
+      mockReplace: replace,
+    };
+  });
 
 vi.mock('@umijs/max', () => ({
   history: mockHistory,
@@ -24,6 +26,7 @@ vi.mock('@umijs/max', () => ({
 
 vi.mock('@/services/admin', () => ({
   currentUser: mockQueryCurrentUser,
+  setupState: mockQuerySetupState,
 }));
 
 vi.mock('@/components', () => ({
@@ -50,6 +53,7 @@ describe('app getInitialState', () => {
       search: '',
       hash: '',
     };
+    mockQuerySetupState.mockResolvedValue({ initialized: true });
   });
 
   it('loads current administrator outside login page', async () => {
@@ -70,9 +74,23 @@ describe('app getInitialState', () => {
 
     const state = await getInitialState();
 
+    expect(mockQuerySetupState).toHaveBeenCalled();
     expect(mockQueryCurrentUser).toHaveBeenCalled();
     expect(state.currentUser).toEqual(user);
+    expect(state.setupState).toEqual({ initialized: true });
     expect(state.settings).toEqual({ title: 'Echo Admin', locale: false });
+  });
+
+  it('redirects to setup before loading current administrator when uninitialized', async () => {
+    const { getInitialState } = await import('./app');
+    mockQuerySetupState.mockResolvedValue({ initialized: false });
+
+    const state = await getInitialState();
+
+    expect(mockQueryCurrentUser).not.toHaveBeenCalled();
+    expect(state.currentUser).toBeUndefined();
+    expect(state.setupState).toEqual({ initialized: false });
+    expect(mockReplace).toHaveBeenCalledWith('/setup');
   });
 
   it('redirects to login when current administrator cannot be loaded', async () => {
@@ -92,6 +110,20 @@ describe('app getInitialState', () => {
     );
   });
 
+  it('keeps setup redirect when current administrator returns system-uninitialized', async () => {
+    const { getInitialState } = await import('./app');
+    const error = new Error('system is not initialized') as Error & {
+      info?: { code?: number };
+    };
+    error.info = { code: 100410 };
+    mockQueryCurrentUser.mockRejectedValue(error);
+
+    const state = await getInitialState();
+
+    expect(state.currentUser).toBeUndefined();
+    expect(mockReplace).toHaveBeenCalledWith('/setup');
+  });
+
   it('does not load current administrator on login page', async () => {
     const { getInitialState } = await import('./app');
     mockHistory.location = {
@@ -102,9 +134,25 @@ describe('app getInitialState', () => {
 
     const state = await getInitialState();
 
+    expect(mockQuerySetupState).toHaveBeenCalled();
     expect(mockQueryCurrentUser).not.toHaveBeenCalled();
     expect(state.currentUser).toBeUndefined();
     expect(state.fetchUserInfo).toBeDefined();
+  });
+
+  it('redirects initialized setup route to login', async () => {
+    const { getInitialState } = await import('./app');
+    mockHistory.location = {
+      pathname: '/setup',
+      search: '',
+      hash: '',
+    };
+
+    const state = await getInitialState();
+
+    expect(mockQueryCurrentUser).not.toHaveBeenCalled();
+    expect(state.setupState).toEqual({ initialized: true });
+    expect(mockReplace).toHaveBeenCalledWith('/user/login');
   });
 });
 

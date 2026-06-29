@@ -11,7 +11,7 @@
 
 `/api/info` 只返回静态配置里的 `app.name`、`app.version` 和当前时间。
 
-它不 import 业务模块。业务路由只在 `internal/boot` 里显式组装。API Token 认证通过 `WithAPIKeyVerifier` 传入一个小接口；server 只读取 `X-API-Token`、写入 request context，不知道 token 表、哈希策略或业务模块。浏览器 Login Session 认证通过 `WithLoginSessionAuthenticator` 注入；server 只读取 HttpOnly cookie 中的 opaque token、写入 request context，不知道会话表结构。内部错误记录通过 `WithSystemErrorRecorder` 注入，server 只在统一错误边界产生诊断事件，不知道审计表结构。
+它不 import 业务模块。业务路由只在 `internal/boot` 里显式组装。System First Initialization gate 通过 `WithInstallationStateReader` 注入；server 只判断当前安装是否完成，并在未完成时放行 health/info/setup 路由、拦截普通管理路由，不知道 setup 表结构。API Token 认证通过 `WithAPIKeyVerifier` 传入一个小接口；server 只读取 `X-API-Token`、写入 request context，不知道 token 表、哈希策略或业务模块。浏览器 Login Session 认证通过 `WithLoginSessionAuthenticator` 注入；server 只读取 HttpOnly cookie 中的 opaque token、写入 request context，不知道会话表结构。内部错误记录通过 `WithSystemErrorRecorder` 注入，server 只在统一错误边界产生诊断事件，不知道审计表结构。
 
 ## API
 

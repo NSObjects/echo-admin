@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/samber/do/v2"
 	"gorm.io/gorm"
@@ -25,11 +26,15 @@ import (
 	filehttp "github.com/NSObjects/echo-admin/internal/modules/fileasset/http"
 	fileusecase "github.com/NSObjects/echo-admin/internal/modules/fileasset/usecase"
 	identitymysql "github.com/NSObjects/echo-admin/internal/modules/identity/adapters/mysql"
+	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	identityhttp "github.com/NSObjects/echo-admin/internal/modules/identity/http"
 	identityusecase "github.com/NSObjects/echo-admin/internal/modules/identity/usecase"
 	settingsmysql "github.com/NSObjects/echo-admin/internal/modules/settings/adapters/mysql"
 	settingshttp "github.com/NSObjects/echo-admin/internal/modules/settings/http"
 	settingsusecase "github.com/NSObjects/echo-admin/internal/modules/settings/usecase"
+	setupmysql "github.com/NSObjects/echo-admin/internal/modules/setup/adapters/mysql"
+	setuphttp "github.com/NSObjects/echo-admin/internal/modules/setup/http"
+	setupusecase "github.com/NSObjects/echo-admin/internal/modules/setup/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 	"github.com/NSObjects/echo-admin/internal/platform/server"
@@ -38,6 +43,7 @@ import (
 // BusinessModules returns the business modules installed by the default runtime.
 func BusinessModules() []Module {
 	return []Module{
+		setupModule(),
 		accessModule(),
 		identityModule(),
 		auditModule(),
@@ -46,6 +52,17 @@ func BusinessModules() []Module {
 		settingsModule(),
 		fileModule(),
 	}
+}
+
+func setupModule() Module {
+	return NewModule("setup",
+		Provide(newSetupStore),
+		Provide(newSetupTransactionRunner),
+		Provide(newSetupUsecase),
+		Provide(newInstallationStateReader),
+		Provide(newSetupHandler),
+		Route(setuphttp.Register),
+	)
 }
 
 func accessModule() Module {
@@ -122,6 +139,72 @@ func newAccessStore(i do.Injector) (*accessmysql.Store, error) {
 	return accessmysql.NewStore(ctx, db)
 }
 
+func newSetupStore(i do.Injector) (*setupmysql.Store, error) {
+	ctx, db, err := startupMySQL(i)
+	if err != nil {
+		return nil, err
+	}
+	return setupmysql.NewStore(ctx, db)
+}
+
+func newSetupTransactionRunner(i do.Injector) (setupusecase.TransactionRunner, error) {
+	_, db, err := startupMySQL(i)
+	if err != nil {
+		return nil, err
+	}
+	setupStore, err := do.Invoke[*setupmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	accessStore, err := do.Invoke[*accessmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	identityStore, err := do.Invoke[*identitymysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	settingsStore, err := do.Invoke[*settingsmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	return setupTransactionRunner{
+		db:       db,
+		setup:    setupStore,
+		access:   accessStore,
+		identity: identityStore,
+		settings: settingsStore,
+	}, nil
+}
+
+func newSetupUsecase(i do.Injector) (*setupusecase.Usecase, error) {
+	store, err := do.Invoke[*setupmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	runner, err := do.Invoke[setupusecase.TransactionRunner](i)
+	if err != nil {
+		return nil, err
+	}
+	return setupusecase.New(store, runner), nil
+}
+
+func newInstallationStateReader(i do.Injector) (server.InstallationStateReader, error) {
+	uc, err := do.Invoke[*setupusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return installationStateReader{setup: uc}, nil
+}
+
+func newSetupHandler(i do.Injector) (*setuphttp.Handler, error) {
+	uc, err := do.Invoke[*setupusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return setuphttp.New(uc), nil
+}
+
 func newAccessUsecase(i do.Injector) (*accessusecase.Usecase, error) {
 	store, err := do.Invoke[*accessmysql.Store](i)
 	if err != nil {
@@ -147,26 +230,7 @@ func newIdentityStore(i do.Injector) (*identitymysql.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, err := identitymysql.NewStore(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	accessStore, err := do.Invoke[*accessmysql.Store](i)
-	if err != nil {
-		return nil, err
-	}
-	role, err := accessStore.FindRoleByCode(ctx, accessdomain.RoleCodeSuperAdmin)
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := do.Invoke[configs.Config](i)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.SeedDefaultAdmin(ctx, role.ID, cfg.Admin.BootstrapPassword); err != nil {
-		return nil, err
-	}
-	return store, nil
+	return identitymysql.NewStore(ctx, db)
 }
 
 func newIdentityUsecase(i do.Injector) (*identityusecase.Usecase, error) {
@@ -508,6 +572,85 @@ func accessHandlerDeps(i do.Injector) (*accessusecase.Usecase, *authusecase.Usec
 
 type authLoginRecorder struct {
 	audit *auditusecase.Usecase
+}
+
+type installationStateReader struct {
+	setup *setupusecase.Usecase
+}
+
+func (r installationStateReader) Initialized(ctx context.Context) (bool, error) {
+	state, err := r.setup.State(ctx)
+	if err != nil {
+		return false, err
+	}
+	return state.Initialized, nil
+}
+
+type setupTransactionRunner struct {
+	db       *gorm.DB
+	setup    *setupmysql.Store
+	access   *accessmysql.Store
+	identity *identitymysql.Store
+	settings *settingsmysql.Store
+}
+
+func (r setupTransactionRunner) RunInitialization(ctx context.Context, fn func(context.Context, setupusecase.Transaction) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		transaction := setupTransaction{
+			setup:    r.setup.WithDB(tx),
+			access:   r.access.WithDB(tx),
+			identity: r.identity.WithDB(tx),
+			settings: r.settings.WithDB(tx),
+		}
+		return fn(ctx, transaction)
+	})
+}
+
+type setupTransaction struct {
+	setup    *setupmysql.Store
+	access   *accessmysql.Store
+	identity *identitymysql.Store
+	settings *settingsmysql.Store
+}
+
+func (t setupTransaction) RequireOpenInstallation(ctx context.Context) error {
+	return t.setup.RequireOpenInstallation(ctx)
+}
+
+func (t setupTransaction) InstallRootAuthorization(ctx context.Context) (setupusecase.RootRole, error) {
+	role, err := t.access.InstallRootAuthorization(ctx)
+	if err != nil {
+		return setupusecase.RootRole{}, err
+	}
+	return setupusecase.RootRole{ID: role.ID, Code: role.Code}, nil
+}
+
+func (t setupTransaction) CreateFirstAdministrator(ctx context.Context, input setupusecase.FirstAdministrator) error {
+	admin, err := identitydomain.RestoreAdmin(
+		0,
+		input.Username,
+		input.DisplayName,
+		input.Email,
+		input.PasswordHash,
+		[]int64{input.RootRoleID},
+		input.RootRoleID,
+		true,
+		time.Time{},
+		time.Time{},
+	)
+	if err != nil {
+		return err
+	}
+	_, err = t.identity.Create(ctx, admin)
+	return err
+}
+
+func (t setupTransaction) InstallInitialSettings(ctx context.Context, input setupusecase.InitialSettings) error {
+	return t.settings.InstallInitialSettings(ctx, input.SiteName)
+}
+
+func (t setupTransaction) CompleteInstallation(ctx context.Context) error {
+	return t.setup.CompleteInstallation(ctx)
 }
 
 type accessAdminRoleReader struct {

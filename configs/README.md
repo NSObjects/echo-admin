@@ -42,7 +42,6 @@ max_age_seconds = 0
 
 [admin]
 upload_dir = "uploads"
-bootstrap_password = "123456"
 
 [mysql]
 enabled = true
@@ -72,13 +71,13 @@ protocol = "grpc" # grpc, http
 insecure = true
 ```
 
-HTTP middleware、MySQL、Redis、MongoDB、Jaeger tracing、admin upload directory 和首次启动管理员密码都是 configured resources。后台基础能力运行期依赖 MySQL；启用 Redis、MongoDB、tracing 等可选外部依赖后也必须提供连接配置，并会进入 `/api/ready` 和 `/api/capabilities`。
+HTTP middleware、MySQL、Redis、MongoDB、Jaeger tracing 和 admin upload directory 都是 configured resources。后台基础能力运行期依赖 MySQL；启用 Redis、MongoDB、tracing 等可选外部依赖后也必须提供连接配置，并会进入 `/api/ready` 和 `/api/capabilities`。
 
 业务代码放在 `internal/modules/<module>`，平台运行时代码放在 `internal/platform`。业务 adapter 复用 boot 已经加载的资源：usecase 定义 usecase-owned outbound interface，adapter 使用配置好的 MySQL/Redis/MongoDB client 实现它，然后业务 module 用 `boot.NewModule`、`boot.Provide` 和 `boot.Route` 声明 adapter、usecase、handler 和 route。
 
 ## 环境变量覆盖
 
-配置文件是主配置入口。数据库 host、port、database、username、连接池等非敏感拓扑配置应写在配置文件中；密码和首次启动管理员密码可以用环境变量覆盖，便于接入 Docker Compose、Kubernetes Secret 或 CI/CD secret。
+配置文件是主配置入口。数据库 host、port、database、username、连接池等非敏感拓扑配置应写在配置文件中；MySQL 密码可以用环境变量覆盖，便于接入 Docker Compose、Kubernetes Secret 或 CI/CD secret。首次管理员密码不在静态配置中维护，由浏览器 `/setup` 初始化页提交。
 
 ```bash
 export ECHO_ADMIN_APP_NAME=echo-admin
@@ -101,7 +100,6 @@ export ECHO_ADMIN_HTTP_CORS_ALLOW_CREDENTIALS=false
 export ECHO_ADMIN_HTTP_CORS_EXPOSE_HEADERS=
 export ECHO_ADMIN_HTTP_CORS_MAX_AGE_SECONDS=0
 export ECHO_ADMIN_ADMIN_UPLOAD_DIR=uploads
-export ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD=replace-with-a-private-password
 export ECHO_ADMIN_MYSQL_PASSWORD=replace-with-a-private-database-password
 export ECHO_ADMIN_REDIS_ENABLED=false
 export ECHO_ADMIN_REDIS_ADDRESS=
@@ -113,7 +111,7 @@ export ECHO_ADMIN_TRACING_PROTOCOL=grpc
 export ECHO_ADMIN_TRACING_INSECURE=true
 ```
 
-浏览器后台登录使用服务端 Login Session 和 HttpOnly cookie，不需要 JWT secret。生产 HTTPS 部署应设置 `ECHO_ADMIN_HTTP_SECURE_COOKIES=true`，让 Login Session cookie 和 CSRF cookie 都带 `Secure` 属性。空库首次启动必须配置 `admin.bootstrap_password`，也可以用 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD` 覆盖；它只在 `admin` 用户不存在时使用，不会覆盖后续修改过的密码。
+浏览器后台登录使用服务端 Login Session 和 HttpOnly cookie，不需要 JWT secret。生产 HTTPS 部署应设置 `ECHO_ADMIN_HTTP_SECURE_COOKIES=true`，让 Login Session cookie 和 CSRF cookie 都带 `Secure` 属性。空库首次启动后访问浏览器后台会进入 `/setup`，由初始化页创建拥有最高权限 Root Role 的首个管理员。
 
 `app.name` 和 `app.version` 会出现在 `/api/info` 响应中。`system.level` 只接受 `1` 或 `2`。`log.format` 只接受 `console` 或 `json`；`log.output` 只接受 `stdout` 或 `stderr`。`http.*_disabled` 可关闭默认安装的 HTTP middleware，`http.secure_cookies` 控制浏览器登录会话相关 cookie 是否只允许 HTTPS 传输。
 

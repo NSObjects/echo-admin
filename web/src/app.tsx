@@ -15,13 +15,22 @@ import {
   LangDropdown,
   OfflineBanner,
 } from '@/components';
-import { currentUser as queryCurrentUser } from '@/services/admin';
-import type { CurrentUser } from '@/services/admin';
+import {
+  currentUser as queryCurrentUser,
+  setupState as querySetupState,
+} from '@/services/admin';
+import type { CurrentUser, SetupState } from '@/services/admin';
 import { filterMenuDataByGrantedMenus } from './runtime/menu';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
 const loginPath = '/user/login';
+const setupPath = '/setup';
+const systemUninitializedCode = 100410;
+
+type RuntimeRequestError = Error & {
+  info?: { code?: number };
+};
 
 /**
  * @see https://umijs.org/docs/api/runtime-config#getinitialstate
@@ -29,6 +38,7 @@ const loginPath = '/user/login';
 export async function getInitialState(): Promise<{
   settings?: Partial<LayoutSettings>;
   currentUser?: CurrentUser;
+  setupState?: SetupState;
   loading?: boolean;
   fetchUserInfo?: () => Promise<CurrentUser | undefined>;
 }> {
@@ -36,7 +46,13 @@ export async function getInitialState(): Promise<{
     try {
       const msg = await queryCurrentUser();
       return msg;
-    } catch (_error) {
+    } catch (error) {
+      if (
+        (error as RuntimeRequestError).info?.code === systemUninitializedCode
+      ) {
+        history.replace(setupPath);
+        return undefined;
+      }
       const { pathname, search, hash } = history.location;
       history.replace(
         `${loginPath}?redirect=${encodeURIComponent(pathname + search + hash)}`,
@@ -44,26 +60,43 @@ export async function getInitialState(): Promise<{
     }
     return undefined;
   };
-  // 如果不是登录页面，执行
+
   const { location } = history;
-  if (location.pathname !== loginPath) {
+  const installation = await querySetupState();
+  if (!installation.initialized) {
+    if (location.pathname !== setupPath) {
+      history.replace(setupPath);
+    }
+    return {
+      fetchUserInfo,
+      setupState: installation,
+      settings: defaultSettings as Partial<LayoutSettings>,
+    };
+  }
+
+  if (location.pathname === setupPath) {
+    history.replace(loginPath);
+  }
+
+  // 如果不是公开页面，执行当前用户加载。
+  if (location.pathname !== loginPath && location.pathname !== setupPath) {
     const currentUser = await fetchUserInfo();
     return {
       fetchUserInfo,
       currentUser,
+      setupState: installation,
       settings: defaultSettings as Partial<LayoutSettings>,
     };
   }
   return {
     fetchUserInfo,
+    setupState: installation,
     settings: defaultSettings as Partial<LayoutSettings>,
   };
 }
 
 // ProLayout 支持的api https://procomponents.ant.design/components/layout
-export const layout: RunTimeLayoutConfig = ({
-  initialState,
-}) => {
+export const layout: RunTimeLayoutConfig = ({ initialState }) => {
   return {
     menuItemRender: (item, dom) => {
       if (item.path) {
@@ -85,9 +118,7 @@ export const layout: RunTimeLayoutConfig = ({
       // `locale` prop is a locale string, so narrow to the boolean toggle here.
       const localeEnabled =
         (initialState?.settings as { locale?: boolean })?.locale !== false;
-      return [
-        localeEnabled && <LangDropdown key="lang" />,
-      ].filter(Boolean);
+      return [localeEnabled && <LangDropdown key="lang" />].filter(Boolean);
     },
     avatarProps: {
       title: initialState?.currentUser?.display_name ?? 'Admin',
@@ -102,7 +133,11 @@ export const layout: RunTimeLayoutConfig = ({
     onPageChange: () => {
       const { location } = history;
       // 如果没有登录，重定向到 login
-      if (!initialState?.currentUser && location.pathname !== loginPath) {
+      if (
+        !initialState?.currentUser &&
+        location.pathname !== loginPath &&
+        location.pathname !== setupPath
+      ) {
         history.replace(
           `${loginPath}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
         );

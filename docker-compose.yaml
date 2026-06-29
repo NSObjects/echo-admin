@@ -10,7 +10,6 @@ services:
       - path: .env
         required: false
     environment:
-      ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD: "${ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD:-}"
       ECHO_ADMIN_MYSQL_PASSWORD: "${ECHO_ADMIN_MYSQL_PASSWORD:-echo_admin_dev_password}"
     volumes:
       - type: bind

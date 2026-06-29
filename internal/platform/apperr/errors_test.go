@@ -49,6 +49,7 @@ func TestCommonRequestErrorCodes(t *testing.T) {
 		{name: "not found", got: ErrNotFound, want: 100404},
 		{name: "method not allowed", got: ErrMethodNotAllowed, want: 100405},
 		{name: "conflict", got: ErrConflict, want: 100409},
+		{name: "system uninitialized", got: ErrSystemUninitialized, want: 100410},
 		{name: "internal", got: ErrInternalServer, want: 100500},
 	}
 
@@ -76,6 +77,7 @@ func TestHTTPStatus(t *testing.T) {
 		{name: "permission denied", code: ErrPermissionDenied, want: 403},
 		{name: "method not allowed", code: ErrMethodNotAllowed, want: 405},
 		{name: "conflict", code: ErrConflict, want: 409},
+		{name: "system uninitialized", code: ErrSystemUninitialized, want: 409},
 		{name: "redis", code: ErrRedis, want: 500},
 		{name: "encoding", code: ErrEncodingJSON, want: 500},
 		{name: "unknown code", code: -1, want: 500},

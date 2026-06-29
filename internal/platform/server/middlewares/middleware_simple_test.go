@@ -34,6 +34,8 @@ func TestDefaultMiddlewareConfig(t *testing.T) {
 	assert.False(t, config.EnableCORS)
 	assert.False(t, config.EnableAPIKey)
 	assert.NotNil(t, config.APIKey)
+	assert.False(t, config.EnableInstallationGate)
+	assert.NotNil(t, config.InstallationGate)
 	assert.False(t, config.EnableLoginSession)
 	assert.NotNil(t, config.LoginSession)
 	assert.False(t, config.EnableCSRF)
@@ -48,12 +50,130 @@ func TestDefaultLoginSessionConfig(t *testing.T) {
 	assert.Equal(t, LoginSessionCookieName, config.CookieName)
 }
 
+func TestInstallationGateBlocksPrivateRoutesWhenUninitialized(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	gate, err := InstallationGate(&InstallationGateConfig{
+		Reader:  &installationStateReader{initialized: false},
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("InstallationGate() error = %v", err)
+	}
+	e.Use(gate)
+	e.GET("/api/auth/me", func(c *echo.Context) error {
+		t.Fatal("private handler reached before installation completed")
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assertErrorPayload(t, rec, apperr.ErrSystemUninitialized, "system is not initialized")
+}
+
+func TestInstallationGateSkipsSetupAndSystemRoutes(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	reader := &installationStateReader{initialized: false}
+	gate, err := InstallationGate(&InstallationGateConfig{
+		Reader:  reader,
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("InstallationGate() error = %v", err)
+	}
+	e.Use(gate)
+	e.GET("/api/setup/state", func(c *echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/setup/state", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	if reader.calls != 0 {
+		t.Fatalf("installation state calls = %d, want 0 for skipped setup route", reader.calls)
+	}
+}
+
+func TestInstallationGateAllowsPrivateRoutesAfterInitialization(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	reader := &installationStateReader{initialized: true}
+	gate, err := InstallationGate(&InstallationGateConfig{
+		Reader:  reader,
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("InstallationGate() error = %v", err)
+	}
+	e.Use(gate)
+	e.GET("/api/auth/me", func(c *echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	if reader.calls != 1 {
+		t.Fatalf("installation state calls = %d, want 1", reader.calls)
+	}
+}
+
+func TestInstallationGateRequiresReaderWhenEnabled(t *testing.T) {
+	gate, err := InstallationGate(&InstallationGateConfig{Enabled: true})
+
+	assert.Error(t, err)
+	assert.Nil(t, gate)
+}
+
 func TestApplyMiddlewares(t *testing.T) {
 	e := echo.New()
 	config := DefaultMiddlewareConfig()
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
 	assert.NotNil(t, e)
+}
+
+func TestInstallationGateRunsBeforeAPIKeyAuthentication(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	verifier := &countingAPIKeyVerifier{}
+	config := DefaultMiddlewareConfig()
+	config.EnableInstallationGate = true
+	config.InstallationGate = &InstallationGateConfig{
+		Reader:  &installationStateReader{initialized: false},
+		Enabled: true,
+	}
+	config.EnableAPIKey = true
+	config.APIKey = &APIKeyConfig{
+		Header:   APIKeyHeader,
+		Verifier: verifier,
+		Enabled:  true,
+	}
+
+	assert.NoError(t, ApplyMiddlewares(e, config))
+	e.GET("/private", func(c *echo.Context) error {
+		t.Fatal("private handler reached before installation completed")
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/private", nil)
+	req.Header.Set(APIKeyHeader, "ea_known_secret")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assertErrorPayload(t, rec, apperr.ErrSystemUninitialized, "system is not initialized")
+	if verifier.calls != 0 {
+		t.Fatalf("api key verifier calls = %d, want 0 before installation completes", verifier.calls)
+	}
 }
 
 func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
@@ -615,6 +735,18 @@ func (staticAPIKeyVerifier) VerifyAPIKey(_ context.Context, secret string) (APIK
 	return APIKeyIdentity{UserID: "42", RoleID: "7"}, nil
 }
 
+type countingAPIKeyVerifier struct {
+	calls int
+}
+
+func (v *countingAPIKeyVerifier) VerifyAPIKey(_ context.Context, secret string) (APIKeyIdentity, error) {
+	v.calls++
+	if secret != "ea_known_secret" {
+		return APIKeyIdentity{}, apperr.NewUnauthorized()
+	}
+	return APIKeyIdentity{UserID: "42", RoleID: "7"}, nil
+}
+
 type staticLoginSessionAuthenticator struct {
 	identity LoginSessionIdentity
 	err      error
@@ -625,6 +757,16 @@ func (a staticLoginSessionAuthenticator) AuthenticateLoginSession(context.Contex
 		return LoginSessionIdentity{}, a.err
 	}
 	return a.identity, nil
+}
+
+type installationStateReader struct {
+	initialized bool
+	calls       int
+}
+
+func (r *installationStateReader) Initialized(context.Context) (bool, error) {
+	r.calls++
+	return r.initialized, nil
 }
 
 type systemErrorRecorderSpy struct {

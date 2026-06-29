@@ -8,8 +8,7 @@ import (
 )
 
 const (
-	envOnlyPort              = ":9999"
-	envOnlyBootstrapPassword = "bootstrap-admin-secret"
+	envOnlyPort = ":9999"
 )
 
 func TestDecodeConfigWithEnvKeepsFileSourceOverrides(t *testing.T) {
@@ -48,22 +47,6 @@ func TestDecodeConfigWithEnvAppliesHTTPSecureCookiesOverride(t *testing.T) {
 
 	if !cfg.HTTP.SecureCookies {
 		t.Fatal("HTTP.SecureCookies = false, want env override true")
-	}
-}
-
-func TestDecodeConfigWithEnvAppliesAdminBootstrapPassword(t *testing.T) {
-	t.Setenv("ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD", envOnlyBootstrapPassword)
-
-	cfg, err := decodeConfigWithEnv([]byte(`
-	[admin]
-	upload_dir = "uploads"
-	`), "toml", true)
-	if err != nil {
-		t.Fatalf("decodeConfigWithEnv() error = %v", err)
-	}
-
-	if cfg.Admin.BootstrapPassword != envOnlyBootstrapPassword {
-		t.Fatalf("Admin.BootstrapPassword = %q, want env-only bootstrap password", cfg.Admin.BootstrapPassword)
 	}
 }
 
@@ -361,20 +344,6 @@ func TestValidateRejectsInvalidLogConfig(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Validate() error = nil, want invalid log output error")
-	}
-}
-
-func TestValidateRejectsUnsafeBootstrapAdminPassword(t *testing.T) {
-	err := Validate(Config{
-		Admin: AdminConfig{
-			BootstrapPassword: "123456",
-		},
-	})
-	if err == nil {
-		t.Fatal("Validate() error = nil, want bootstrap password validation error")
-	}
-	if !strings.Contains(err.Error(), "removed default") {
-		t.Fatalf("Validate() error = %q, want removed default identified", err)
 	}
 }
 
