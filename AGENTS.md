@@ -258,3 +258,17 @@ go mod tidy
 - 是否有测试缺失；
 - 是否需要补注释；
 - 是否需要更新文档。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 和 PRD 记录在 GitHub Issues 中，外部 PR 也作为 triage 入口。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+Triage 使用默认标签：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+本仓库使用 multi-context domain-doc 布局，根入口是 `CONTEXT-MAP.md`。详见 `docs/agents/domain.md`。
