@@ -3,7 +3,7 @@ import type { RequestConfig } from '@umijs/max';
 import { history } from '@umijs/max';
 import { message } from 'antd';
 
-import { clearAuthToken, getAuthToken } from '@/services/auth-token';
+import { getCSRFToken } from '@/services/csrf-token';
 
 type ApiEnvelope = {
   code?: number;
@@ -18,6 +18,8 @@ type RequestError = Error & {
 
 const successCode = 100001;
 const loginPath = '/user/login';
+const csrfHeader = 'X-CSRF-Token';
+const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export const errorConfig: RequestConfig = {
   errorConfig: {
@@ -34,7 +36,6 @@ export const errorConfig: RequestConfig = {
       if (opts?.skipErrorHandler) throw error;
 
       if (error.response?.status === 401) {
-        clearAuthToken();
         if (history.location.pathname !== loginPath) {
           history.replace(
             `${loginPath}?redirect=${encodeURIComponent(
@@ -59,14 +60,17 @@ export const errorConfig: RequestConfig = {
   },
   requestInterceptors: [
     (config: RequestOptions) => {
-      const token = getAuthToken();
-      if (!token) return config;
+      const method = String(config.method ?? 'GET').toUpperCase();
+      const csrfToken = unsafeMethods.has(method) ? getCSRFToken() : '';
       return {
         ...config,
-        headers: {
-          ...config.headers,
-          Authorization: `Bearer ${token}`,
-        },
+        withCredentials: true,
+        headers: csrfToken
+          ? {
+              ...config.headers,
+              [csrfHeader]: csrfToken,
+            }
+          : config.headers,
       };
     },
   ],

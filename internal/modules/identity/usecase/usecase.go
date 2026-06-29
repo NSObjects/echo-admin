@@ -85,6 +85,14 @@ func (u *Usecase) Update(ctx context.Context, input UpdateAdminInput) (Admin, er
 	if err != nil {
 		return Admin{}, err
 	}
+	if identitySecurityEvent(existing, input) {
+		// Revoke before saving security-sensitive identity changes so a
+		// failed revocation cannot leave old browser sessions alive after a
+		// password reset.
+		if err := u.sessions.RevokeLoginSessions(ctx, existing.ID); err != nil {
+			return Admin{}, err
+		}
+	}
 	saved, err := u.store.Update(ctx, updated)
 	if err != nil {
 		return Admin{}, err
@@ -107,7 +115,10 @@ func (u *Usecase) Delete(ctx context.Context, id int64) error {
 	if checkErr := rejectSelfDelete(ctx, existing.ID); checkErr != nil {
 		return checkErr
 	}
-	return u.store.Delete(ctx, existing.ID)
+	if err := u.store.Delete(ctx, existing.ID); err != nil {
+		return err
+	}
+	return u.sessions.RevokeLoginSessions(ctx, existing.ID)
 }
 
 // RoleAdminIDs returns visible administrators currently assigned to one role.
@@ -242,10 +253,16 @@ func roleAdminProfile(admin domain.Admin, roleID int64, shouldHaveRole bool, cur
 }
 
 func (u *Usecase) ready() error {
-	if u == nil || u.store == nil || u.roles == nil {
+	if u == nil || u.store == nil || u.roles == nil || u.sessions == nil {
 		return apperr.New(apperr.ErrInternalServer, "identity dependencies are not configured")
 	}
 	return nil
+}
+
+func identitySecurityEvent(existing domain.Admin, input UpdateAdminInput) bool {
+	passwordReset := input.Password != nil
+	disabled := input.Active != nil && existing.Active && !*input.Active
+	return passwordReset || disabled
 }
 
 func (u *Usecase) updateAdmin(ctx context.Context, existing domain.Admin, input UpdateAdminInput) (domain.Admin, error) {

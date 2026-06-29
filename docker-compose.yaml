@@ -10,13 +10,11 @@ services:
       - path: .env
         required: false
     environment:
-      ECHO_ADMIN_JWT_SECRET: "${ECHO_ADMIN_JWT_SECRET:-}"
       ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD: "${ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD:-}"
-      ECHO_ADMIN_MYSQL_ENABLED: "true"
-      ECHO_ADMIN_MYSQL_DSN: "${ECHO_ADMIN_MYSQL_DSN:-echo_admin:echo_admin_dev_password@tcp(mysql:3306)/echo_admin?charset=utf8mb4&parseTime=true&loc=Local}"
+      ECHO_ADMIN_MYSQL_PASSWORD: "${ECHO_ADMIN_MYSQL_PASSWORD:-echo_admin_dev_password}"
     volumes:
       - type: bind
-        source: ./configs/config.toml
+        source: ./configs/config.compose.toml
         target: /configs/config.toml
         read_only: true
     ports:

@@ -90,7 +90,7 @@ func authModule() Module {
 	return NewModule("auth",
 		Provide(newAuthStore),
 		Provide(newAuthUsecase),
-		Provide(newJWTBlocklistChecker),
+		Provide(newLoginSessionAuthenticator),
 		Provide(newAuthHandler),
 		Route(authhttp.Register),
 	)
@@ -178,7 +178,11 @@ func newIdentityUsecase(i do.Injector) (*identityusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return identityusecase.New(store, roles), nil
+	auth, err := do.Invoke[*authusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return identityusecase.New(store, roles, identitySessionRevoker{auth: auth}), nil
 }
 
 func newIdentityHandler(i do.Injector) (*identityhttp.Handler, error) {
@@ -302,11 +306,7 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := do.Invoke[configs.Config](i)
-	if err != nil {
-		return nil, err
-	}
-	return authusecase.New(identityStore, accessStore, accessStore, accessStore, authStore, authStore, authLoginRecorder{audit: audit}, cfg.JWT.Secret), nil
+	return authusecase.New(identityStore, accessStore, accessStore, accessStore, authStore, authStore, authLoginRecorder{audit: audit}), nil
 }
 
 func newAuthStore(i do.Injector) (*authmysql.Store, error) {
@@ -317,12 +317,36 @@ func newAuthStore(i do.Injector) (*authmysql.Store, error) {
 	return authmysql.NewStore(ctx, db)
 }
 
-func newJWTBlocklistChecker(i do.Injector) (server.JWTBlocklistChecker, error) {
+func newLoginSessionAuthenticator(i do.Injector) (server.LoginSessionAuthenticator, error) {
 	uc, err := do.Invoke[*authusecase.Usecase](i)
 	if err != nil {
 		return nil, err
 	}
-	return uc, nil
+	return loginSessionAuthenticator{auth: uc}, nil
+}
+
+type loginSessionAuthenticator struct {
+	auth *authusecase.Usecase
+}
+
+func (a loginSessionAuthenticator) AuthenticateLoginSession(ctx context.Context, token string) (server.LoginSessionIdentity, error) {
+	identity, err := a.auth.AuthenticateLoginSession(ctx, token)
+	if err != nil {
+		return server.LoginSessionIdentity{}, err
+	}
+	return server.LoginSessionIdentity{
+		SessionID: formatID(identity.SessionID),
+		UserID:    formatID(identity.AdminID),
+		RoleID:    formatID(identity.RoleID),
+	}, nil
+}
+
+type identitySessionRevoker struct {
+	auth *authusecase.Usecase
+}
+
+func (r identitySessionRevoker) RevokeLoginSessions(ctx context.Context, adminID int64) error {
+	return r.auth.RevokeLoginSessions(ctx, adminID)
 }
 
 type apiKeyVerifier struct {
@@ -368,7 +392,11 @@ func newAuthHandler(i do.Injector) (*authhttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return authhttp.New(uc), nil
+	cfg, err := do.Invoke[configs.Config](i)
+	if err != nil {
+		return nil, err
+	}
+	return authhttp.New(uc, cfg.HTTP.SecureCookies), nil
 }
 
 func newSettingsStore(i do.Injector) (*settingsmysql.Store, error) {

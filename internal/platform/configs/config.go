@@ -53,6 +53,9 @@ const (
 	// DefaultMySQLConnMaxLifetimeSeconds controls how long MySQL connections can be reused.
 	DefaultMySQLConnMaxLifetimeSeconds = 300
 
+	// DefaultMySQLPort is the conventional TCP port used by MySQL.
+	DefaultMySQLPort = 3306
+
 	// DefaultRedisDB is the default logical Redis database.
 	DefaultRedisDB = 0
 
@@ -69,7 +72,6 @@ type Config struct {
 	System  SystemConfig  `mapstructure:"system"`
 	Log     LogConfig     `mapstructure:"log"`
 	HTTP    HTTPConfig    `mapstructure:"http"`
-	JWT     JWTConfig     `mapstructure:"jwt"`
 	Admin   AdminConfig   `mapstructure:"admin"`
 	MySQL   MySQLConfig   `mapstructure:"mysql"`
 	Redis   RedisConfig   `mapstructure:"redis"`
@@ -108,6 +110,7 @@ type HTTPConfig struct {
 	RequestContextDisabled bool       `mapstructure:"request_context_disabled"`
 	RequestLogDisabled     bool       `mapstructure:"request_log_disabled"`
 	GzipDisabled           bool       `mapstructure:"gzip_disabled"`
+	SecureCookies          bool       `mapstructure:"secure_cookies"`
 	CORS                   CORSConfig `mapstructure:"cors"`
 }
 
@@ -122,17 +125,14 @@ type CORSConfig struct {
 	MaxAgeSeconds    int      `mapstructure:"max_age_seconds"`
 }
 
-// JWTConfig controls optional server-level JWT verification.
-type JWTConfig struct {
-	Enabled   bool     `mapstructure:"enabled"`
-	Secret    string   `mapstructure:"secret"`
-	SkipPaths []string `mapstructure:"skip_paths"`
-}
-
 // MySQLConfig controls the optional process-level MySQL resource.
 type MySQLConfig struct {
 	Enabled                bool   `mapstructure:"enabled"`
-	DSN                    string `mapstructure:"dsn"`
+	Host                   string `mapstructure:"host"`
+	Port                   int    `mapstructure:"port"`
+	Database               string `mapstructure:"database"`
+	Username               string `mapstructure:"username"`
+	Password               string `mapstructure:"password"`
 	MaxOpenConns           int    `mapstructure:"max_open_conns"`
 	MaxIdleConns           int    `mapstructure:"max_idle_conns"`
 	ConnMaxLifetimeSeconds int    `mapstructure:"conn_max_lifetime_seconds"`

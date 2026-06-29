@@ -4,18 +4,12 @@ version = "dev"
 
 [system]
 port = ":9322"
-#1 = debug , 2 = online
 level = 1
 
 [log]
-# console is convenient for local debug; json is better for production collectors.
 format = "console"
 output = "stdout"
 caller = false
-
-[admin]
-upload_dir = "uploads"
-bootstrap_password = "change-me-admin-password"
 
 [http]
 recovery_disabled = false
@@ -33,13 +27,17 @@ allow_credentials = false
 expose_headers = []
 max_age_seconds = 0
 
+[admin]
+upload_dir = "uploads"
+bootstrap_password = ""
+
 [mysql]
 enabled = true
-host = "127.0.0.1"
+host = "mysql"
 port = 3306
 database = "echo_admin"
-username = "root"
-password = "123456"
+username = "echo_admin"
+password = ""
 max_open_conns = 25
 max_idle_conns = 5
 conn_max_lifetime_seconds = 300

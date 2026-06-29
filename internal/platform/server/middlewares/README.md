@@ -2,7 +2,7 @@
 
 ## 概述
 
-Middlewares 包提供 API 模板的通用中间件能力，包括请求元数据、JWT 验证、错误恢复、请求日志、压缩和可选 CORS。
+Middlewares 包提供 API 模板的通用中间件能力，包括请求元数据、API Token、Login Session、CSRF、错误恢复、请求日志、压缩和可选 CORS。
 
 ## 中间件列表
 
@@ -16,27 +16,28 @@ Middlewares 包提供 API 模板的通用中间件能力，包括请求元数据
 - 该中间件不读取 `X-User-ID` 这类客户端身份 header；真实用户身份必须由认证边界验证后写入 context。
 - usecase 层通过 `internal/platform/requestctx` 读取元数据，不依赖 Echo context。
 
-### 2. JWT 中间件 (`jwt.go`)
+### 2. Login Session 中间件 (`login_session.go`)
 
-**功能**: JWT 令牌认证和验证
+**功能**: 浏览器登录会话认证和 CSRF 配置
 
 **配置**:
 ```go
-type JWTConfig struct {
-    SigningKey []byte
-    SkipPaths  []string
-    Enabled    bool
-    Blocklist  JWTBlocklistChecker
+type LoginSessionConfig struct {
+    CookieName    string
+    SkipPaths     []string
+    Authenticator LoginSessionAuthenticator
+    Enabled       bool
 }
 ```
 
 **特性**:
-- 支持路径跳过
-- 可配置签名密钥
-- 可启用或禁用
-- 统一错误处理
-- 可注入 JWT 黑名单 checker，验签成功后拒绝已撤销 token
-- 验证成功后把标准 `sub` claim 写入 `requestctx.UserID`；业务需要其他身份语义时，应由真实 auth 模块显式转换
+- 支持公开路径跳过
+- 从 `login_session` HttpOnly cookie 读取 opaque token
+- 通过 boot 注入的 authenticator 校验会话，不 import 业务存储
+- 验证成功后写入 `requestctx.UserID`、`requestctx.RoleID` 和 `requestctx.LoginSessionID`
+- API Token 已经认证的请求会跳过浏览器会话认证
+- `CSRFConfig` 只保护已通过 Login Session 认证的 unsafe method；API Token 请求不走浏览器 CSRF
+- 登录 handler 负责设置 `login_session` 和浏览器可读的 `csrf_token` cookie
 
 ### 3. 错误处理中间件 (`error.go`)
 
@@ -68,8 +69,10 @@ type MiddlewareConfig struct {
     EnableGzip           bool
     EnableCORS           bool
     CORS                 middleware.CORSConfig
-    EnableJWT            bool
-    JWT                  *JWTConfig
+    EnableLoginSession   bool
+    LoginSession         *LoginSessionConfig
+    EnableCSRF           bool
+    CSRF                 middleware.CSRFConfig
 }
 ```
 
@@ -84,12 +87,15 @@ config := &MiddlewareConfig{
     CORS: middleware.CORSConfig{
         AllowOrigins: []string{"https://app.example.com"},
     },
-    EnableJWT:    true,
-    JWT: &JWTConfig{
-        SigningKey: []byte(secretFromConfig),
-        SkipPaths:  []string{"/api/health", "/api/info", "/api/ready"},
-        Enabled:    true,
+    EnableLoginSession: true,
+    LoginSession: &LoginSessionConfig{
+        CookieName:    LoginSessionCookieName,
+        SkipPaths:     []string{"/api/health", "/api/info", "/api/ready"},
+        Authenticator: loginSessionAuthenticator,
+        Enabled:       true,
     },
+    EnableCSRF: true,
+    CSRF:       CSRFConfig(nil, true),
 }
 
 ApplyMiddlewares(e, config)

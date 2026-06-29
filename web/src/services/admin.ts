@@ -1,7 +1,5 @@
 import { request } from '@umijs/max';
 
-import { clearAuthToken, getAuthToken, setAuthToken } from './auth-token';
-
 export type Envelope<T> = {
   code: number;
   message: string;
@@ -45,7 +43,6 @@ export type CapabilitiesResult = {
 };
 
 export type LoginResult = {
-  token: string;
   user: CurrentUser;
 };
 
@@ -517,21 +514,16 @@ export async function login(body: {
     method: 'POST',
     data: body,
   });
-  setAuthToken(response.data.token);
   return response.data;
 }
 
 export async function logout(): Promise<void> {
- try {
-		if (getAuthToken()) {
-			await request('/api/auth/logout', { method: 'POST' });
-		}
-	} catch {
-		// Local logout must still complete when the revocation request cannot
-		// reach the server, otherwise the UI can trap an operator in a stale session.
-	} finally {
-		clearAuthToken();
-	}
+  try {
+    await request('/api/auth/logout', { method: 'POST' });
+  } catch {
+    // Local logout must still complete when the revocation request cannot
+    // reach the server, otherwise the UI can trap an operator in a stale session.
+  }
 }
 
 export async function currentUser(): Promise<CurrentUser> {
@@ -553,23 +545,21 @@ export async function updateCurrentUserProfile(body: {
 }
 
 export async function switchRole(roleID: number): Promise<LoginResult> {
-	const response = await request<Envelope<LoginResult>>('/api/auth/role', {
-		method: 'POST',
-		data: { role_id: roleID },
-	});
-	setAuthToken(response.data.token);
-	return response.data;
+  const response = await request<Envelope<LoginResult>>('/api/auth/role', {
+    method: 'POST',
+    data: { role_id: roleID },
+  });
+  return response.data;
 }
 
 export async function changePassword(body: {
-	current_password: string;
-	new_password: string;
+  current_password: string;
+  new_password: string;
 }): Promise<void> {
-	await request('/api/auth/password', {
-		method: 'POST',
-		data: body,
-	});
-	clearAuthToken();
+  await request('/api/auth/password', {
+    method: 'POST',
+    data: body,
+  });
 }
 
 export async function listAdmins(
@@ -883,9 +873,8 @@ export async function batchDeleteVersions(ids: number[]): Promise<void> {
 }
 
 export async function downloadVersionJSON(id: number): Promise<Blob> {
-  const token = getAuthToken();
   const response = await fetch(`/api/system/versions/${id}/download`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'include',
   });
   if (!response.ok) {
     throw new Error('download version json failed');
@@ -899,9 +888,8 @@ export async function listDictionaries(): Promise<Dictionary[]> {
 }
 
 export async function exportDictionaries(): Promise<Blob> {
-  const token = getAuthToken();
   const response = await fetch('/api/dictionaries/export', {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'include',
   });
   if (!response.ok) {
     throw new Error('export dictionaries failed');

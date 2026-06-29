@@ -18,12 +18,13 @@ const (
 // Info is metadata extracted at a delivery boundary and passed through
 // request-scoped work.
 type Info struct {
-	TraceID   string
-	SpanID    string
-	RequestID string
-	UserID    string
-	RoleID    string
-	StartTime time.Time
+	TraceID        string
+	SpanID         string
+	RequestID      string
+	UserID         string
+	RoleID         string
+	LoginSessionID string
+	StartTime      time.Time
 }
 
 // WithInfo returns a child context carrying request metadata.
@@ -79,6 +80,14 @@ func WithRoleID(ctx context.Context, roleID string) context.Context {
 	return WithInfo(ctx, info)
 }
 
+// WithLoginSessionID returns a child context carrying the authenticated login
+// session identity. API-token requests intentionally leave this field empty.
+func WithLoginSessionID(ctx context.Context, sessionID string) context.Context {
+	info, _ := FromContext(ctx)
+	info.LoginSessionID = sessionID
+	return WithInfo(ctx, info)
+}
+
 // FromContext returns request metadata from ctx.
 func FromContext(ctx context.Context) (Info, bool) {
 	if ctx == nil {
@@ -122,6 +131,15 @@ func GetRoleID(ctx context.Context) string {
 		return ""
 	}
 	return info.RoleID
+}
+
+// GetLoginSessionID returns the login session ID stored in ctx.
+func GetLoginSessionID(ctx context.Context) string {
+	info, ok := FromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return info.LoginSessionID
 }
 
 // GetStartTime returns the request start time stored in ctx.

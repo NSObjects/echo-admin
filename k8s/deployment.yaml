@@ -1,5 +1,5 @@
-# Kubernetes runtime overrides use ECHO_ADMIN_* environment variables so the
-# image-owned /configs/config.toml remains the single static config baseline.
+# Kubernetes mounts runtime config as a file. Secrets stay in environment
+# variables so database topology is reviewable without exposing passwords.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,26 +9,78 @@ metadata:
     app.kubernetes.io/component: api
     app.kubernetes.io/part-of: echo-admin
 data:
-  ECHO_ADMIN_APP_NAME: "echo-admin"
-  ECHO_ADMIN_APP_VERSION: "dev"
-  ECHO_ADMIN_SYSTEM_PORT: ":9322"
-  ECHO_ADMIN_SYSTEM_LEVEL: "2"
-  ECHO_ADMIN_LOG_FORMAT: "json"
-  ECHO_ADMIN_LOG_OUTPUT: "stdout"
-  ECHO_ADMIN_LOG_CALLER: "false"
-  ECHO_ADMIN_HTTP_RECOVERY_DISABLED: "false"
-  ECHO_ADMIN_HTTP_REQUEST_CONTEXT_DISABLED: "false"
-  ECHO_ADMIN_HTTP_REQUEST_LOG_DISABLED: "false"
-  ECHO_ADMIN_HTTP_GZIP_DISABLED: "false"
-  ECHO_ADMIN_HTTP_CORS_ENABLED: "false"
-  ECHO_ADMIN_JWT_ENABLED: "true"
-  ECHO_ADMIN_ADMIN_UPLOAD_DIR: "/uploads"
-  ECHO_ADMIN_MYSQL_ENABLED: "true"
-  ECHO_ADMIN_REDIS_ENABLED: "false"
-  ECHO_ADMIN_MONGODB_ENABLED: "false"
-  ECHO_ADMIN_TRACING_ENABLED: "false"
-  ECHO_ADMIN_TRACING_PROTOCOL: "grpc"
-  ECHO_ADMIN_TRACING_INSECURE: "true"
+  config.toml: |
+    [app]
+    name = "echo-admin"
+    version = "dev"
+
+    [system]
+    port = ":9322"
+    level = 2
+
+    [log]
+    format = "json"
+    output = "stdout"
+    caller = false
+
+    [http]
+    recovery_disabled = false
+    request_context_disabled = false
+    request_log_disabled = false
+    gzip_disabled = false
+    secure_cookies = true
+
+    [http.cors]
+    enabled = false
+    allow_origins = []
+    allow_methods = []
+    allow_headers = []
+    allow_credentials = false
+    expose_headers = []
+    max_age_seconds = 0
+
+    [admin]
+    upload_dir = "/uploads"
+    bootstrap_password = ""
+
+    [mysql]
+    enabled = true
+    host = "mysql"
+    port = 3306
+    database = "echo_admin"
+    username = "echo_admin"
+    password = ""
+    max_open_conns = 25
+    max_idle_conns = 5
+    conn_max_lifetime_seconds = 300
+    ping_timeout_seconds = 3
+
+    [redis]
+    enabled = false
+    address = ""
+    username = ""
+    password = ""
+    db = 0
+    dial_timeout_seconds = 3
+    read_timeout_seconds = 3
+    write_timeout_seconds = 3
+    ping_timeout_seconds = 3
+
+    [mongodb]
+    enabled = false
+    uri = ""
+    database = ""
+    connect_timeout_seconds = 3
+    ping_timeout_seconds = 3
+
+    [tracing]
+    enabled = false
+    endpoint = ""
+    protocol = "grpc"
+    insecure = true
+    service_name = ""
+    sample_ratio = 1.0
+    shutdown_timeout_seconds = 5
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -61,27 +113,18 @@ spec:
         - name: api
           image: echo-admin:latest
           imagePullPolicy: IfNotPresent
-          envFrom:
-            - configMapRef:
-                name: echo-admin-runtime
           env:
-            - name: ECHO_ADMIN_JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: echo-admin-secrets
-                  key: jwt-secret
-                  optional: false
             - name: ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: echo-admin-secrets
                   key: bootstrap-admin-password
                   optional: false
-            - name: ECHO_ADMIN_MYSQL_DSN
+            - name: ECHO_ADMIN_MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: echo-admin-secrets
-                  key: mysql-dsn
+                  key: mysql-password
                   optional: false
             - name: ECHO_ADMIN_REDIS_PASSWORD
               valueFrom:
@@ -100,6 +143,10 @@ spec:
               containerPort: 9322
               protocol: TCP
           volumeMounts:
+            - name: runtime-config
+              mountPath: /configs/config.toml
+              subPath: config.toml
+              readOnly: true
             - name: uploads
               mountPath: /uploads
           securityContext:
@@ -134,6 +181,9 @@ spec:
               port: http
             periodSeconds: 5
       volumes:
+        - name: runtime-config
+          configMap:
+            name: echo-admin-runtime
         - name: uploads
           emptyDir: {}
 ---

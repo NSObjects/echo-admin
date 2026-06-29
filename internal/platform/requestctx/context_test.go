@@ -12,17 +12,19 @@ const (
 	traceIDForTest   = "trace-123"
 	userIDForTest    = "user-001"
 	roleIDForTest    = "role-001"
+	sessionIDForTest = "session-001"
 )
 
 func TestWithInfoStoresRequestMetadata(t *testing.T) {
 	start := time.Now()
 	ctx := WithInfo(context.Background(), Info{
-		TraceID:   traceIDForTest,
-		SpanID:    "span-456",
-		RequestID: requestIDForTest,
-		UserID:    userIDForTest,
-		RoleID:    roleIDForTest,
-		StartTime: start,
+		TraceID:        traceIDForTest,
+		SpanID:         "span-456",
+		RequestID:      requestIDForTest,
+		UserID:         userIDForTest,
+		RoleID:         roleIDForTest,
+		LoginSessionID: sessionIDForTest,
+		StartTime:      start,
 	})
 
 	info, ok := FromContext(ctx)
@@ -43,6 +45,9 @@ func TestWithInfoStoresRequestMetadata(t *testing.T) {
 	}
 	if info.RoleID != roleIDForTest {
 		t.Fatalf("RoleID = %q, want %s", info.RoleID, roleIDForTest)
+	}
+	if info.LoginSessionID != sessionIDForTest {
+		t.Fatalf("LoginSessionID = %q, want %s", info.LoginSessionID, sessionIDForTest)
 	}
 	if !info.StartTime.Equal(start) {
 		t.Fatalf("StartTime = %v, want %v", info.StartTime, start)
@@ -86,8 +91,9 @@ func TestWithTraceInfoSupportsAccessors(t *testing.T) {
 
 func TestWithTraceSpanPreservesExistingMetadata(t *testing.T) {
 	ctx := WithInfo(context.Background(), Info{
-		RequestID: requestIDForTest,
-		UserID:    userIDForTest,
+		RequestID:      requestIDForTest,
+		UserID:         userIDForTest,
+		LoginSessionID: sessionIDForTest,
 	})
 
 	ctx = WithTraceSpan(ctx, traceIDForTest, "span-456")
@@ -101,6 +107,9 @@ func TestWithTraceSpanPreservesExistingMetadata(t *testing.T) {
 	}
 	if info.UserID != userIDForTest {
 		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+	}
+	if info.LoginSessionID != sessionIDForTest {
+		t.Fatalf("LoginSessionID = %q, want %s", info.LoginSessionID, sessionIDForTest)
 	}
 	if info.TraceID != traceIDForTest {
 		t.Fatalf("TraceID = %q, want %s", info.TraceID, traceIDForTest)
@@ -186,6 +195,22 @@ func TestWithRoleIDAddsActiveAuthenticatedRole(t *testing.T) {
 	}
 }
 
+func TestWithLoginSessionIDAddsSessionMetadata(t *testing.T) {
+	ctx := WithUserID(context.Background(), userIDForTest)
+	ctx = WithLoginSessionID(ctx, sessionIDForTest)
+
+	info, ok := FromContext(ctx)
+	if !ok {
+		t.Fatal("FromContext() ok = false, want true")
+	}
+	if info.UserID != userIDForTest {
+		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+	}
+	if got := GetLoginSessionID(ctx); got != sessionIDForTest {
+		t.Fatalf("GetLoginSessionID() = %q, want %s", got, sessionIDForTest)
+	}
+}
+
 func TestContextAccessorsHandleNilContext(t *testing.T) {
 	var ctx context.Context
 	if got := GetTraceID(ctx); got != "" {
@@ -199,6 +224,9 @@ func TestContextAccessorsHandleNilContext(t *testing.T) {
 	}
 	if got := GetRoleID(ctx); got != "" {
 		t.Fatalf("GetRoleID(nil) = %q, want empty", got)
+	}
+	if got := GetLoginSessionID(ctx); got != "" {
+		t.Fatalf("GetLoginSessionID(nil) = %q, want empty", got)
 	}
 	if got := GetStartTime(ctx); !got.IsZero() {
 		t.Fatalf("GetStartTime(nil) = %v, want zero", got)

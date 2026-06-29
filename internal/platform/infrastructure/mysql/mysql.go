@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
+	"net"
 	"os"
+	"strconv"
 	"time"
 
+	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -38,7 +41,8 @@ func Open(ctx context.Context, cfg configs.MySQLConfig) (*Resource, error) {
 		return nil, resources.NewCapabilityError(resources.CapabilityMySQL, "configure", err)
 	}
 
-	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{Logger: newGORMLogger(os.Stdout, true)})
+	dsn := buildDSN(cfg)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newGORMLogger(os.Stdout, true)})
 	if err != nil {
 		return nil, resources.NewCapabilityError(resources.CapabilityMySQL, "open", err)
 	}
@@ -117,6 +121,23 @@ func configurePool(db *sql.DB, cfg configs.MySQLConfig) {
 	if cfg.ConnMaxLifetimeSeconds > 0 {
 		db.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSeconds) * time.Second)
 	}
+}
+
+func buildDSN(cfg configs.MySQLConfig) string {
+	// Keep the static connection topology in config while allowing the password
+	// to come from a secret-backed environment variable.
+	driverConfig := drivermysql.NewConfig()
+	driverConfig.User = cfg.Username
+	driverConfig.Passwd = cfg.Password
+	driverConfig.Net = "tcp"
+	driverConfig.Addr = net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	driverConfig.DBName = cfg.Database
+	driverConfig.ParseTime = true
+	driverConfig.Loc = time.Local
+	driverConfig.Params = map[string]string{
+		"charset": "utf8mb4",
+	}
+	return driverConfig.FormatDSN()
 }
 
 func newGORMLogger(writer io.Writer, colorful bool) logger.Interface {

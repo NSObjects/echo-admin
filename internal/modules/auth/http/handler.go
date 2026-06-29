@@ -2,30 +2,31 @@
 package authhttp
 
 import (
-	"strings"
-
 	"github.com/labstack/echo/v5"
 
 	"github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
+	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 // Handler adapts auth HTTP requests to the auth usecase.
 type Handler struct {
-	usecase *usecase.Usecase
+	usecase       *usecase.Usecase
+	secureCookies bool
 }
 
 // New creates an auth HTTP handler.
-func New(uc *usecase.Usecase) *Handler {
-	return &Handler{usecase: uc}
+func New(uc *usecase.Usecase, secureCookies bool) *Handler {
+	return &Handler{usecase: uc, secureCookies: secureCookies}
 }
 
 // Register mounts authentication routes on group.
 func Register(group *echo.Group, handler *Handler) {
 	group.POST("/auth/login", handler.Login)
 	group.POST("/auth/logout", handler.Logout)
+	group.POST("/auth/logout-others", handler.LogoutOthers)
 	group.POST("/auth/password", handler.ChangePassword)
 	group.POST("/auth/role", handler.SwitchRole)
 	group.GET("/auth/me", handler.Me)
@@ -50,26 +51,37 @@ func (h *Handler) Login(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := handlerSetLoginCookies(c, output, h.secureCookies); err != nil {
+		return err
+	}
 	return httpresp.OK(c, output)
 }
 
-// Logout revokes the current bearer token on the server.
+// Logout revokes the current login session on the server.
 func (h *Handler) Logout(c *echo.Context) error {
 	if err := h.ready(); err != nil {
 		return err
 	}
-	token, err := bearerToken(c)
-	if err != nil {
+	if err := h.usecase.Logout(c.Request().Context()); err != nil {
 		return err
 	}
-	if err := h.usecase.Logout(c.Request().Context(), token); err != nil {
+	clearLoginCookies(c, h.secureCookies)
+	return httpresp.OK(c, map[string]bool{"ok": true})
+}
+
+// LogoutOthers revokes the current administrator's other login sessions.
+func (h *Handler) LogoutOthers(c *echo.Context) error {
+	if err := h.ready(); err != nil {
+		return err
+	}
+	if err := h.usecase.LogoutOthers(c.Request().Context()); err != nil {
 		return err
 	}
 	return httpresp.OK(c, map[string]bool{"ok": true})
 }
 
-// ChangePassword updates the current administrator password and revokes the
-// bearer token used by the request.
+// ChangePassword updates the current administrator password and revokes other
+// login sessions for the same administrator.
 func (h *Handler) ChangePassword(c *echo.Context) error {
 	if err := h.ready(); err != nil {
 		return err
@@ -78,14 +90,9 @@ func (h *Handler) ChangePassword(c *echo.Context) error {
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	token, err := bearerToken(c)
-	if err != nil {
-		return err
-	}
 	if err := h.usecase.ChangePassword(c.Request().Context(), usecase.ChangePasswordInput{
 		CurrentPassword: req.CurrentPassword,
 		NewPassword:     req.NewPassword,
-		RawToken:        token,
 	}); err != nil {
 		return err
 	}
@@ -146,11 +153,20 @@ func (h *Handler) ready() error {
 	return nil
 }
 
-func bearerToken(c *echo.Context) (string, error) {
-	authHeader := strings.TrimSpace(c.Request().Header.Get(echo.HeaderAuthorization))
-	parts := strings.Fields(authHeader)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
-		return "", apperr.NewUnauthorized()
+func handlerSetLoginCookies(c *echo.Context, output usecase.LoginOutput, secure bool) error {
+	if output.SessionToken == "" || output.SessionExpiresAt.IsZero() {
+		return apperr.New(apperr.ErrInternalServer, "login session was not created")
 	}
-	return parts[1], nil
+	middlewares.SetLoginSessionCookie(c, output.SessionToken, output.SessionExpiresAt, secure)
+	csrfToken, err := middlewares.NewCSRFToken()
+	if err != nil {
+		return err
+	}
+	middlewares.SetCSRFCookie(c, csrfToken, output.SessionExpiresAt, secure)
+	return nil
+}
+
+func clearLoginCookies(c *echo.Context, secure bool) {
+	middlewares.ClearLoginSessionCookie(c, secure)
+	middlewares.ClearCSRFCookie(c, secure)
 }

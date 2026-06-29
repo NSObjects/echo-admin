@@ -68,6 +68,7 @@ var registeredAPISeedRoutes = []string{
 	"GET /api/capabilities",
 	"POST /api/auth/login",
 	"POST /api/auth/logout",
+	"POST /api/auth/logout-others",
 	"POST /api/auth/password",
 	"POST /api/auth/role",
 	"GET /api/auth/me",

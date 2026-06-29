@@ -27,7 +27,7 @@ type Server struct {
 	statusReporter StatusReporter
 	apiKeyVerifier middlewares.APIKeyVerifier
 	errorRecorder  middlewares.SystemErrorRecorder
-	jwtBlocklist   middlewares.JWTBlocklistChecker
+	sessionAuth    middlewares.LoginSessionAuthenticator
 }
 
 type healthResponse struct {
@@ -72,7 +72,8 @@ type Option func(*Server)
 // APIKeyIdentity is the server-owned identity shape returned by API key auth.
 type APIKeyIdentity = middlewares.APIKeyIdentity
 
-// APIKeyVerifier verifies API key credentials before JWT middleware runs.
+// APIKeyVerifier verifies API key credentials before browser session middleware
+// runs.
 type APIKeyVerifier = middlewares.APIKeyVerifier
 
 // SystemErrorRecorder stores internal API failure diagnostics.
@@ -81,8 +82,11 @@ type SystemErrorRecorder = middlewares.SystemErrorRecorder
 // SystemErrorInput is the server-owned diagnostic payload for internal errors.
 type SystemErrorInput = middlewares.SystemErrorInput
 
-// JWTBlocklistChecker reports whether a raw JWT has been revoked.
-type JWTBlocklistChecker = middlewares.JWTBlocklistChecker
+// LoginSessionAuthenticator verifies browser login session cookies.
+type LoginSessionAuthenticator = middlewares.LoginSessionAuthenticator
+
+// LoginSessionIdentity is the authenticated browser login session identity.
+type LoginSessionIdentity = middlewares.LoginSessionIdentity
 
 // WithStatusReporter installs the readiness and capability reporter.
 func WithStatusReporter(reporter StatusReporter) Option {
@@ -105,10 +109,10 @@ func WithSystemErrorRecorder(recorder SystemErrorRecorder) Option {
 	}
 }
 
-// WithJWTBlocklistChecker installs optional server-side JWT revocation checks.
-func WithJWTBlocklistChecker(checker JWTBlocklistChecker) Option {
+// WithLoginSessionAuthenticator installs browser login-session authentication.
+func WithLoginSessionAuthenticator(authenticator LoginSessionAuthenticator) Option {
 	return func(s *Server) {
-		s.jwtBlocklist = checker
+		s.sessionAuth = authenticator
 	}
 }
 
@@ -165,13 +169,10 @@ func (s *Server) installMiddleware() error {
 }
 
 func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
-	jwtConfig := middlewares.CreateJWTConfig(
-		s.appConfig.JWT.Secret,
-		s.appConfig.JWT.SkipPaths,
-		s.appConfig.JWT.Enabled,
-	)
-	jwtConfig.Blocklist = s.jwtBlocklist
 	httpConfig := s.appConfig.HTTP
+	sessionConfig := middlewares.DefaultLoginSessionConfig()
+	sessionConfig.Enabled = s.sessionAuth != nil
+	sessionConfig.Authenticator = s.sessionAuth
 
 	return &middlewares.MiddlewareConfig{
 		EnableRecovery:       !httpConfig.RecoveryDisabled,
@@ -188,8 +189,10 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 			Verifier: s.apiKeyVerifier,
 			Enabled:  s.apiKeyVerifier != nil,
 		},
-		EnableJWT: jwtConfig.Enabled,
-		JWT:       jwtConfig,
+		EnableLoginSession: sessionConfig.Enabled,
+		LoginSession:       sessionConfig,
+		EnableCSRF:         sessionConfig.Enabled,
+		CSRF:               middlewares.CSRFConfig(sessionConfig.SkipPaths, httpConfig.SecureCookies),
 	}
 }
 

@@ -39,9 +39,13 @@ type MiddlewareConfig struct {
 
 	APIKey *APIKeyConfig
 
-	EnableJWT bool
+	EnableLoginSession bool
 
-	JWT *JWTConfig
+	LoginSession *LoginSessionConfig
+
+	EnableCSRF bool
+
+	CSRF middleware.CSRFConfig
 }
 
 // DefaultMiddlewareConfig returns the HTTP middleware defaults.
@@ -54,8 +58,9 @@ func DefaultMiddlewareConfig() *MiddlewareConfig {
 		EnableCORS:           false,
 		EnableAPIKey:         false,
 		APIKey:               DefaultAPIKeyConfig(),
-		EnableJWT:            false,
-		JWT:                  DefaultJWTConfig(),
+		EnableLoginSession:   false,
+		LoginSession:         DefaultLoginSessionConfig(),
+		EnableCSRF:           false,
 	}
 }
 
@@ -93,7 +98,12 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 		return err
 	}
 
-	return installJWT(e, config)
+	if err := installLoginSession(e, config); err != nil {
+		return err
+	}
+
+	installCSRF(e, config)
+	return nil
 }
 
 func installCORS(e *echo.Echo, config *MiddlewareConfig) error {
@@ -120,16 +130,22 @@ func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
 	return nil
 }
 
-func installJWT(e *echo.Echo, config *MiddlewareConfig) error {
-	if !config.EnableJWT || config.JWT == nil {
+func installLoginSession(e *echo.Echo, config *MiddlewareConfig) error {
+	if !config.EnableLoginSession || config.LoginSession == nil {
 		return nil
 	}
-	jwtMiddleware, err := JWT(config.JWT)
+	sessionMiddleware, err := LoginSession(config.LoginSession)
 	if err != nil {
 		return err
 	}
-	e.Use(jwtMiddleware)
+	e.Use(sessionMiddleware)
 	return nil
+}
+
+func installCSRF(e *echo.Echo, config *MiddlewareConfig) {
+	if config.EnableCSRF {
+		e.Use(middleware.CSRFWithConfig(config.CSRF))
+	}
 }
 
 func requestLogger() echo.MiddlewareFunc {
@@ -245,6 +261,7 @@ func normalizedCORSConfig(config middleware.CORSConfig) (middleware.CORSConfig, 
 			echo.HeaderContentType,
 			echo.HeaderAccept,
 			echo.HeaderAuthorization,
+			echo.HeaderXCSRFToken,
 			APIKeyHeader,
 		}
 	}

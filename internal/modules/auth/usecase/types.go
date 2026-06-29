@@ -6,6 +6,7 @@ import (
 	"time"
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
+	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 )
 
@@ -36,11 +37,16 @@ type LoginRecorder interface {
 	RecordLogin(context.Context, LoginRecord) error
 }
 
-// JWTBlacklistStore stores revoked JWT identifiers without persisting the raw
-// bearer token. Logout and middleware lookup share the same hash contract.
-type JWTBlacklistStore interface {
-	AddJWTBlacklist(context.Context, JWTBlacklistEntry) error
-	JWTBlacklisted(context.Context, string, time.Time) (bool, error)
+// LoginSessionStore persists browser login sessions without storing the raw
+// cookie credential.
+type LoginSessionStore interface {
+	CreateLoginSession(context.Context, authdomain.LoginSession) (authdomain.LoginSession, error)
+	FindLoginSessionByTokenHash(context.Context, string) (authdomain.LoginSession, bool, error)
+	RefreshLoginSession(context.Context, authdomain.LoginSession) error
+	UpdateLoginSessionRole(context.Context, int64, int64, time.Time) error
+	RevokeLoginSession(context.Context, int64, string, time.Time) error
+	RevokeOtherLoginSessions(context.Context, int64, int64, string, time.Time) error
+	RevokeLoginSessions(context.Context, int64, string, time.Time) error
 }
 
 // LoginAttemptLimiter blocks repeated failed sign-in attempts across app
@@ -59,9 +65,8 @@ type Usecase struct {
 	menus        MenuReader
 	apis         APIReader
 	logins       LoginRecorder
-	jwtBlacklist JWTBlacklistStore
+	sessions     LoginSessionStore
 	loginLimiter LoginAttemptLimiter
-	jwtSecret    []byte
 	now          func() time.Time
 }
 
@@ -77,18 +82,17 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
-// New creates an auth usecase with its required readers, JWT revocation store,
-// and JWT secret.
-func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader, jwtBlacklist JWTBlacklistStore, loginLimiter LoginAttemptLimiter, logins LoginRecorder, jwtSecret string, opts ...Option) *Usecase {
+// New creates an auth usecase with its required readers and login-session
+// store.
+func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader, sessions LoginSessionStore, loginLimiter LoginAttemptLimiter, logins LoginRecorder, opts ...Option) *Usecase {
 	u := &Usecase{
 		admins:       admins,
 		roles:        roles,
 		menus:        menus,
 		apis:         apis,
 		logins:       logins,
-		jwtBlacklist: jwtBlacklist,
+		sessions:     sessions,
 		loginLimiter: loginLimiter,
-		jwtSecret:    []byte(jwtSecret),
 		now:          func() time.Time { return time.Now().UTC() },
 	}
 	for _, opt := range opts {
@@ -109,8 +113,9 @@ type LoginInput struct {
 
 // LoginOutput is returned after successful authentication.
 type LoginOutput struct {
-	Token string      `json:"token"`
-	User  CurrentUser `json:"user"`
+	SessionToken     string      `json:"-"`
+	SessionExpiresAt time.Time   `json:"-"`
+	User             CurrentUser `json:"user"`
 }
 
 // RoleSwitchInput carries the requested active role.
@@ -122,7 +127,6 @@ type RoleSwitchInput struct {
 type ChangePasswordInput struct {
 	CurrentPassword string
 	NewPassword     string
-	RawToken        string
 }
 
 // UpdateProfileInput carries current-user profile fields.
@@ -133,8 +137,7 @@ type UpdateProfileInput struct {
 
 // RoleSwitchOutput is returned after the active role changes.
 type RoleSwitchOutput struct {
-	Token string      `json:"token"`
-	User  CurrentUser `json:"user"`
+	User CurrentUser `json:"user"`
 }
 
 // LoginRecord carries a safe sign-in audit event.
@@ -147,10 +150,12 @@ type LoginRecord struct {
 	Reason    string
 }
 
-// JWTBlacklistEntry is the persistence contract for one revoked bearer token.
-type JWTBlacklistEntry struct {
-	TokenHash string
-	ExpiresAt time.Time
+// LoginSessionIdentity is the authenticated browser login identity stored on
+// request context by HTTP middleware.
+type LoginSessionIdentity struct {
+	SessionID int64
+	AdminID   int64
+	RoleID    int64
 }
 
 // Admin is the current-user administrator DTO.

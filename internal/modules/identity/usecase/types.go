@@ -30,15 +30,22 @@ type RoleScope interface {
 	EnsureAssignableRoles(context.Context, []int64) error
 }
 
+// LoginSessionRevoker revokes browser login sessions after identity security
+// events without exposing auth storage to the identity module.
+type LoginSessionRevoker interface {
+	RevokeLoginSessions(context.Context, int64) error
+}
+
 // Usecase coordinates administrator management rules.
 type Usecase struct {
-	store Store
-	roles RoleScope
+	store    Store
+	roles    RoleScope
+	sessions LoginSessionRevoker
 }
 
 // New creates an identity usecase.
-func New(store Store, roles RoleScope) *Usecase {
-	return &Usecase{store: store, roles: roles}
+func New(store Store, roles RoleScope, sessions LoginSessionRevoker) *Usecase {
+	return &Usecase{store: store, roles: roles, sessions: sessions}
 }
 
 // AdminInput carries mutable administrator fields.

@@ -2,9 +2,8 @@ import { message } from 'antd';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorConfig } from './requestErrorConfig';
 
-const { mockClearAuthToken, mockGetAuthToken, mockReplace } = vi.hoisted(() => ({
-  mockClearAuthToken: vi.fn(),
-  mockGetAuthToken: vi.fn(),
+const { mockGetCSRFToken, mockReplace } = vi.hoisted(() => ({
+  mockGetCSRFToken: vi.fn(),
   mockReplace: vi.fn(),
 }));
 
@@ -25,9 +24,8 @@ vi.mock('@umijs/max', () => ({
   },
 }));
 
-vi.mock('@/services/auth-token', () => ({
-  clearAuthToken: mockClearAuthToken,
-  getAuthToken: mockGetAuthToken,
+vi.mock('@/services/csrf-token', () => ({
+  getCSRFToken: mockGetCSRFToken,
 }));
 
 type TestError = Error & {
@@ -39,12 +37,13 @@ describe('requestErrorConfig', () => {
   const errorThrower = errorConfig.errorConfig?.errorThrower;
   const errorHandler = errorConfig.errorConfig?.errorHandler;
   const interceptor = errorConfig.requestInterceptors?.[0] as (config: {
+    method?: string;
     headers?: Record<string, string>;
-  }) => { headers?: Record<string, string> };
+  }) => { headers?: Record<string, string>; withCredentials?: boolean };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetAuthToken.mockReturnValue('');
+    mockGetCSRFToken.mockReturnValue('');
   });
 
   it('throws BizError for non-success API envelopes', () => {
@@ -59,13 +58,12 @@ describe('requestErrorConfig', () => {
     ).not.toThrow();
   });
 
-  it('redirects and clears token on unauthorized responses', () => {
+  it('redirects on unauthorized responses', () => {
     const error: TestError = new Error('unauthorized');
     error.response = { status: 401 };
 
     errorHandler?.(error, {});
 
-    expect(mockClearAuthToken).toHaveBeenCalled();
     expect(mockReplace).toHaveBeenCalledWith(
       `/user/login?redirect=${encodeURIComponent('/admins?page=1#top')}`,
     );
@@ -89,20 +87,27 @@ describe('requestErrorConfig', () => {
     );
   });
 
-  it('adds bearer token when a token exists', () => {
-    mockGetAuthToken.mockReturnValue('token-1');
+  it('includes credentials and csrf header for unsafe requests', () => {
+    mockGetCSRFToken.mockReturnValue('csrf-1');
 
-    const result = interceptor({ headers: { Accept: 'application/json' } });
+    const result = interceptor({
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
 
+    expect(result.withCredentials).toBe(true);
     expect(result.headers).toEqual({
       Accept: 'application/json',
-      Authorization: 'Bearer token-1',
+      'X-CSRF-Token': 'csrf-1',
     });
   });
 
-  it('keeps request config unchanged without a token', () => {
+  it('includes credentials without csrf header for safe requests', () => {
     const config = { headers: { Accept: 'application/json' } };
+    const result = interceptor(config);
 
-    expect(interceptor(config)).toBe(config);
+    expect(result).not.toBe(config);
+    expect(result.withCredentials).toBe(true);
+    expect(result.headers).toEqual({ Accept: 'application/json' });
   });
 });

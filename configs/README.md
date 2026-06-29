@@ -6,7 +6,7 @@
 cfg, err := configs.Load("configs/config.toml")
 ```
 
-配置文件支持 TOML、YAML、JSON，格式由文件后缀识别。无后缀时按 TOML 解析，未知后缀会在启动时失败。未知配置字段也会在启动时失败。环境变量可以覆盖同名配置项。
+配置文件支持 TOML、YAML、JSON，格式由文件后缀识别。无后缀时按 TOML 解析，未知后缀会在启动时失败。未知配置字段也会在启动时失败。环境变量只覆盖显式绑定的运行时项和 secret。
 
 ## 当前配置项
 
@@ -29,6 +29,7 @@ recovery_disabled = false
 request_context_disabled = false
 request_log_disabled = false
 gzip_disabled = false
+secure_cookies = false
 
 [http.cors]
 enabled = false
@@ -39,18 +40,21 @@ allow_credentials = false
 expose_headers = []
 max_age_seconds = 0
 
-[jwt]
-enabled = true
-secret = ""
-skip_paths = ["/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"]
-
 [admin]
 upload_dir = "uploads"
-bootstrap_password = ""
+bootstrap_password = "123456"
 
 [mysql]
 enabled = true
-dsn = "echo_admin:echo_admin_dev_password@tcp(127.0.0.1:3306)/echo_admin?charset=utf8mb4&parseTime=true&loc=Local"
+host = "127.0.0.1"
+port = 3306
+database = "echo_admin"
+username = "echo_admin"
+password = ""
+max_open_conns = 25
+max_idle_conns = 5
+conn_max_lifetime_seconds = 300
+ping_timeout_seconds = 3
 
 [redis]
 enabled = false
@@ -68,11 +72,13 @@ protocol = "grpc" # grpc, http
 insecure = true
 ```
 
-HTTP middleware、MySQL、Redis、MongoDB、JWT、Jaeger tracing、admin upload directory 和首次启动管理员密码都是 configured resources。后台基础能力运行期依赖 MySQL；启用 Redis、MongoDB、tracing 等可选外部依赖后也必须提供连接配置，并会进入 `/api/ready` 和 `/api/capabilities`。
+HTTP middleware、MySQL、Redis、MongoDB、Jaeger tracing、admin upload directory 和首次启动管理员密码都是 configured resources。后台基础能力运行期依赖 MySQL；启用 Redis、MongoDB、tracing 等可选外部依赖后也必须提供连接配置，并会进入 `/api/ready` 和 `/api/capabilities`。
 
 业务代码放在 `internal/modules/<module>`，平台运行时代码放在 `internal/platform`。业务 adapter 复用 boot 已经加载的资源：usecase 定义 usecase-owned outbound interface，adapter 使用配置好的 MySQL/Redis/MongoDB client 实现它，然后业务 module 用 `boot.NewModule`、`boot.Provide` 和 `boot.Route` 声明 adapter、usecase、handler 和 route。
 
 ## 环境变量覆盖
+
+配置文件是主配置入口。数据库 host、port、database、username、连接池等非敏感拓扑配置应写在配置文件中；密码和首次启动管理员密码可以用环境变量覆盖，便于接入 Docker Compose、Kubernetes Secret 或 CI/CD secret。
 
 ```bash
 export ECHO_ADMIN_APP_NAME=echo-admin
@@ -86,6 +92,7 @@ export ECHO_ADMIN_HTTP_RECOVERY_DISABLED=false
 export ECHO_ADMIN_HTTP_REQUEST_CONTEXT_DISABLED=false
 export ECHO_ADMIN_HTTP_REQUEST_LOG_DISABLED=false
 export ECHO_ADMIN_HTTP_GZIP_DISABLED=false
+export ECHO_ADMIN_HTTP_SECURE_COOKIES=false
 export ECHO_ADMIN_HTTP_CORS_ENABLED=false
 export ECHO_ADMIN_HTTP_CORS_ALLOW_ORIGINS=
 export ECHO_ADMIN_HTTP_CORS_ALLOW_METHODS=
@@ -93,12 +100,9 @@ export ECHO_ADMIN_HTTP_CORS_ALLOW_HEADERS=
 export ECHO_ADMIN_HTTP_CORS_ALLOW_CREDENTIALS=false
 export ECHO_ADMIN_HTTP_CORS_EXPOSE_HEADERS=
 export ECHO_ADMIN_HTTP_CORS_MAX_AGE_SECONDS=0
-export ECHO_ADMIN_JWT_ENABLED=true
-export ECHO_ADMIN_JWT_SECRET="$(openssl rand -base64 32)"
 export ECHO_ADMIN_ADMIN_UPLOAD_DIR=uploads
 export ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD=replace-with-a-private-password
-export ECHO_ADMIN_MYSQL_ENABLED=true
-export ECHO_ADMIN_MYSQL_DSN='echo_admin:echo_admin_dev_password@tcp(127.0.0.1:3306)/echo_admin?charset=utf8mb4&parseTime=true&loc=Local'
+export ECHO_ADMIN_MYSQL_PASSWORD=replace-with-a-private-database-password
 export ECHO_ADMIN_REDIS_ENABLED=false
 export ECHO_ADMIN_REDIS_ADDRESS=
 export ECHO_ADMIN_MONGODB_ENABLED=false
@@ -109,9 +113,9 @@ export ECHO_ADMIN_TRACING_PROTOCOL=grpc
 export ECHO_ADMIN_TRACING_INSECURE=true
 ```
 
-JWT 默认启用，但仓库配置不会提供可启动的默认签名密钥。必须通过 `ECHO_ADMIN_JWT_SECRET` 或 Secret 管理系统提供至少 32 个字符的真实 secret，不要把真实 secret 写入 ConfigMap。空库首次启动还必须设置 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`；它只在 `admin` 用户不存在时使用，不会覆盖后续修改过的密码。
+浏览器后台登录使用服务端 Login Session 和 HttpOnly cookie，不需要 JWT secret。生产 HTTPS 部署应设置 `ECHO_ADMIN_HTTP_SECURE_COOKIES=true`，让 Login Session cookie 和 CSRF cookie 都带 `Secure` 属性。空库首次启动必须配置 `admin.bootstrap_password`，也可以用 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD` 覆盖；它只在 `admin` 用户不存在时使用，不会覆盖后续修改过的密码。
 
-`app.name` 和 `app.version` 会出现在 `/api/info` 响应中。`system.level` 只接受 `1` 或 `2`。`log.format` 只接受 `console` 或 `json`；`log.output` 只接受 `stdout` 或 `stderr`。`http.*_disabled` 可关闭默认安装的 HTTP middleware。
+`app.name` 和 `app.version` 会出现在 `/api/info` 响应中。`system.level` 只接受 `1` 或 `2`。`log.format` 只接受 `console` 或 `json`；`log.output` 只接受 `stdout` 或 `stderr`。`http.*_disabled` 可关闭默认安装的 HTTP middleware，`http.secure_cookies` 控制浏览器登录会话相关 cookie 是否只允许 HTTPS 传输。
 
 `http.cors.enabled=true` 时必须配置 `http.cors.allow_origins`。`http.cors.allow_credentials=true` 时 `allow_origins` 不能包含 `*`。环境变量中的列表项使用逗号分隔，例如 `ECHO_ADMIN_HTTP_CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com`。
 

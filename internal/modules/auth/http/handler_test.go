@@ -6,14 +6,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
+	echomiddleware "github.com/labstack/echo/v5/middleware"
 	"golang.org/x/crypto/bcrypt"
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
+	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
@@ -22,16 +25,19 @@ import (
 
 func TestAuthFlowReturnsCurrentUser(t *testing.T) {
 	e := newTestEcho(t)
-	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	client := newSessionClient(e)
+
+	login := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`)
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
 	}
 	loginBody := decodeLoginResponse(t, login)
-	if loginBody.Data.Token == "" {
-		t.Fatal("login token is empty, want bearer token")
+	if loginBody.Data.User.Username != "admin" {
+		t.Fatalf("login username = %q, want admin", loginBody.Data.User.Username)
 	}
+	assertLoginCookies(t, client)
 
-	me := doJSON(t, e, http.MethodGet, "/api/auth/me", "", loginBody.Data.Token)
+	me := client.doJSON(t, http.MethodGet, "/api/auth/me", "")
 	if me.Code != http.StatusOK {
 		t.Fatalf("me status = %d, want %d: %s", me.Code, http.StatusOK, me.Body.String())
 	}
@@ -44,45 +50,68 @@ func TestAuthFlowReturnsCurrentUser(t *testing.T) {
 	}
 }
 
-func TestLogoutBlacklistsCurrentToken(t *testing.T) {
+func TestLogoutRevokesCurrentLoginSession(t *testing.T) {
 	e := newTestEcho(t)
-	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	client := newSessionClient(e)
+	login := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`)
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
 	}
-	token := decodeLoginResponse(t, login).Data.Token
 
-	logout := doJSON(t, e, http.MethodPost, "/api/auth/logout", "", token)
+	logout := client.doJSON(t, http.MethodPost, "/api/auth/logout", "")
 	if logout.Code != http.StatusOK {
 		t.Fatalf("logout status = %d, want %d: %s", logout.Code, http.StatusOK, logout.Body.String())
 	}
-	me := doJSON(t, e, http.MethodGet, "/api/auth/me", "", token)
+	me := client.doJSON(t, http.MethodGet, "/api/auth/me", "")
 	if me.Code != http.StatusUnauthorized {
 		t.Fatalf("me status after logout = %d, want %d: %s", me.Code, http.StatusUnauthorized, me.Body.String())
 	}
 }
 
-func TestChangePasswordRevokesCurrentToken(t *testing.T) {
+func TestLogoutOthersRevokesOtherLoginSessions(t *testing.T) {
 	e := newTestEcho(t)
-	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	current := newSessionClient(e)
+	other := newSessionClient(e)
+	if login := current.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`); login.Code != http.StatusOK {
+		t.Fatalf("current login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
+	}
+	if login := other.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`); login.Code != http.StatusOK {
+		t.Fatalf("other login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
+	}
+
+	logout := current.doJSON(t, http.MethodPost, "/api/auth/logout-others", "")
+	if logout.Code != http.StatusOK {
+		t.Fatalf("logout others status = %d, want %d: %s", logout.Code, http.StatusOK, logout.Body.String())
+	}
+	if me := current.doJSON(t, http.MethodGet, "/api/auth/me", ""); me.Code != http.StatusOK {
+		t.Fatalf("current me status = %d, want %d: %s", me.Code, http.StatusOK, me.Body.String())
+	}
+	if me := other.doJSON(t, http.MethodGet, "/api/auth/me", ""); me.Code != http.StatusUnauthorized {
+		t.Fatalf("other me status = %d, want %d: %s", me.Code, http.StatusUnauthorized, me.Body.String())
+	}
+}
+
+func TestChangePasswordKeepsCurrentSession(t *testing.T) {
+	e := newTestEcho(t)
+	client := newSessionClient(e)
+	login := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`)
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
 	}
-	token := decodeLoginResponse(t, login).Data.Token
 
-	change := doJSON(t, e, http.MethodPost, "/api/auth/password", `{"current_password":"123456","new_password":"changed123"}`, token)
+	change := client.doJSON(t, http.MethodPost, "/api/auth/password", `{"current_password":"123456","new_password":"changed123"}`)
 	if change.Code != http.StatusOK {
 		t.Fatalf("change password status = %d, want %d: %s", change.Code, http.StatusOK, change.Body.String())
 	}
-	me := doJSON(t, e, http.MethodGet, "/api/auth/me", "", token)
-	if me.Code != http.StatusUnauthorized {
-		t.Fatalf("me status after password change = %d, want %d: %s", me.Code, http.StatusUnauthorized, me.Body.String())
+	me := client.doJSON(t, http.MethodGet, "/api/auth/me", "")
+	if me.Code != http.StatusOK {
+		t.Fatalf("me status after password change = %d, want %d: %s", me.Code, http.StatusOK, me.Body.String())
 	}
-	oldLogin := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	oldLogin := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`)
 	if oldLogin.Code != http.StatusUnauthorized {
 		t.Fatalf("old login status = %d, want %d: %s", oldLogin.Code, http.StatusUnauthorized, oldLogin.Body.String())
 	}
-	newLogin := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"changed123"}`, "")
+	newLogin := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"changed123"}`)
 	if newLogin.Code != http.StatusOK {
 		t.Fatalf("new login status = %d, want %d: %s", newLogin.Code, http.StatusOK, newLogin.Body.String())
 	}
@@ -90,13 +119,13 @@ func TestChangePasswordRevokesCurrentToken(t *testing.T) {
 
 func TestUpdateProfileReturnsCurrentUser(t *testing.T) {
 	e := newTestEcho(t)
-	login := doJSON(t, e, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`, "")
+	client := newSessionClient(e)
+	login := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`)
 	if login.Code != http.StatusOK {
 		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
 	}
-	token := decodeLoginResponse(t, login).Data.Token
 
-	update := doJSON(t, e, http.MethodPatch, "/api/auth/me", `{"display_name":"平台管理员","email":"ops@example.com"}`, token)
+	update := client.doJSON(t, http.MethodPatch, "/api/auth/me", `{"display_name":"平台管理员","email":"ops@example.com"}`)
 	if update.Code != http.StatusOK {
 		t.Fatalf("update profile status = %d, want %d: %s", update.Code, http.StatusOK, update.Body.String())
 	}
@@ -112,23 +141,24 @@ func TestUpdateProfileReturnsCurrentUser(t *testing.T) {
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
 	store := newAuthStore(t)
-	uc := authusecase.New(store, store, store, store, store, store, &loginRecorder{}, "test-secret")
-	handler := authhttp.New(uc)
+	uc := authusecase.New(store, store, store, store, store, store, &loginRecorder{})
+	handler := authhttp.New(uc, false)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	e.Use(middlewares.RequestContext())
-	jwtMiddleware, err := middlewares.JWT(&middlewares.JWTConfig{
-		Enabled:    true,
-		SigningKey: []byte("test-secret"),
-		SkipPaths:  []string{"/api/auth/login"},
-		Blocklist:  uc,
+	sessionMiddleware, err := middlewares.LoginSession(&middlewares.LoginSessionConfig{
+		Enabled:       true,
+		CookieName:    middlewares.LoginSessionCookieName,
+		SkipPaths:     []string{"/api/auth/login"},
+		Authenticator: sessionAuthenticator{auth: uc},
 	})
 	if err != nil {
-		t.Fatalf("JWT() error = %v", err)
+		t.Fatalf("LoginSession() error = %v", err)
 	}
-	e.Use(jwtMiddleware)
+	e.Use(sessionMiddleware)
+	e.Use(echomiddleware.CSRFWithConfig(middlewares.CSRFConfig([]string{"/api/auth/login"}, false)))
 	authhttp.Register(e.Group("/api"), handler)
 	return e
 }
@@ -153,30 +183,22 @@ func newAuthStore(t *testing.T) *authStore {
 		t.Fatalf("RestoreMenu() error = %v", err)
 	}
 	return &authStore{
-		admin:       admin,
-		role:        role,
-		menu:        menu,
-		blacklisted: map[string]time.Time{},
+		admin:         admin,
+		role:          role,
+		menu:          menu,
+		nextSessionID: 1,
+		sessions:      map[int64]authdomain.LoginSession{},
+		sessionByHash: map[string]int64{},
 	}
-}
-
-func doJSON(t *testing.T, e *echo.Echo, method, path, body, token string) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	if token != "" {
-		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
-	}
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-	return rec
 }
 
 type authStore struct {
-	admin       identitydomain.Admin
-	role        accessdomain.Role
-	menu        accessdomain.Menu
-	blacklisted map[string]time.Time
+	admin         identitydomain.Admin
+	role          accessdomain.Role
+	menu          accessdomain.Menu
+	nextSessionID int64
+	sessions      map[int64]authdomain.LoginSession
+	sessionByHash map[string]int64
 }
 
 func (s *authStore) FindByUsername(context.Context, string) (identitydomain.Admin, error) {
@@ -204,14 +226,68 @@ func (s *authStore) ListAPIs(context.Context) ([]accessdomain.API, error) {
 	return nil, nil
 }
 
-func (s *authStore) AddJWTBlacklist(_ context.Context, entry authusecase.JWTBlacklistEntry) error {
-	s.blacklisted[entry.TokenHash] = entry.ExpiresAt
+func (s *authStore) CreateLoginSession(_ context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {
+	session.ID = s.nextSessionID
+	s.nextSessionID++
+	s.sessions[session.ID] = session
+	s.sessionByHash[session.TokenHash] = session.ID
+	return session, nil
+}
+
+func (s *authStore) FindLoginSessionByTokenHash(_ context.Context, tokenHash string) (authdomain.LoginSession, bool, error) {
+	id, ok := s.sessionByHash[tokenHash]
+	if !ok {
+		return authdomain.LoginSession{}, false, nil
+	}
+	return s.sessions[id], true, nil
+}
+
+func (s *authStore) RefreshLoginSession(_ context.Context, session authdomain.LoginSession) error {
+	s.sessions[session.ID] = session
 	return nil
 }
 
-func (s *authStore) JWTBlacklisted(_ context.Context, tokenHash string, now time.Time) (bool, error) {
-	expiresAt, ok := s.blacklisted[tokenHash]
-	return ok && now.Before(expiresAt), nil
+func (s *authStore) UpdateLoginSessionRole(_ context.Context, sessionID, roleID int64, now time.Time) error {
+	session := s.sessions[sessionID]
+	session.ActiveRoleID = roleID
+	session.UpdatedAt = now
+	s.sessions[sessionID] = session
+	return nil
+}
+
+func (s *authStore) RevokeLoginSession(_ context.Context, sessionID int64, reason string, now time.Time) error {
+	session := s.sessions[sessionID]
+	session.RevokedAt = &now
+	session.RevokedReason = reason
+	session.UpdatedAt = now
+	s.sessions[sessionID] = session
+	return nil
+}
+
+func (s *authStore) RevokeOtherLoginSessions(_ context.Context, adminID, keepSessionID int64, reason string, now time.Time) error {
+	for id, session := range s.sessions {
+		if session.AdminID != adminID || id == keepSessionID || session.RevokedAt != nil {
+			continue
+		}
+		session.RevokedAt = &now
+		session.RevokedReason = reason
+		session.UpdatedAt = now
+		s.sessions[id] = session
+	}
+	return nil
+}
+
+func (s *authStore) RevokeLoginSessions(_ context.Context, adminID int64, reason string, now time.Time) error {
+	for id, session := range s.sessions {
+		if session.AdminID != adminID || session.RevokedAt != nil {
+			continue
+		}
+		session.RevokedAt = &now
+		session.RevokedReason = reason
+		session.UpdatedAt = now
+		s.sessions[id] = session
+	}
+	return nil
 }
 
 func (s *authStore) CheckLoginAttempt(context.Context, string, time.Time) error {
@@ -232,9 +308,90 @@ func (r *loginRecorder) RecordLogin(context.Context, authusecase.LoginRecord) er
 	return nil
 }
 
+type sessionAuthenticator struct {
+	auth *authusecase.Usecase
+}
+
+func (a sessionAuthenticator) AuthenticateLoginSession(ctx context.Context, token string) (middlewares.LoginSessionIdentity, error) {
+	identity, err := a.auth.AuthenticateLoginSession(ctx, token)
+	if err != nil {
+		return middlewares.LoginSessionIdentity{}, err
+	}
+	return middlewares.LoginSessionIdentity{
+		SessionID: strconv.FormatInt(identity.SessionID, 10),
+		UserID:    strconv.FormatInt(identity.AdminID, 10),
+		RoleID:    strconv.FormatInt(identity.RoleID, 10),
+	}, nil
+}
+
+type sessionClient struct {
+	echo    *echo.Echo
+	cookies map[string]*http.Cookie
+}
+
+func newSessionClient(e *echo.Echo) *sessionClient {
+	return &sessionClient{echo: e, cookies: map[string]*http.Cookie{}}
+}
+
+func (c *sessionClient) doJSON(t *testing.T, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	for _, cookie := range c.cookies {
+		if cookie.MaxAge < 0 {
+			continue
+		}
+		req.AddCookie(cookie)
+	}
+	if csrf, ok := c.cookies[middlewares.CSRFCookieName]; ok && unsafeMethod(method) {
+		req.Header.Set(echo.HeaderXCSRFToken, csrf.Value)
+	}
+	rec := httptest.NewRecorder()
+	c.echo.ServeHTTP(rec, req)
+	response := rec.Result()
+	defer response.Body.Close()
+	for _, cookie := range response.Cookies() {
+		if cookie.MaxAge < 0 {
+			delete(c.cookies, cookie.Name)
+			continue
+		}
+		c.cookies[cookie.Name] = cookie
+	}
+	return rec
+}
+
+func unsafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+		return false
+	default:
+		return true
+	}
+}
+
+func assertLoginCookies(t *testing.T, client *sessionClient) {
+	t.Helper()
+	sessionCookie, ok := client.cookies[middlewares.LoginSessionCookieName]
+	if !ok {
+		t.Fatalf("%s cookie missing", middlewares.LoginSessionCookieName)
+	}
+	if !sessionCookie.HttpOnly {
+		t.Fatalf("%s HttpOnly = false, want true", middlewares.LoginSessionCookieName)
+	}
+	csrfCookie, ok := client.cookies[middlewares.CSRFCookieName]
+	if !ok {
+		t.Fatalf("%s cookie missing", middlewares.CSRFCookieName)
+	}
+	if csrfCookie.HttpOnly {
+		t.Fatalf("%s HttpOnly = true, want false", middlewares.CSRFCookieName)
+	}
+}
+
 type loginResponse struct {
 	Data struct {
-		Token string `json:"token"`
+		User struct {
+			Username string `json:"username"`
+		} `json:"user"`
 	} `json:"data"`
 }
 

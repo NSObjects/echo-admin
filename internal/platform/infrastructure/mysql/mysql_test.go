@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
@@ -57,6 +58,39 @@ func TestOpenDisabledMySQLDoesNotConnect(t *testing.T) {
 	status := resource.Check(context.Background())
 	if status.State != resources.StateDisabled {
 		t.Fatalf("State = %q, want %q", status.State, resources.StateDisabled)
+	}
+}
+
+func TestBuildDSNUsesStructuredMySQLConfig(t *testing.T) {
+	dsn := buildDSN(configs.MySQLConfig{
+		Host:     "mysql",
+		Port:     configs.DefaultMySQLPort,
+		Database: "echo_admin",
+		Username: "echo_admin",
+		Password: "secret-password",
+	})
+
+	parsed, err := drivermysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("ParseDSN() error = %v", err)
+	}
+	if parsed.User != "echo_admin" {
+		t.Fatalf("User = %q, want echo_admin", parsed.User)
+	}
+	if parsed.Passwd != "secret-password" {
+		t.Fatalf("Passwd = %q, want secret-password", parsed.Passwd)
+	}
+	if parsed.Addr != "mysql:3306" {
+		t.Fatalf("Addr = %q, want mysql:3306", parsed.Addr)
+	}
+	if parsed.DBName != "echo_admin" {
+		t.Fatalf("DBName = %q, want echo_admin", parsed.DBName)
+	}
+	if !parsed.ParseTime {
+		t.Fatal("ParseTime = false, want true")
+	}
+	if parsed.Params["charset"] != "utf8mb4" {
+		t.Fatalf("charset = %q, want utf8mb4", parsed.Params["charset"])
 	}
 }
 

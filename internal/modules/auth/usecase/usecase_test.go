@@ -2,19 +2,21 @@ package usecase_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
+	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
-func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
+func TestLoginCreatesSessionAndReturnsCurrentUserGrants(t *testing.T) {
 	uc, recorder, store := newUsecaseWithStore(t)
 	output, err := uc.Login(context.Background(), authusecase.LoginInput{
 		Username: "admin",
@@ -35,11 +37,17 @@ func TestLoginReturnsTokenAndCurrentUserGrants(t *testing.T) {
 
 func assertSuccessfulLogin(t *testing.T, output authusecase.LoginOutput, recorder *loginRecorder, store *authStore) {
 	t.Helper()
-	if output.Token == "" {
-		t.Fatal("Login() token is empty, want signed token")
+	if output.SessionToken == "" {
+		t.Fatal("Login() session token is empty, want opaque credential")
+	}
+	if output.SessionExpiresAt.IsZero() {
+		t.Fatal("Login() session expiry is zero")
 	}
 	if output.User.ActiveRoleID != 1 {
 		t.Fatalf("Login().User.ActiveRoleID = %d, want 1", output.User.ActiveRoleID)
+	}
+	if len(store.sessions) != 1 {
+		t.Fatalf("created sessions = %d, want 1", len(store.sessions))
 	}
 	if len(recorder.records) != 1 || !recorder.records[0].Success {
 		t.Fatalf("login records = %#v, want one success record", recorder.records)
@@ -148,18 +156,28 @@ func TestRequireRoutePermissionKeepsSuperAdminUnblocked(t *testing.T) {
 }
 
 func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
-	uc, _ := newUsecase(t)
-	ctx := requestctx.WithUserID(context.Background(), "1")
+	uc, _, store := newUsecaseWithStore(t)
+	login, err := uc.Login(context.Background(), authusecase.LoginInput{
+		Username: "admin",
+		Password: "123456",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), store.lastSessionID)
 
 	output, err := uc.SwitchRole(ctx, authusecase.RoleSwitchInput{RoleID: 2})
 	if err != nil {
 		t.Fatalf("SwitchRole() error = %v", err)
 	}
-	if output.Token == "" {
-		t.Fatal("SwitchRole() token is empty, want signed token")
+	if login.SessionToken == "" {
+		t.Fatal("Login() session token is empty")
 	}
 	if output.User.ActiveRoleID != 2 {
 		t.Fatalf("SwitchRole().User.ActiveRoleID = %d, want 2", output.User.ActiveRoleID)
+	}
+	if got := store.sessions[store.lastSessionID].ActiveRoleID; got != 2 {
+		t.Fatalf("session active role = %d, want 2", got)
 	}
 	if !contains(output.User.Permissions, accessdomain.PermissionRoleRead) {
 		t.Fatalf("permissions = %v, want %s", output.User.Permissions, accessdomain.PermissionRoleRead)
@@ -183,9 +201,9 @@ func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
 	}
 }
 
-func TestLogoutBlacklistsCurrentJWT(t *testing.T) {
-	uc, _ := newUsecase(t)
-	output, err := uc.Login(context.Background(), authusecase.LoginInput{
+func TestLogoutRevokesCurrentLoginSession(t *testing.T) {
+	uc, _, store := newUsecaseWithStore(t)
+	_, err := uc.Login(context.Background(), authusecase.LoginInput{
 		Username: "admin",
 		Password: "123456",
 	})
@@ -193,60 +211,52 @@ func TestLogoutBlacklistsCurrentJWT(t *testing.T) {
 		t.Fatalf("Login() error = %v", err)
 	}
 
-	ctx := requestctx.WithUserID(context.Background(), "1")
-	if logoutErr := uc.Logout(ctx, output.Token); logoutErr != nil {
+	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), store.lastSessionID)
+	if logoutErr := uc.Logout(ctx); logoutErr != nil {
 		t.Fatalf("Logout() error = %v", logoutErr)
 	}
-	blocked, err := uc.TokenBlocked(context.Background(), output.Token)
-	if err != nil {
-		t.Fatalf("TokenBlocked() error = %v", err)
-	}
-	if !blocked {
-		t.Fatal("TokenBlocked() = false, want true after logout")
+	if store.sessions[store.lastSessionID].RevokedAt == nil {
+		t.Fatal("session revoked_at is nil, want revoked after logout")
 	}
 }
 
-func TestLogoutRejectsInvalidJWTWithoutWritingBlacklist(t *testing.T) {
+func TestLogoutRejectsMissingLoginSessionContext(t *testing.T) {
 	uc, _ := newUsecase(t)
 
 	ctx := requestctx.WithUserID(context.Background(), "1")
-	if err := uc.Logout(ctx, "not-a-jwt"); err == nil {
-		t.Fatal("Logout(invalid token) error = nil, want unauthorized")
-	}
-	blocked, err := uc.TokenBlocked(context.Background(), "not-a-jwt")
-	if err != nil {
-		t.Fatalf("TokenBlocked() error = %v", err)
-	}
-	if blocked {
-		t.Fatal("TokenBlocked(invalid token) = true, want false")
+	if err := uc.Logout(ctx); err == nil {
+		t.Fatal("Logout(missing session) error = nil, want unauthorized")
 	}
 }
 
-func TestChangePasswordRotatesPasswordAndRevokesCurrentToken(t *testing.T) {
-	uc, _ := newUsecase(t)
-	login, err := uc.Login(context.Background(), authusecase.LoginInput{
+func TestChangePasswordRotatesPasswordAndRevokesOtherSessions(t *testing.T) {
+	uc, _, store := newUsecaseWithStore(t)
+	_, err := uc.Login(context.Background(), authusecase.LoginInput{
 		Username: "admin",
 		Password: "123456",
 	})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	ctx := requestctx.WithUserID(context.Background(), "1")
+	currentSessionID := store.lastSessionID
+	if _, err := uc.Login(context.Background(), authusecase.LoginInput{Username: "admin", Password: "123456"}); err != nil {
+		t.Fatalf("Login(second session) error = %v", err)
+	}
+	otherSessionID := store.lastSessionID
+	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), currentSessionID)
 
 	err = uc.ChangePassword(ctx, authusecase.ChangePasswordInput{
 		CurrentPassword: "123456",
 		NewPassword:     "changed123",
-		RawToken:        login.Token,
 	})
 	if err != nil {
 		t.Fatalf("ChangePassword() error = %v", err)
 	}
-	blocked, err := uc.TokenBlocked(context.Background(), login.Token)
-	if err != nil {
-		t.Fatalf("TokenBlocked() error = %v", err)
+	if store.sessions[currentSessionID].RevokedAt != nil {
+		t.Fatal("current session revoked, want it to remain active")
 	}
-	if !blocked {
-		t.Fatal("TokenBlocked(old token) = false, want true")
+	if store.sessions[otherSessionID].RevokedAt == nil {
+		t.Fatal("other session revoked_at is nil, want revoked")
 	}
 	if _, err := uc.Login(context.Background(), authusecase.LoginInput{Username: "admin", Password: "123456"}); err == nil {
 		t.Fatal("Login(old password) error = nil, want invalid credentials")
@@ -257,20 +267,19 @@ func TestChangePasswordRotatesPasswordAndRevokesCurrentToken(t *testing.T) {
 }
 
 func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
-	uc, _ := newUsecase(t)
-	login, err := uc.Login(context.Background(), authusecase.LoginInput{
+	uc, _, store := newUsecaseWithStore(t)
+	_, err := uc.Login(context.Background(), authusecase.LoginInput{
 		Username: "admin",
 		Password: "123456",
 	})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	ctx := requestctx.WithUserID(context.Background(), "1")
+	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), store.lastSessionID)
 
 	err = uc.ChangePassword(ctx, authusecase.ChangePasswordInput{
 		CurrentPassword: "wrong-password",
 		NewPassword:     "changed123",
-		RawToken:        login.Token,
 	})
 	if err == nil {
 		t.Fatal("ChangePassword(wrong current password) error = nil, want unauthorized")
@@ -300,14 +309,16 @@ func newUsecaseWithStore(t *testing.T) (*authusecase.Usecase, *loginRecorder, *a
 	menus := authMenus(t, now)
 	apis := authAPIs(t, now)
 	store := &authStore{
-		admin:       admin,
-		roles:       roles,
-		menus:       menus,
-		apis:        apis,
-		blacklisted: map[string]time.Time{},
+		admin:         admin,
+		roles:         roles,
+		menus:         menus,
+		apis:          apis,
+		nextSessionID: 1,
+		sessions:      map[int64]authdomain.LoginSession{},
+		sessionByHash: map[string]int64{},
 	}
 	recorder := &loginRecorder{}
-	uc := authusecase.New(store, store, store, store, store, store, recorder, "test-secret", authusecase.WithClock(func() time.Time {
+	uc := authusecase.New(store, store, store, store, store, store, recorder, authusecase.WithClock(func() time.Time {
 		return now
 	}))
 	return uc, recorder, store
@@ -384,7 +395,10 @@ type authStore struct {
 	roles               map[int64]accessdomain.Role
 	menus               []accessdomain.Menu
 	apis                []accessdomain.API
-	blacklisted         map[string]time.Time
+	nextSessionID       int64
+	lastSessionID       int64
+	sessions            map[int64]authdomain.LoginSession
+	sessionByHash       map[string]int64
 	loginBlocked        bool
 	findByUsernameCalls int
 	checkedLoginKeys    []string
@@ -422,14 +436,69 @@ func (s *authStore) ListAPIs(context.Context) ([]accessdomain.API, error) {
 	return s.apis, nil
 }
 
-func (s *authStore) AddJWTBlacklist(_ context.Context, entry authusecase.JWTBlacklistEntry) error {
-	s.blacklisted[entry.TokenHash] = entry.ExpiresAt
+func (s *authStore) CreateLoginSession(_ context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {
+	session.ID = s.nextSessionID
+	s.nextSessionID++
+	s.lastSessionID = session.ID
+	s.sessions[session.ID] = session
+	s.sessionByHash[session.TokenHash] = session.ID
+	return session, nil
+}
+
+func (s *authStore) FindLoginSessionByTokenHash(_ context.Context, tokenHash string) (authdomain.LoginSession, bool, error) {
+	id, ok := s.sessionByHash[tokenHash]
+	if !ok {
+		return authdomain.LoginSession{}, false, nil
+	}
+	return s.sessions[id], true, nil
+}
+
+func (s *authStore) RefreshLoginSession(_ context.Context, session authdomain.LoginSession) error {
+	s.sessions[session.ID] = session
 	return nil
 }
 
-func (s *authStore) JWTBlacklisted(_ context.Context, tokenHash string, now time.Time) (bool, error) {
-	expiresAt, ok := s.blacklisted[tokenHash]
-	return ok && now.Before(expiresAt), nil
+func (s *authStore) UpdateLoginSessionRole(_ context.Context, sessionID, roleID int64, now time.Time) error {
+	session := s.sessions[sessionID]
+	session.ActiveRoleID = roleID
+	session.UpdatedAt = now
+	s.sessions[sessionID] = session
+	return nil
+}
+
+func (s *authStore) RevokeLoginSession(_ context.Context, sessionID int64, reason string, now time.Time) error {
+	session := s.sessions[sessionID]
+	session.RevokedAt = &now
+	session.RevokedReason = reason
+	session.UpdatedAt = now
+	s.sessions[sessionID] = session
+	return nil
+}
+
+func (s *authStore) RevokeOtherLoginSessions(_ context.Context, adminID, keepSessionID int64, reason string, now time.Time) error {
+	for id, session := range s.sessions {
+		if session.AdminID != adminID || id == keepSessionID || session.RevokedAt != nil {
+			continue
+		}
+		session.RevokedAt = &now
+		session.RevokedReason = reason
+		session.UpdatedAt = now
+		s.sessions[id] = session
+	}
+	return nil
+}
+
+func (s *authStore) RevokeLoginSessions(_ context.Context, adminID int64, reason string, now time.Time) error {
+	for id, session := range s.sessions {
+		if session.AdminID != adminID || session.RevokedAt != nil {
+			continue
+		}
+		session.RevokedAt = &now
+		session.RevokedReason = reason
+		session.UpdatedAt = now
+		s.sessions[id] = session
+	}
+	return nil
 }
 
 func (s *authStore) CheckLoginAttempt(_ context.Context, key string, _ time.Time) error {
@@ -457,6 +526,10 @@ type loginRecorder struct {
 func (r *loginRecorder) RecordLogin(_ context.Context, record authusecase.LoginRecord) error {
 	r.records = append(r.records, record)
 	return nil
+}
+
+func withSession(ctx context.Context, sessionID int64) context.Context {
+	return requestctx.WithLoginSessionID(ctx, strconv.FormatInt(sessionID, 10))
 }
 
 func contains(values []string, want string) bool {

@@ -137,7 +137,7 @@ func provideServer(i do.Injector) {
 		if err != nil {
 			return nil, err
 		}
-		options, err = appendOptionalJWTBlocklist(i, options)
+		options, err = appendOptionalLoginSessionAuthenticator(i, options)
 		if err != nil {
 			return nil, err
 		}
@@ -171,10 +171,10 @@ func appendOptionalSystemErrorRecorder(i do.Injector, options []server.Option) (
 	return nil, err
 }
 
-func appendOptionalJWTBlocklist(i do.Injector, options []server.Option) ([]server.Option, error) {
-	jwtBlocklist, err := do.InvokeAs[server.JWTBlocklistChecker](i)
+func appendOptionalLoginSessionAuthenticator(i do.Injector, options []server.Option) ([]server.Option, error) {
+	authenticator, err := do.InvokeAs[server.LoginSessionAuthenticator](i)
 	if err == nil {
-		return append(options, server.WithJWTBlocklistChecker(jwtBlocklist)), nil
+		return append(options, server.WithLoginSessionAuthenticator(authenticator)), nil
 	}
 	if optionalServiceMissing(err) {
 		return options, nil

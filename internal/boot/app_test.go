@@ -167,8 +167,8 @@ func TestNewAppReturnsModuleRouteResolutionError(t *testing.T) {
 
 func TestNewAppReturnsConfigError(t *testing.T) {
 	app, err := NewApp(configs.Config{
-		JWT: configs.JWTConfig{
-			Enabled: true,
+		System: configs.SystemConfig{
+			Level: 99,
 		},
 	})
 

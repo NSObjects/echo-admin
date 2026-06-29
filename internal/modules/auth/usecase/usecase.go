@@ -2,8 +2,11 @@ package usecase
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -12,16 +15,27 @@ import (
 
 	"github.com/casbin/casbin/v3"
 	"github.com/casbin/casbin/v3/model"
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
+	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
-const tokenTTL = 12 * time.Hour
+const (
+	loginSessionTokenBytes      = 32
+	loginSessionIdleTTL         = 2 * time.Hour
+	loginSessionAbsoluteTTL     = 12 * time.Hour
+	loginSessionRefreshInterval = 5 * time.Minute
+
+	loginSessionRevokedLogout         = "logout"
+	loginSessionRevokedLogoutOthers   = "logout_others"
+	loginSessionRevokedPasswordChange = "password_changed"
+	loginSessionRevokedSecurityEvent  = "security_event"
+)
 
 // casbinRBACModel maps UI permission tokens to Casbin's {subject, object, action}
 // RBAC form. Users and roles are prefixed before insertion because Casbin treats
@@ -43,7 +57,7 @@ e = some(where (p.eft == allow))
 m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 `
 
-// Login authenticates an administrator and returns a bearer token.
+// Login authenticates an administrator and creates a browser login session.
 func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, error) {
 	if err := u.ready(); err != nil {
 		return LoginOutput{}, err
@@ -75,14 +89,31 @@ func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, err
 	if err != nil {
 		return LoginOutput{}, err
 	}
-	token, err := u.issueToken(admin.ID, admin.Username, user.ActiveRoleID, user.Permissions)
+	rawToken, tokenHash, err := newLoginSessionToken()
+	if err != nil {
+		return LoginOutput{}, err
+	}
+	session, err := authdomain.NewLoginSession(authdomain.LoginSessionInput{
+		AdminID:           admin.ID,
+		ActiveRoleID:      user.ActiveRoleID,
+		TokenHash:         tokenHash,
+		IP:                input.IP,
+		UserAgent:         input.UserAgent,
+		CreatedAt:         now,
+		IdleExpiresAt:     now.Add(loginSessionIdleTTL),
+		AbsoluteExpiresAt: now.Add(loginSessionAbsoluteTTL),
+	})
+	if err != nil {
+		return LoginOutput{}, err
+	}
+	created, err := u.sessions.CreateLoginSession(ctx, session)
 	if err != nil {
 		return LoginOutput{}, err
 	}
 	if err := u.recordLogin(ctx, loginRecordFromInput(admin.ID, username, input, true, "login succeeded")); err != nil {
 		return LoginOutput{}, err
 	}
-	return LoginOutput{Token: token, User: user}, nil
+	return LoginOutput{SessionToken: rawToken, SessionExpiresAt: created.AbsoluteExpiresAt, User: user}, nil
 }
 
 // CurrentUser returns the authenticated administrator profile and active-role grants.
@@ -120,9 +151,13 @@ func (u *Usecase) UpdateProfile(ctx context.Context, input UpdateProfileInput) (
 	return u.userSnapshot(ctx, saved, activeRoleID)
 }
 
-// SwitchRole persists a new active role and returns a token scoped to that role.
+// SwitchRole changes the active role for the current login session.
 func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSwitchOutput, error) {
 	if err := u.ready(); err != nil {
+		return RoleSwitchOutput{}, err
+	}
+	sessionID, err := currentLoginSessionID(ctx)
+	if err != nil {
 		return RoleSwitchOutput{}, err
 	}
 	adminID, err := currentAdminID(ctx)
@@ -140,25 +175,24 @@ func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSw
 	if err != nil {
 		return RoleSwitchOutput{}, apperr.NewBadRequest("active role is not assigned")
 	}
-	saved, err := u.admins.Update(ctx, switched)
+	if err := u.sessions.UpdateLoginSessionRole(ctx, sessionID, switched.ActiveRoleID, u.now()); err != nil {
+		return RoleSwitchOutput{}, err
+	}
+	user, err := u.userSnapshot(ctx, admin, input.RoleID)
 	if err != nil {
 		return RoleSwitchOutput{}, err
 	}
-	user, err := u.userSnapshot(ctx, saved, input.RoleID)
-	if err != nil {
-		return RoleSwitchOutput{}, err
-	}
-	token, err := u.issueToken(saved.ID, saved.Username, user.ActiveRoleID, user.Permissions)
-	if err != nil {
-		return RoleSwitchOutput{}, err
-	}
-	return RoleSwitchOutput{Token: token, User: user}, nil
+	return RoleSwitchOutput{User: user}, nil
 }
 
 // ChangePassword verifies the current password, stores the new hash, and
-// revokes the token used for the password-changing request.
+// revokes other login sessions for the same administrator.
 func (u *Usecase) ChangePassword(ctx context.Context, input ChangePasswordInput) error {
 	if err := u.ready(); err != nil {
+		return err
+	}
+	sessionID, err := currentLoginSessionID(ctx)
+	if err != nil {
 		return err
 	}
 	adminID, err := currentAdminID(ctx)
@@ -186,60 +220,88 @@ func (u *Usecase) ChangePassword(ctx context.Context, input ChangePasswordInput)
 	if _, err := u.admins.Update(ctx, updated); err != nil {
 		return err
 	}
-	return u.blacklistTokenForAdmin(ctx, input.RawToken, adminID)
+	return u.sessions.RevokeOtherLoginSessions(ctx, adminID, sessionID, loginSessionRevokedPasswordChange, u.now())
 }
 
-// Logout revokes the current JWT so it cannot be reused after the client leaves.
-func (u *Usecase) Logout(ctx context.Context, rawToken string) error {
+// Logout revokes the current login session.
+func (u *Usecase) Logout(ctx context.Context) error {
 	if err := u.ready(); err != nil {
+		return err
+	}
+	sessionID, err := currentLoginSessionID(ctx)
+	if err != nil {
+		return err
+	}
+	return u.sessions.RevokeLoginSession(ctx, sessionID, loginSessionRevokedLogout, u.now())
+}
+
+// LogoutOthers revokes every other login session for the current administrator.
+func (u *Usecase) LogoutOthers(ctx context.Context) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	sessionID, err := currentLoginSessionID(ctx)
+	if err != nil {
 		return err
 	}
 	adminID, err := currentAdminID(ctx)
 	if err != nil {
 		return err
 	}
-	return u.blacklistTokenForAdmin(ctx, rawToken, adminID)
+	return u.sessions.RevokeOtherLoginSessions(ctx, adminID, sessionID, loginSessionRevokedLogoutOthers, u.now())
 }
 
-func (u *Usecase) blacklistTokenForAdmin(ctx context.Context, rawToken string, adminID int64) error {
-	rawToken = strings.TrimSpace(rawToken)
-	if rawToken == "" {
-		return apperr.NewUnauthorized()
-	}
-	claims := jwt.MapClaims{}
-	token, err := jwt.NewParser(jwt.WithTimeFunc(u.now)).ParseWithClaims(rawToken, claims, func(token *jwt.Token) (interface{}, error) {
-		if token.Method != jwt.SigningMethodHS256 {
-			return nil, apperr.NewUnauthorized()
-		}
-		return u.jwtSecret, nil
-	})
-	if err != nil || token == nil || !token.Valid {
-		return apperr.NewUnauthorized()
-	}
-	subject, err := claims.GetSubject()
-	if err != nil || subject != strconv.FormatInt(adminID, 10) {
-		return apperr.NewUnauthorized()
-	}
-	expiresAt, err := claims.GetExpirationTime()
-	if err != nil || expiresAt == nil {
-		return apperr.NewUnauthorized()
-	}
-	return u.jwtBlacklist.AddJWTBlacklist(ctx, JWTBlacklistEntry{
-		TokenHash: jwtTokenHash(rawToken),
-		ExpiresAt: expiresAt.UTC(),
-	})
-}
-
-// TokenBlocked reports whether a raw JWT has been revoked and has not expired.
-func (u *Usecase) TokenBlocked(ctx context.Context, rawToken string) (bool, error) {
+// AuthenticateLoginSession validates a raw browser session token and returns
+// the identity that middleware should attach to request context.
+func (u *Usecase) AuthenticateLoginSession(ctx context.Context, rawToken string) (LoginSessionIdentity, error) {
 	if err := u.ready(); err != nil {
-		return false, err
+		return LoginSessionIdentity{}, err
 	}
-	rawToken = strings.TrimSpace(rawToken)
-	if rawToken == "" {
-		return false, nil
+	tokenHash := loginSessionTokenHash(rawToken)
+	if tokenHash == "" {
+		return LoginSessionIdentity{}, apperr.NewUnauthorized()
 	}
-	return u.jwtBlacklist.JWTBlacklisted(ctx, jwtTokenHash(rawToken), u.now())
+	session, found, err := u.sessions.FindLoginSessionByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return LoginSessionIdentity{}, err
+	}
+	if !found {
+		return LoginSessionIdentity{}, apperr.NewUnauthorized()
+	}
+	now := u.now()
+	if err := session.AvailabilityError(now); err != nil {
+		return LoginSessionIdentity{}, mapSessionAvailabilityError(err)
+	}
+	admin, err := u.admins.FindByID(ctx, session.AdminID)
+	if err != nil {
+		return LoginSessionIdentity{}, apperr.NewUnauthorized()
+	}
+	if !admin.Active || !admin.HasRole(session.ActiveRoleID) {
+		return LoginSessionIdentity{}, apperr.NewUnauthorized()
+	}
+	if session.NeedsRefresh(now, loginSessionRefreshInterval) {
+		refreshed := session.Refreshed(now, loginSessionIdleTTL)
+		if err := u.sessions.RefreshLoginSession(ctx, refreshed); err != nil {
+			logging.FromContext(ctx).Warn().Err(err).Int64("session_id", session.ID).Msg("refresh login session")
+		}
+	}
+	return LoginSessionIdentity{
+		SessionID: session.ID,
+		AdminID:   session.AdminID,
+		RoleID:    session.ActiveRoleID,
+	}, nil
+}
+
+// RevokeLoginSessions revokes all login sessions for one administrator after a
+// security event such as disabling or deleting the account.
+func (u *Usecase) RevokeLoginSessions(ctx context.Context, adminID int64) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	if adminID <= 0 {
+		return apperr.NewBadRequest("invalid admin id")
+	}
+	return u.sessions.RevokeLoginSessions(ctx, adminID, loginSessionRevokedSecurityEvent, u.now())
 }
 
 // RequirePermission verifies that the current admin has permission through the active role.
@@ -285,11 +347,8 @@ func (u *Usecase) RequireRoutePermission(ctx context.Context, permission, method
 }
 
 func (u *Usecase) ready() error {
-	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.apis == nil || u.logins == nil || u.jwtBlacklist == nil || u.loginLimiter == nil {
+	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.apis == nil || u.logins == nil || u.sessions == nil || u.loginLimiter == nil {
 		return apperr.New(apperr.ErrInternalServer, "auth dependencies are not configured")
-	}
-	if len(u.jwtSecret) == 0 {
-		return apperr.New(apperr.ErrInternalServer, "jwt secret is not configured")
 	}
 	return nil
 }
@@ -473,24 +532,6 @@ func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Me
 	return out, nil
 }
 
-func (u *Usecase) issueToken(adminID int64, username string, activeRoleID int64, permissions []string) (string, error) {
-	now := u.now()
-	claims := jwt.MapClaims{
-		"sub":         strconv.FormatInt(adminID, 10),
-		"username":    username,
-		"role_id":     strconv.FormatInt(activeRoleID, 10),
-		"permissions": permissions,
-		"iat":         now.Unix(),
-		"exp":         now.Add(tokenTTL).Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(u.jwtSecret)
-	if err != nil {
-		return "", fmt.Errorf("sign jwt token: %w", err)
-	}
-	return signed, nil
-}
-
 func (u *Usecase) recordLogin(ctx context.Context, record LoginRecord) error {
 	return u.logins.RecordLogin(ctx, record)
 }
@@ -531,9 +572,29 @@ func hashPassword(password string) ([]byte, error) {
 	return hash, nil
 }
 
-func jwtTokenHash(rawToken string) string {
+func newLoginSessionToken() (string, string, error) {
+	token := make([]byte, loginSessionTokenBytes)
+	if _, err := rand.Read(token); err != nil {
+		return "", "", fmt.Errorf("generate login session token: %w", err)
+	}
+	rawToken := base64.RawURLEncoding.EncodeToString(token)
+	return rawToken, loginSessionTokenHash(rawToken), nil
+}
+
+func loginSessionTokenHash(rawToken string) string {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return ""
+	}
 	sum := sha256.Sum256([]byte(rawToken))
 	return hex.EncodeToString(sum[:])
+}
+
+func mapSessionAvailabilityError(err error) error {
+	if errors.Is(err, authdomain.ErrLoginSessionExpired) || errors.Is(err, authdomain.ErrLoginSessionRevoked) {
+		return apperr.NewUnauthorized()
+	}
+	return err
 }
 
 func isTooManyLoginAttempts(err error) bool {
@@ -564,6 +625,15 @@ func currentRoleID(ctx context.Context) (int64, error) {
 	if raw == "" {
 		return 0, apperr.NewUnauthorized()
 	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, apperr.NewUnauthorized()
+	}
+	return id, nil
+}
+
+func currentLoginSessionID(ctx context.Context) (int64, error) {
+	raw := requestctx.GetLoginSessionID(ctx)
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || id <= 0 {
 		return 0, apperr.NewUnauthorized()

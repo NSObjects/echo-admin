@@ -44,24 +44,9 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   const [passwordForm] = Form.useForm<PasswordFormValues>();
   const { initialState, setInitialState } = useModel('@@initialState');
 
-  const redirectToLogin = () => {
-    const { search, pathname } = window.location;
-    const urlParams = new URL(window.location.href).searchParams;
-    const searchParams = new URLSearchParams({
-      redirect: pathname + search,
-    });
-    const redirect = urlParams.get('redirect');
-    if (window.location.pathname !== '/user/login' && !redirect) {
-      history.replace({
-        pathname: '/user/login',
-        search: searchParams.toString(),
-      });
-    }
-  };
-
   const loginOut = async () => {
     await logout();
-    redirectToLogin();
+    history.replace('/user/login');
   };
 
   const submitProfile = async () => {
@@ -90,13 +75,9 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
         current_password: values.currentPassword,
         new_password: values.newPassword,
       });
-      message.success('密码已更新，请重新登录');
-      startTransition(() => {
-        setInitialState((s) => ({ ...s, currentUser: undefined }));
-      });
+      message.success('密码已更新');
       setPasswordOpen(false);
       passwordForm.resetFields();
-      redirectToLogin();
     } finally {
       setPasswordSaving(false);
     }

@@ -19,8 +19,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
-const testJWTSecret = "test-secret-with-at-least-32-bytes"
-
 func TestServerEcho(t *testing.T) {
 	server := mustNewServer(t, configs.Config{})
 
@@ -83,29 +81,25 @@ func TestServerMiddlewareConfig(t *testing.T) {
 	assert.True(t, config.EnableLogger)
 	assert.True(t, config.EnableGzip)
 	assert.False(t, config.EnableCORS)
-	assert.False(t, config.EnableJWT)
-	assert.NotNil(t, config.JWT)
+	assert.False(t, config.EnableLoginSession)
+	assert.NotNil(t, config.LoginSession)
+	assert.False(t, config.EnableCSRF)
 }
 
-func TestServerMiddlewareConfigEnablesJWTFromConfig(t *testing.T) {
+func TestServerMiddlewareConfigEnablesLoginSessionFromAuthenticator(t *testing.T) {
 	server := &Server{
-		config: DefaultConfig(),
-		appConfig: configs.Config{
-			JWT: configs.JWTConfig{
-				Enabled:   true,
-				Secret:    testJWTSecret,
-				SkipPaths: []string{"/api/health"},
-			},
-		},
+		config:      DefaultConfig(),
+		appConfig:   configs.Config{},
+		sessionAuth: fakeLoginSessionAuthenticator{},
 	}
 
 	config := server.middlewareConfig()
 
-	assert.True(t, config.EnableJWT)
-	assert.NotNil(t, config.JWT)
-	assert.True(t, config.JWT.Enabled)
-	assert.Equal(t, []byte(testJWTSecret), config.JWT.SigningKey)
-	assert.Equal(t, []string{"/api/health"}, config.JWT.SkipPaths)
+	assert.True(t, config.EnableLoginSession)
+	assert.NotNil(t, config.LoginSession)
+	assert.True(t, config.LoginSession.Enabled)
+	assert.True(t, config.EnableCSRF)
+	assert.NotNil(t, config.CSRF.Skipper)
 }
 
 func TestServerMiddlewareConfigUsesHTTPConfig(t *testing.T) {
@@ -331,11 +325,6 @@ func TestServerNew(t *testing.T) {
 			Port:  ":9323",
 			Level: 1,
 		},
-		JWT: configs.JWTConfig{
-			Enabled:   true,
-			Secret:    testJWTSecret,
-			SkipPaths: []string{"/api/health"},
-		},
 	}
 
 	server, err := New(cfg)
@@ -350,8 +339,8 @@ func TestServerNew(t *testing.T) {
 
 func TestServerNewReturnsConfigError(t *testing.T) {
 	server, err := New(configs.Config{
-		JWT: configs.JWTConfig{
-			Enabled: true,
+		System: configs.SystemConfig{
+			Level: 99,
 		},
 	})
 
@@ -490,6 +479,12 @@ func TestServerCapabilitiesReturnsStatusList(t *testing.T) {
 type fakeStatusReporter struct {
 	statuses []CapabilityStatus
 	readyErr error
+}
+
+type fakeLoginSessionAuthenticator struct{}
+
+func (fakeLoginSessionAuthenticator) AuthenticateLoginSession(context.Context, string) (LoginSessionIdentity, error) {
+	return LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}, nil
 }
 
 func (f fakeStatusReporter) Status(context.Context) []CapabilityStatus {

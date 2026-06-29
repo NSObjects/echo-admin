@@ -18,15 +18,17 @@ func TestConfigDefaults(t *testing.T) {
 	assert.Equal(t, LogOutputStdout, cfg.Log.Output)
 	assert.False(t, cfg.Log.Caller)
 
-	assert.False(t, cfg.JWT.Enabled)
-	assert.Equal(t, "", cfg.JWT.Secret)
-	assert.Equal(t, []string{"/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"}, cfg.JWT.SkipPaths)
+	assert.False(t, cfg.HTTP.SecureCookies)
 
 	assert.Equal(t, DefaultUploadDir, cfg.Admin.UploadDir)
 	assert.Equal(t, "", cfg.Admin.BootstrapPassword)
 
 	assert.False(t, cfg.MySQL.Enabled)
-	assert.Equal(t, "", cfg.MySQL.DSN)
+	assert.Equal(t, "", cfg.MySQL.Host)
+	assert.Equal(t, DefaultMySQLPort, cfg.MySQL.Port)
+	assert.Equal(t, "", cfg.MySQL.Database)
+	assert.Equal(t, "", cfg.MySQL.Username)
+	assert.Equal(t, "", cfg.MySQL.Password)
 	assert.Equal(t, DefaultMySQLMaxOpenConns, cfg.MySQL.MaxOpenConns)
 	assert.Equal(t, DefaultMySQLMaxIdleConns, cfg.MySQL.MaxIdleConns)
 	assert.Equal(t, DefaultMySQLConnMaxLifetimeSeconds, cfg.MySQL.ConnMaxLifetimeSeconds)
@@ -79,23 +81,23 @@ func TestLogConfig(t *testing.T) {
 	assert.True(t, cfg.Caller)
 }
 
-func TestJWTConfig(t *testing.T) {
-	cfg := JWTConfig{
-		Enabled:   true,
-		Secret:    "test-secret",
-		SkipPaths: []string{"/api/health"},
+func TestHTTPConfig(t *testing.T) {
+	cfg := HTTPConfig{
+		SecureCookies: true,
 	}
 
-	assert.True(t, cfg.Enabled)
-	assert.Equal(t, "test-secret", cfg.Secret)
-	assert.Equal(t, []string{"/api/health"}, cfg.SkipPaths)
+	assert.True(t, cfg.SecureCookies)
 }
 
 func TestCapabilityConfig(t *testing.T) {
 	cfg := Config{
 		MySQL: MySQLConfig{
-			Enabled: true,
-			DSN:     "user:pass@tcp(localhost:3306)/app?parseTime=true",
+			Enabled:  true,
+			Host:     "localhost",
+			Port:     DefaultMySQLPort,
+			Database: "app",
+			Username: "user",
+			Password: "pass",
 		},
 		Redis: RedisConfig{
 			Enabled: true,
@@ -113,16 +115,6 @@ func TestCapabilityConfig(t *testing.T) {
 	assert.True(t, cfg.Redis.Enabled)
 	assert.False(t, cfg.MongoDB.Enabled)
 	assert.False(t, cfg.Tracing.Enabled)
-}
-
-func TestValidateRejectsEnabledJWTWithoutSecret(t *testing.T) {
-	err := Validate(Config{
-		JWT: JWTConfig{
-			Enabled: true,
-		},
-	})
-
-	assert.Error(t, err)
 }
 
 func TestValidateRejectsBlankAppIdentity(t *testing.T) {

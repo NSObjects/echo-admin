@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 	"github.com/rs/zerolog"
@@ -35,49 +34,18 @@ func TestDefaultMiddlewareConfig(t *testing.T) {
 	assert.False(t, config.EnableCORS)
 	assert.False(t, config.EnableAPIKey)
 	assert.NotNil(t, config.APIKey)
-	assert.False(t, config.EnableJWT)
-	assert.NotNil(t, config.JWT)
+	assert.False(t, config.EnableLoginSession)
+	assert.NotNil(t, config.LoginSession)
+	assert.False(t, config.EnableCSRF)
 }
 
-func TestDefaultJWTConfig(t *testing.T) {
-	config := DefaultJWTConfig()
+func TestDefaultLoginSessionConfig(t *testing.T) {
+	config := DefaultLoginSessionConfig()
 
 	assert.NotNil(t, config)
 	assert.False(t, config.Enabled)
 	assert.NotNil(t, config.SkipPaths)
-	assert.Empty(t, config.SigningKey)
-}
-
-func TestCreateJWTConfig(t *testing.T) {
-	tests := []struct {
-		name      string
-		secret    string
-		skipPaths []string
-		enabled   bool
-	}{
-		{
-			name:      "enabled JWT",
-			secret:    "test-secret",
-			skipPaths: []string{"/api/health"},
-			enabled:   true,
-		},
-		{
-			name:      "disabled JWT",
-			secret:    "test-secret",
-			skipPaths: []string{},
-			enabled:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := CreateJWTConfig(tt.secret, tt.skipPaths, tt.enabled)
-			assert.NotNil(t, config)
-			assert.Equal(t, []byte(tt.secret), config.SigningKey)
-			assert.Equal(t, tt.skipPaths, config.SkipPaths)
-			assert.Equal(t, tt.enabled, config.Enabled)
-		})
-	}
+	assert.Equal(t, LoginSessionCookieName, config.CookieName)
 }
 
 func TestApplyMiddlewares(t *testing.T) {
@@ -88,7 +56,7 @@ func TestApplyMiddlewares(t *testing.T) {
 	assert.NotNil(t, e)
 }
 
-func TestAPIKeyAuthenticationRunsBeforeJWT(t *testing.T) {
+func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	config := DefaultMiddlewareConfig()
@@ -98,8 +66,12 @@ func TestAPIKeyAuthenticationRunsBeforeJWT(t *testing.T) {
 		Verifier: staticAPIKeyVerifier{},
 		Enabled:  true,
 	}
-	config.EnableJWT = true
-	config.JWT = CreateJWTConfig("test-secret", nil, true)
+	config.EnableLoginSession = true
+	config.LoginSession = &LoginSessionConfig{
+		CookieName:    LoginSessionCookieName,
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-9", UserID: "99", RoleID: "9"}},
+		Enabled:       true,
+	}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
 	e.GET("/private", func(c *echo.Context) error {
@@ -288,25 +260,23 @@ func TestRequestLoggerOmitsTraceMetadataWithoutActiveSpan(t *testing.T) {
 	}
 }
 
-func TestJWTStoresSubjectAndRoleAsAuthenticatedContext(t *testing.T) {
-	const secret = "test-secret"
-
-	signedToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":     "user-123",
-		"role_id": "role-456",
-	}).SignedString([]byte(secret))
+func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
+	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+		CookieName: LoginSessionCookieName,
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{
+			SessionID: "session-123",
+			UserID:    "user-123",
+			RoleID:    "role-456",
+		}},
+		Enabled: true,
+	})
 	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-
-	jwtMiddleware, err := JWT(CreateJWTConfig(secret, nil, true))
-	if err != nil {
-		t.Fatalf("JWT() error = %v", err)
+		t.Fatalf("LoginSession() error = %v", err)
 	}
 
 	e := echo.New()
 	e.Use(RequestContext())
-	e.Use(jwtMiddleware)
+	e.Use(sessionMiddleware)
 	e.GET("/me", func(c *echo.Context) error {
 		if got := requestctx.GetUserID(c.Request().Context()); got != "user-123" {
 			t.Fatalf("GetUserID() = %q, want user-123", got)
@@ -314,11 +284,14 @@ func TestJWTStoresSubjectAndRoleAsAuthenticatedContext(t *testing.T) {
 		if got := requestctx.GetRoleID(c.Request().Context()); got != "role-456" {
 			t.Fatalf("GetRoleID() = %q, want role-456", got)
 		}
+		if got := requestctx.GetLoginSessionID(c.Request().Context()); got != "session-123" {
+			t.Fatalf("GetLoginSessionID() = %q, want session-123", got)
+		}
 		return c.NoContent(http.StatusNoContent)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken)
+	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
 	rec := httptest.NewRecorder()
 
 	e.ServeHTTP(rec, req)
@@ -326,51 +299,49 @@ func TestJWTStoresSubjectAndRoleAsAuthenticatedContext(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
-func TestJWTRejectsBlacklistedToken(t *testing.T) {
-	const secret = "test-secret"
-
-	signedToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": "user-123",
-	}).SignedString([]byte(secret))
+func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
+	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+		CookieName:    LoginSessionCookieName,
+		Authenticator: staticLoginSessionAuthenticator{err: apperr.NewUnauthorized()},
+		Enabled:       true,
+	})
 	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	config := CreateJWTConfig(secret, nil, true)
-	config.Blocklist = staticJWTBlocklist{blocked: true}
-	jwtMiddleware, err := JWT(config)
-	if err != nil {
-		t.Fatalf("JWT() error = %v", err)
+		t.Fatalf("LoginSession() error = %v", err)
 	}
 
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	e.Use(RequestContext())
-	e.Use(jwtMiddleware)
+	e.Use(sessionMiddleware)
 	e.GET("/me", func(c *echo.Context) error {
-		t.Fatal("handler reached with blacklisted token")
+		t.Fatal("handler reached with rejected login session")
 		return c.NoContent(http.StatusNoContent)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken)
+	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
 	rec := httptest.NewRecorder()
 
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assertErrorPayload(t, rec, apperr.ErrUnauthorized, "Unauthorized")
+	assertErrorPayload(t, rec, apperr.ErrUnauthorized, "unauthorized")
 }
 
-func TestJWTMissingTokenReturnsGenericUnauthorized(t *testing.T) {
-	jwtMiddleware, err := JWT(CreateJWTConfig("test-secret", nil, true))
+func TestLoginSessionMissingCookieReturnsGenericUnauthorized(t *testing.T) {
+	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+		CookieName:    LoginSessionCookieName,
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
+		Enabled:       true,
+	})
 	if err != nil {
-		t.Fatalf("JWT() error = %v", err)
+		t.Fatalf("LoginSession() error = %v", err)
 	}
 
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	e.Use(RequestContext())
-	e.Use(jwtMiddleware)
+	e.Use(sessionMiddleware)
 	e.GET("/me", func(c *echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	})
@@ -381,7 +352,34 @@ func TestJWTMissingTokenReturnsGenericUnauthorized(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assertErrorPayload(t, rec, apperr.ErrUnauthorized, "Unauthorized")
+	assertErrorPayload(t, rec, apperr.ErrUnauthorized, "unauthorized")
+}
+
+func TestCSRFProtectsLoginSessionUnsafeRequests(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	e.Use(RequestContext())
+	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+		CookieName:    LoginSessionCookieName,
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("LoginSession() error = %v", err)
+	}
+	e.Use(sessionMiddleware)
+	e.Use(middleware.CSRFWithConfig(CSRFConfig(nil, false)))
+	e.POST("/change", func(c *echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/change", nil)
+	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestErrorRecovery(t *testing.T) {
@@ -617,12 +615,16 @@ func (staticAPIKeyVerifier) VerifyAPIKey(_ context.Context, secret string) (APIK
 	return APIKeyIdentity{UserID: "42", RoleID: "7"}, nil
 }
 
-type staticJWTBlocklist struct {
-	blocked bool
+type staticLoginSessionAuthenticator struct {
+	identity LoginSessionIdentity
+	err      error
 }
 
-func (b staticJWTBlocklist) TokenBlocked(context.Context, string) (bool, error) {
-	return b.blocked, nil
+func (a staticLoginSessionAuthenticator) AuthenticateLoginSession(context.Context, string) (LoginSessionIdentity, error) {
+	if a.err != nil {
+		return LoginSessionIdentity{}, a.err
+	}
+	return a.identity, nil
 }
 
 type systemErrorRecorderSpy struct {
@@ -654,23 +656,24 @@ func assertErrorHandlerNormalizes(
 	assertErrorPayload(t, rec, wantCode, wantMsg)
 }
 
-func TestJWTConfig(t *testing.T) {
+func TestLoginSessionConfig(t *testing.T) {
 	tests := []struct {
 		name   string
-		config *JWTConfig
+		config *LoginSessionConfig
 	}{
 		{
-			name: "enabled JWT",
-			config: &JWTConfig{
-				SigningKey: []byte("test-secret"),
-				SkipPaths:  []string{"/api/health"},
-				Enabled:    true,
+			name: "enabled login session",
+			config: &LoginSessionConfig{
+				CookieName:    LoginSessionCookieName,
+				SkipPaths:     []string{"/api/health"},
+				Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
+				Enabled:       true,
 			},
 		},
 		{
-			name: "disabled JWT",
-			config: &JWTConfig{
-				SigningKey: []byte("test-secret"),
+			name: "disabled login session",
+			config: &LoginSessionConfig{
+				CookieName: LoginSessionCookieName,
 				SkipPaths:  []string{},
 				Enabled:    false,
 			},
@@ -679,17 +682,17 @@ func TestJWTConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			jwtMiddleware, err := JWT(tt.config)
+			sessionMiddleware, err := LoginSession(tt.config)
 			assert.NoError(t, err)
-			assert.NotNil(t, jwtMiddleware)
+			assert.NotNil(t, sessionMiddleware)
 		})
 	}
 }
 
-func TestJWTRequiresSigningKeyWhenEnabled(t *testing.T) {
-	jwtMiddleware, err := JWT(&JWTConfig{Enabled: true})
+func TestLoginSessionRequiresAuthenticatorWhenEnabled(t *testing.T) {
+	sessionMiddleware, err := LoginSession(&LoginSessionConfig{Enabled: true})
 	assert.Error(t, err)
-	assert.Nil(t, jwtMiddleware)
+	assert.Nil(t, sessionMiddleware)
 }
 
 func TestApplyMiddlewaresRequiresCORSOriginsWhenEnabled(t *testing.T) {
@@ -746,8 +749,8 @@ func TestMiddlewareConfig(t *testing.T) {
 				CORS: middleware.CORSConfig{
 					AllowOrigins: []string{"https://example.com"},
 				},
-				EnableJWT: false,
-				JWT:       DefaultJWTConfig(),
+				EnableLoginSession: false,
+				LoginSession:       DefaultLoginSessionConfig(),
 			},
 		},
 	}

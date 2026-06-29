@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -16,7 +17,8 @@ func TestDeleteRejectsCurrentAdmin(t *testing.T) {
 	store := &storeSpy{admins: map[int64]identitydomain.Admin{
 		42: newAdmin(t, 42, "admin"),
 	}}
-	uc := usecase.New(store, roleScopeSpy{})
+	sessions := &sessionRevokerSpy{}
+	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
 	err := uc.Delete(requestctx.WithUserID(context.Background(), "42"), 42)
 	if err == nil {
@@ -25,19 +27,109 @@ func TestDeleteRejectsCurrentAdmin(t *testing.T) {
 	if store.deletedID != 0 {
 		t.Fatalf("deletedID = %d, want 0", store.deletedID)
 	}
+	if len(sessions.adminIDs) != 0 {
+		t.Fatalf("revoked sessions = %v, want none", sessions.adminIDs)
+	}
 }
 
 func TestDeleteRemovesScopedAdmin(t *testing.T) {
 	store := &storeSpy{admins: map[int64]identitydomain.Admin{
 		7: newAdmin(t, 7, "operator"),
 	}}
-	uc := usecase.New(store, roleScopeSpy{})
+	sessions := &sessionRevokerSpy{}
+	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
 	if err := uc.Delete(requestctx.WithUserID(context.Background(), "42"), 7); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 	if store.deletedID != 7 {
 		t.Fatalf("deletedID = %d, want 7", store.deletedID)
+	}
+	if !reflect.DeepEqual(sessions.adminIDs, []int64{7}) {
+		t.Fatalf("revoked sessions = %v, want [7]", sessions.adminIDs)
+	}
+}
+
+func TestUpdateRevokesSessionsWhenAdminIsDisabled(t *testing.T) {
+	inactive := false
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}}
+	sessions := &sessionRevokerSpy{}
+	uc := usecase.New(store, roleScopeSpy{}, sessions)
+
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+		ID:     7,
+		Active: &inactive,
+	})
+	if err != nil {
+		t.Fatalf("Update(disable admin) error = %v", err)
+	}
+	if !reflect.DeepEqual(sessions.adminIDs, []int64{7}) {
+		t.Fatalf("revoked sessions = %v, want [7]", sessions.adminIDs)
+	}
+}
+
+func TestUpdateRevokesSessionsWhenPasswordIsReset(t *testing.T) {
+	password := "new-password"
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}}
+	sessions := &sessionRevokerSpy{}
+	uc := usecase.New(store, roleScopeSpy{}, sessions)
+
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+		ID:       7,
+		Password: &password,
+	})
+	if err != nil {
+		t.Fatalf("Update(reset password) error = %v", err)
+	}
+	if !reflect.DeepEqual(sessions.adminIDs, []int64{7}) {
+		t.Fatalf("revoked sessions = %v, want [7]", sessions.adminIDs)
+	}
+}
+
+func TestUpdateRejectsSecurityChangeWhenSessionRevocationFails(t *testing.T) {
+	password := "new-password"
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}}
+	sessions := &sessionRevokerSpy{err: errors.New("revoke sessions")}
+	uc := usecase.New(store, roleScopeSpy{}, sessions)
+
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+		ID:       7,
+		Password: &password,
+	})
+	if err == nil {
+		t.Fatal("Update(reset password with revocation failure) error = nil, want error")
+	}
+	if !reflect.DeepEqual(sessions.adminIDs, []int64{7}) {
+		t.Fatalf("revoked sessions = %v, want [7]", sessions.adminIDs)
+	}
+	if store.updateCalls != 0 {
+		t.Fatalf("updateCalls = %d, want 0", store.updateCalls)
+	}
+}
+
+func TestUpdateProfileDoesNotRevokeSessions(t *testing.T) {
+	displayName := "Operator"
+	store := &storeSpy{admins: map[int64]identitydomain.Admin{
+		7: newAdmin(t, 7, "operator"),
+	}}
+	sessions := &sessionRevokerSpy{}
+	uc := usecase.New(store, roleScopeSpy{}, sessions)
+
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+		ID:          7,
+		DisplayName: &displayName,
+	})
+	if err != nil {
+		t.Fatalf("Update(display name) error = %v", err)
+	}
+	if len(sessions.adminIDs) != 0 {
+		t.Fatalf("revoked sessions = %v, want none", sessions.adminIDs)
 	}
 }
 
@@ -46,7 +138,7 @@ func TestListFiltersAdminsByVisibleRoles(t *testing.T) {
 		7: newAdminWithRoles(t, 7, "operator", []int64{1}),
 		8: newAdminWithRoles(t, 8, "auditor", []int64{2}),
 	}}
-	uc := usecase.New(store, roleScopeSpy{visibleIDs: []int64{2}})
+	uc := usecase.New(store, roleScopeSpy{visibleIDs: []int64{2}}, &sessionRevokerSpy{})
 
 	output, err := uc.List(context.Background(), usecase.ListInput{Page: 1, PageSize: 20})
 	if err != nil {
@@ -66,7 +158,7 @@ func TestRoleAdminIDsFiltersAdminsByVisibleRoles(t *testing.T) {
 		8: newAdminWithRoles(t, 8, "auditor", []int64{2}),
 		9: newAdminWithRoles(t, 9, "mixed", []int64{1, 2}),
 	}}
-	uc := usecase.New(store, roleScopeSpy{visibleIDs: []int64{1}})
+	uc := usecase.New(store, roleScopeSpy{visibleIDs: []int64{1}}, &sessionRevokerSpy{})
 
 	got, err := uc.RoleAdminIDs(context.Background(), 1)
 	if err != nil {
@@ -84,7 +176,7 @@ func TestSetRoleAdminsReplacesVisibleRoleMembership(t *testing.T) {
 		8: newAdminWithRoles(t, 8, "auditor", []int64{1}),
 		9: newAdminWithRoles(t, 9, "reviewer", []int64{1, 2}),
 	}}
-	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{1, 2}})
+	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{1, 2}}, &sessionRevokerSpy{})
 
 	got, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), "42"), usecase.RoleAdminsInput{
 		RoleID:   2,
@@ -112,7 +204,7 @@ func TestSetRoleAdminsRejectsRemovingOnlyRole(t *testing.T) {
 	store := &storeSpy{admins: map[int64]identitydomain.Admin{
 		7: newAdminWithRoles(t, 7, "operator", []int64{2}),
 	}}
-	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{2}})
+	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{2}}, &sessionRevokerSpy{})
 
 	_, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), "42"), usecase.RoleAdminsInput{
 		RoleID: 2,
@@ -141,8 +233,9 @@ func newAdminWithRoles(t *testing.T, id int64, username string, roleIDs []int64)
 }
 
 type storeSpy struct {
-	admins    map[int64]identitydomain.Admin
-	deletedID int64
+	admins      map[int64]identitydomain.Admin
+	updateCalls int
+	deletedID   int64
 }
 
 func (s *storeSpy) FindByUsername(context.Context, string) (identitydomain.Admin, error) {
@@ -170,6 +263,7 @@ func (s *storeSpy) Create(_ context.Context, admin identitydomain.Admin) (identi
 }
 
 func (s *storeSpy) Update(_ context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
+	s.updateCalls++
 	if s.admins != nil {
 		s.admins[admin.ID] = admin
 	}
@@ -217,4 +311,14 @@ func testIDSet(ids []int64) map[int64]struct{} {
 		out[id] = struct{}{}
 	}
 	return out
+}
+
+type sessionRevokerSpy struct {
+	adminIDs []int64
+	err      error
+}
+
+func (s *sessionRevokerSpy) RevokeLoginSessions(_ context.Context, adminID int64) error {
+	s.adminIDs = append(s.adminIDs, adminID)
+	return s.err
 }

@@ -3,7 +3,8 @@ import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, useModel } from '@umijs/max';
 import { App } from 'antd';
 import { createStyles } from 'antd-style';
-import React, { startTransition } from 'react';
+import React from 'react';
+import { flushSync } from 'react-dom';
 
 import { Footer } from '@/components';
 import { login } from '@/services/admin';
@@ -45,7 +46,7 @@ const safeRedirect = (redirect: string | null, fallback: string): string => {
 const Login: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
-  const { initialState, setInitialState } = useModel('@@initialState');
+  const { setInitialState } = useModel('@@initialState');
 
   return (
     <div className={styles.container}>
@@ -59,12 +60,12 @@ const Login: React.FC = () => {
             subTitle="统一后台管理基础框架"
             initialValues={{ username: 'admin' }}
             onFinish={async (values) => {
-              await login({
+              const result = await login({
                 username: String(values.username ?? ''),
                 password: String(values.password ?? ''),
               });
-              const currentUser = await initialState?.fetchUserInfo?.();
-              startTransition(() => {
+              const currentUser = result.user;
+              flushSync(() => {
                 setInitialState((state) => ({ ...state, currentUser }));
               });
               message.success('登录成功');
@@ -85,6 +86,7 @@ const Login: React.FC = () => {
               fieldProps={{
                 size: 'large',
                 prefix: <UserOutlined />,
+                autoComplete: 'username',
               }}
               placeholder="用户名：admin"
               rules={[{ required: true, message: '请输入用户名' }]}
@@ -94,8 +96,9 @@ const Login: React.FC = () => {
               fieldProps={{
                 size: 'large',
                 prefix: <LockOutlined />,
+                autoComplete: 'current-password',
               }}
-              placeholder="密码：123456"
+              placeholder="请输入密码"
               rules={[{ required: true, message: '请输入密码' }]}
             />
           </LoginForm>

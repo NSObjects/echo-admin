@@ -125,7 +125,7 @@ func TestSetRoleAdminsRequiresPermissionAndRecordsOperation(t *testing.T) {
 
 func newIdentityEcho(authErr error) (*echo.Echo, *identityStore, *operationRecorder, *identityAuthorizer) {
 	store := &identityStore{}
-	uc := identityusecase.New(store, identityRoleScope{})
+	uc := identityusecase.New(store, identityRoleScope{}, identitySessionRevoker{})
 	auth := &identityAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
 	handler := identityhttp.New(uc, auth, recorder)
@@ -217,6 +217,12 @@ func (a *identityAuthorizer) RequireRoutePermission(_ context.Context, permissio
 
 type operationRecorder struct {
 	records []auditusecase.OperationInput
+}
+
+type identitySessionRevoker struct{}
+
+func (identitySessionRevoker) RevokeLoginSessions(context.Context, int64) error {
+	return nil
 }
 
 func (r *operationRecorder) RecordOperation(_ context.Context, input auditusecase.OperationInput) (auditusecase.OperationLog, error) {

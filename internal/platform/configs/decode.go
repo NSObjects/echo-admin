@@ -15,11 +15,9 @@ const (
 	configFormatYAML = "yaml"
 	configFormatYML  = "yml"
 
-	insecureDevelopmentJWTSecret = "dev-only-echo-admin-secret-change-me"
-	removedDefaultAdminPassword  = "123456"
-	minJWTSecretLength           = 32
-	minAdminPasswordLength       = 8
-	maxAdminPasswordLength       = 72
+	removedDefaultAdminPassword = "123456"
+	minAdminPasswordLength      = 8
+	maxAdminPasswordLength      = 72
 )
 
 func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error) {
@@ -54,7 +52,6 @@ func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error
 func Normalize(cfg Config) Config {
 	cfg = normalizeAppDefaults(cfg)
 	cfg = normalizeLogDefaults(cfg)
-	cfg = normalizeJWTDefaults(cfg)
 	cfg = normalizeAdminDefaults(cfg)
 	cfg = normalizeResourceDefaults(cfg)
 	return normalizeTracingDefaults(cfg)
@@ -94,14 +91,6 @@ func normalizeLogDefaults(cfg Config) Config {
 	return cfg
 }
 
-func normalizeJWTDefaults(cfg Config) Config {
-	cfg.JWT.Secret = strings.TrimSpace(cfg.JWT.Secret)
-	if cfg.JWT.SkipPaths == nil {
-		cfg.JWT.SkipPaths = []string{"/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"}
-	}
-	return cfg
-}
-
 func normalizeAdminDefaults(cfg Config) Config {
 	if strings.TrimSpace(cfg.Admin.UploadDir) == "" {
 		cfg.Admin.UploadDir = DefaultUploadDir
@@ -111,6 +100,13 @@ func normalizeAdminDefaults(cfg Config) Config {
 }
 
 func normalizeResourceDefaults(cfg Config) Config {
+	cfg.MySQL.Host = strings.TrimSpace(cfg.MySQL.Host)
+	cfg.MySQL.Database = strings.TrimSpace(cfg.MySQL.Database)
+	cfg.MySQL.Username = strings.TrimSpace(cfg.MySQL.Username)
+	cfg.MySQL.Password = strings.TrimSpace(cfg.MySQL.Password)
+	if cfg.MySQL.Port == 0 {
+		cfg.MySQL.Port = DefaultMySQLPort
+	}
 	if cfg.MySQL.MaxOpenConns == 0 {
 		cfg.MySQL.MaxOpenConns = DefaultMySQLMaxOpenConns
 	}
@@ -169,9 +165,6 @@ func Validate(cfg Config) error {
 	if err := validateLogConfig(cfg.Log); err != nil {
 		return err
 	}
-	if err := validateJWTConfig(cfg.JWT); err != nil {
-		return err
-	}
 	if err := validateAdminConfig(cfg.Admin); err != nil {
 		return err
 	}
@@ -182,7 +175,6 @@ func applyEnvListOverrides(cfg *Config) {
 	if cfg == nil {
 		return
 	}
-	applyEnvList(envName("JWT_SKIP_PATHS"), &cfg.JWT.SkipPaths)
 	applyEnvList(envName("HTTP_CORS_ALLOW_ORIGINS"), &cfg.HTTP.CORS.AllowOrigins)
 	applyEnvList(envName("HTTP_CORS_ALLOW_METHODS"), &cfg.HTTP.CORS.AllowMethods)
 	applyEnvList(envName("HTTP_CORS_ALLOW_HEADERS"), &cfg.HTTP.CORS.AllowHeaders)
@@ -247,23 +239,6 @@ func validateLogConfig(cfg LogConfig) error {
 	}
 }
 
-func validateJWTConfig(cfg JWTConfig) error {
-	if !cfg.Enabled {
-		return nil
-	}
-	secret := strings.TrimSpace(cfg.Secret)
-	if secret == "" {
-		return errors.New("jwt secret is required when jwt is enabled")
-	}
-	if secret == insecureDevelopmentJWTSecret {
-		return errors.New("jwt secret must not use the removed development default")
-	}
-	if len(secret) < minJWTSecretLength {
-		return errors.New("jwt secret must be at least 32 characters when jwt is enabled")
-	}
-	return nil
-}
-
 func validateAdminConfig(cfg AdminConfig) error {
 	if strings.TrimSpace(cfg.UploadDir) == "" {
 		return errors.New("admin upload_dir is required")
@@ -320,6 +295,9 @@ func hasWildcardOrigin(origins []string) bool {
 }
 
 func validateMySQLConfig(cfg MySQLConfig) error {
+	if cfg.Port < 0 || cfg.Port > 65535 {
+		return errors.New("mysql port must be between 1 and 65535")
+	}
 	if cfg.MaxOpenConns < 0 {
 		return errors.New("mysql max_open_conns must not be negative")
 	}
@@ -332,8 +310,17 @@ func validateMySQLConfig(cfg MySQLConfig) error {
 	if cfg.PingTimeoutSeconds < 0 {
 		return errors.New("mysql ping_timeout_seconds must not be negative")
 	}
-	if cfg.Enabled && strings.TrimSpace(cfg.DSN) == "" {
-		return errors.New("mysql dsn is required when mysql is enabled")
+	if cfg.Enabled && cfg.Port == 0 {
+		return errors.New("mysql port is required when mysql is enabled")
+	}
+	if cfg.Enabled && strings.TrimSpace(cfg.Host) == "" {
+		return errors.New("mysql host is required when mysql is enabled")
+	}
+	if cfg.Enabled && strings.TrimSpace(cfg.Database) == "" {
+		return errors.New("mysql database is required when mysql is enabled")
+	}
+	if cfg.Enabled && strings.TrimSpace(cfg.Username) == "" {
+		return errors.New("mysql username is required when mysql is enabled")
 	}
 	if cfg.Enabled && cfg.MaxIdleConns > cfg.MaxOpenConns {
 		return errors.New("mysql max_idle_conns must not exceed max_open_conns")
@@ -432,9 +419,6 @@ func coreEnvKeys() []string {
 		"log::format",
 		"log::output",
 		"log::caller",
-		"jwt::enabled",
-		"jwt::secret",
-		"jwt::skip_paths",
 	}
 }
 
@@ -451,6 +435,7 @@ func httpEnvKeys() []string {
 		"http::request_context_disabled",
 		"http::request_log_disabled",
 		"http::gzip_disabled",
+		"http::secure_cookies",
 		"http::cors::enabled",
 		"http::cors::allow_origins",
 		"http::cors::allow_methods",
@@ -463,12 +448,7 @@ func httpEnvKeys() []string {
 
 func resourceEnvKeys() []string {
 	return []string{
-		"mysql::enabled",
-		"mysql::dsn",
-		"mysql::max_open_conns",
-		"mysql::max_idle_conns",
-		"mysql::conn_max_lifetime_seconds",
-		"mysql::ping_timeout_seconds",
+		"mysql::password",
 		"redis::enabled",
 		"redis::address",
 		"redis::username",

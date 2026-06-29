@@ -18,7 +18,7 @@
 ├── cmd/                         # CLI 入口，默认读取 configs/config.toml
 ├── configs/                     # 静态配置示例和配置说明
 ├── internal/boot/               # composition root，负责装配资源、模块和路由
-├── internal/modules/auth/       # 登录认证、JWT 签发、当前用户和授权判断
+├── internal/modules/auth/       # 登录会话、当前用户和授权判断
 ├── internal/modules/identity/   # 管理员管理
 ├── internal/modules/access/     # 角色权限和菜单管理
 ├── internal/modules/apitoken/    # API Token 管理和 token 认证
@@ -46,7 +46,7 @@ docker compose up mysql
 再启动 API：
 
 ```bash
-export ECHO_ADMIN_JWT_SECRET="$(openssl rand -base64 32)"
+export ECHO_ADMIN_MYSQL_PASSWORD="echo_admin_dev_password"
 export ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD="replace-with-a-private-password"
 go run main.go --config configs/config.toml
 ```
@@ -60,14 +60,14 @@ curl http://127.0.0.1:9322/api/ready
 curl http://127.0.0.1:9322/api/capabilities
 ```
 
-第一次启动会在 MySQL 中创建权限目录、API 目录、基础菜单、`super_admin` 角色、系统配置、状态字典和一个本地管理员。管理员账号固定为 `admin`，密码来自 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`；该密码只在管理员不存在时使用，后续启动不会重置已修改的密码。
+第一次启动会在 MySQL 中创建权限目录、API 目录、基础菜单、`super_admin` 角色、系统配置、状态字典和一个本地管理员。管理员账号固定为 `admin`，密码来自 `admin.bootstrap_password`，也可以用 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD` 覆盖；该密码只在管理员不存在时使用，后续启动不会重置已修改的密码。
 
 ```text
 username: admin
-password: <ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD>
+password: <admin.bootstrap_password 或 ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD>
 ```
 
-`super_admin` 是根角色，默认拥有全部权限、全部基础菜单、全部 API、全部按钮、全部数据角色和默认入口 `/dashboard`。管理员可以拥有多个角色，JWT 会携带当前生效的 `role_id`；切换角色后后端会重新签发只包含该角色权限的新 token，前端菜单、按钮权限和数据权限也会随之刷新。退出登录会把当前 JWT 的 SHA-256 哈希写入服务端黑名单，旧 token 不能继续访问私有接口。
+`super_admin` 是根角色，默认拥有全部权限、全部基础菜单、全部 API、全部按钮、全部数据角色和默认入口 `/dashboard`。管理员可以拥有多个角色；浏览器登录使用服务端 Login Session 和 HttpOnly cookie，当前生效角色保存在本次登录会话中。切换角色后后端更新当前登录会话，前端菜单、按钮权限和数据权限随 `/api/auth/me` 刷新。退出登录只撤销当前登录会话，`logout-others` 可撤销同一管理员的其他登录会话。
 
 前端：
 
@@ -77,23 +77,20 @@ npm install
 npm run dev
 ```
 
-前端 dev server 默认把 `/api` 代理到 `http://127.0.0.1:9322`；如需连接其他后端，设置 `ECHO_ADMIN_WEB_API_TARGET`。生产部署按同源 `/api` 访问，登录后通过 `Authorization: Bearer <token>` 调用后端。
+前端 dev server 默认把 `/api` 代理到 `http://127.0.0.1:9322`；如需连接其他后端，设置 `ECHO_ADMIN_WEB_API_TARGET`。生产部署按同源 `/api` 访问，浏览器登录后通过 cookie 携带登录会话，unsafe method 会自动带 `X-CSRF-Token`。机器客户端继续使用 `X-API-Token`。
 
 ## 配置
 
 默认配置文件是 `configs/config.toml`。配置支持 TOML、YAML、JSON，未知配置字段会导致启动失败。环境变量前缀是 `ECHO_ADMIN_`。
 
-本地默认启用 JWT，并跳过这些公开路径：
+浏览器后台默认使用 Login Session；服务端只把 opaque session token 写入 HttpOnly cookie，MySQL 只保存 SHA-256 哈希。状态变更请求使用 Echo CSRF middleware，前端从 `csrf_token` cookie 读取并发送 `X-CSRF-Token`。生产 HTTPS 部署应开启 secure cookie：
 
 ```toml
-[jwt]
-enabled = true
-skip_paths = ["/api/health", "/api/info", "/api/ready", "/api/capabilities", "/api/auth/login"]
+[http]
+secure_cookies = true
 ```
 
-必须通过 `ECHO_ADMIN_JWT_SECRET` 或 Secret 管理系统提供 JWT secret；仓库配置不会提供可启动的默认签名密钥。
-
-首次启动空库前必须设置 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`。该值必须是 8 到 72 个字符，且不能使用已移除的公开默认密码 `123456`。
+数据库 host、port、database、username 和连接池等非敏感拓扑配置写在配置文件的 `[mysql]` 中；MySQL 密码可以写在私有配置文件，也可以由 `ECHO_ADMIN_MYSQL_PASSWORD` 注入。首次启动空库前必须配置 `admin.bootstrap_password` 或 `ECHO_ADMIN_ADMIN_BOOTSTRAP_PASSWORD`。该值必须是 8 到 72 个字符，且不能使用已移除的公开默认密码 `123456`。
 
 可选 capability 默认关闭：
 
@@ -143,7 +140,7 @@ internal/modules/audit/          # 操作日志、登录日志和系统错误日
 
 授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。当前生效角色决定本次请求的权限集合，已分配但未激活的其他角色不会参与授权。
 
-`auth` 模块提供登录、当前用户、当前用户资料更新、角色切换、当前用户改密码、服务端退出登录和权限判断。JWT 只保存当前生效角色；退出登录和当前用户改密码都会撤销当前 bearer token，JWT middleware 每次验签成功后都会检查黑名单，已撤销且未过期的 token 统一按未授权处理。黑名单表只保存 token 哈希和过期时间，不保存原始 JWT。
+`auth` 模块提供登录、当前用户、当前用户资料更新、角色切换、当前用户改密码、服务端退出登录和权限判断。浏览器登录态是 MySQL 持久化的 Login Session；cookie 中只保存 opaque token，表中只保存 token 哈希、当前角色、idle 过期时间、绝对过期时间和撤销信息。登录会话校验发生在 server middleware：过期、撤销、管理员不可用或角色不可用都会按未授权处理。当前用户改密码只撤销其他会话并保留当前会话；管理员被禁用、删除或被重置密码会撤销该管理员全部会话。API Token 是独立的机器客户端认证路径，不复用浏览器 cookie。
 
 `access` 模块提供权限目录、API 目录、角色树、数据权限、菜单管理和菜单按钮管理。权限目录、API 目录、菜单 meta 和菜单按钮会持久化到 MySQL，便于初始化检查和后台审计；后台私有 handler 会同时校验 permission token、当前 route 的 method/path API 记录，以及普通角色持有的 `api_ids`。`super_admin` 默认拥有全部权限、全部基础菜单、全部菜单按钮、全部数据角色和全部初始化 API，新增 API 记录不会把根角色锁在门外，但普通角色必须显式分配对应 API 后才能访问该接口。角色通过 `parent_id` 形成委派树：`super_admin` 可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限、菜单、API、菜单按钮或数据角色。`data_role_ids` 是当前角色可见的管理员数据范围，管理员列表按这些角色过滤；管理员创建、更新和删除仍按可分配角色边界校验。菜单项通过 `permission` token 控制可见性，菜单记录同时保存 `hidden`、`component`、`keep_alive`、`default_menu`、`close_tab`、`active_name` 和 `transition_type` 等 gin-vue-admin 风格路由元信息。前端静态路由只注册页面，最终菜单显示以后端 `/api/auth/me` 返回的菜单为准。
 
@@ -173,9 +170,10 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | Method | Path | 用途 |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | 管理员登录 |
-| `POST` | `/api/auth/role` | 切换当前生效角色并重新签发 token |
-| `POST` | `/api/auth/logout` | 服务端退出登录并拉黑当前 JWT |
-| `POST` | `/api/auth/password` | 当前管理员修改密码并拉黑当前 JWT |
+| `POST` | `/api/auth/role` | 切换当前登录会话的生效角色 |
+| `POST` | `/api/auth/logout` | 服务端退出当前登录会话 |
+| `POST` | `/api/auth/logout-others` | 撤销同一管理员的其他登录会话 |
+| `POST` | `/api/auth/password` | 当前管理员修改密码并撤销其他登录会话 |
 | `GET` | `/api/auth/me` | 当前管理员 |
 | `PATCH` | `/api/auth/me` | 更新当前管理员资料 |
 | `GET` | `/api/admins` | 管理员列表 |

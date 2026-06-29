@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
+	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
@@ -23,7 +23,8 @@ const (
 	loginAttemptKeyMaxBytes = 128
 )
 
-// Store persists auth-owned runtime data such as revoked JWTs.
+// Store persists auth-owned runtime data such as login sessions and failed
+// login attempt counters.
 type Store struct {
 	db *gorm.DB
 }
@@ -36,59 +37,122 @@ func NewStore(ctx context.Context, db *gorm.DB) (*Store, error) {
 	if db == nil {
 		return nil, errors.New("create auth store: nil db")
 	}
-	if err := db.WithContext(ctx).AutoMigrate(&jwtBlacklistModel{}, &loginAttemptModel{}); err != nil {
+	if err := db.WithContext(ctx).AutoMigrate(&loginSessionModel{}, &loginAttemptModel{}); err != nil {
 		return nil, apperr.WrapDatabase(err, "migrate auth tables")
 	}
 	return &Store{db: db}, nil
 }
 
-// AddJWTBlacklist records a revoked JWT hash. The operation is idempotent so
-// repeated logout requests keep the revocation active until the latest expiry.
-func (s *Store) AddJWTBlacklist(ctx context.Context, entry usecase.JWTBlacklistEntry) error {
+// CreateLoginSession stores a new browser login session.
+func (s *Store) CreateLoginSession(ctx context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {
+	if err := ctx.Err(); err != nil {
+		return authdomain.LoginSession{}, err
+	}
+	model := loginSessionModelFromDomain(session)
+	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return authdomain.LoginSession{}, apperr.WrapDatabase(err, "create login session")
+	}
+	return model.toDomain()
+}
+
+// FindLoginSessionByTokenHash reads an active or historical session by token hash.
+func (s *Store) FindLoginSessionByTokenHash(ctx context.Context, tokenHash string) (authdomain.LoginSession, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return authdomain.LoginSession{}, false, err
+	}
+	tokenHash = strings.TrimSpace(tokenHash)
+	if tokenHash == "" {
+		return authdomain.LoginSession{}, false, nil
+	}
+	var model loginSessionModel
+	err := s.db.WithContext(ctx).First(&model, "token_hash = ?", tokenHash).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return authdomain.LoginSession{}, false, nil
+	}
+	if err != nil {
+		return authdomain.LoginSession{}, false, apperr.WrapDatabase(err, "find login session")
+	}
+	session, err := model.toDomain()
+	if err != nil {
+		return authdomain.LoginSession{}, false, err
+	}
+	return session, true, nil
+}
+
+// RefreshLoginSession updates last-seen metadata for a still-active session.
+func (s *Store) RefreshLoginSession(ctx context.Context, session authdomain.LoginSession) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	hash := strings.TrimSpace(entry.TokenHash)
-	if hash == "" {
-		return apperr.NewBadRequest("invalid jwt token")
-	}
-	now := time.Now().UTC()
-	model := jwtBlacklistModel{
-		TokenHash: hash,
-		ExpiresAt: entry.ExpiresAt.UTC(),
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
 	err := s.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "token_hash"}},
-			DoUpdates: clause.AssignmentColumns([]string{"expires_at", "updated_at"}),
-		}).
-		Create(&model).Error
+		Model(&loginSessionModel{}).
+		Where("id = ? AND revoked_at IS NULL", session.ID).
+		Updates(map[string]any{
+			"last_seen_at":    session.LastSeenAt,
+			"idle_expires_at": session.IdleExpiresAt,
+			"updated_at":      session.UpdatedAt,
+		}).Error
 	if err != nil {
-		return apperr.WrapDatabase(err, "record jwt blacklist")
+		return apperr.WrapDatabase(err, "refresh login session")
 	}
 	return nil
 }
 
-// JWTBlacklisted reports whether a JWT hash is still revoked at the supplied time.
-func (s *Store) JWTBlacklisted(ctx context.Context, tokenHash string, now time.Time) (bool, error) {
+// UpdateLoginSessionRole changes the active role for the current browser login.
+func (s *Store) UpdateLoginSessionRole(ctx context.Context, sessionID, roleID int64, now time.Time) error {
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return err
 	}
-	tokenHash = strings.TrimSpace(tokenHash)
-	if tokenHash == "" {
-		return false, nil
+	result := s.db.WithContext(ctx).
+		Model(&loginSessionModel{}).
+		Where("id = ? AND revoked_at IS NULL", sessionID).
+		Updates(map[string]any{
+			"active_role_id": roleID,
+			"updated_at":     now.UTC(),
+		})
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, "update login session role")
 	}
-	var count int64
-	err := s.db.WithContext(ctx).
-		Model(&jwtBlacklistModel{}).
-		Where("token_hash = ? AND expires_at > ?", tokenHash, now.UTC()).
-		Count(&count).Error
+	if result.RowsAffected == 0 {
+		return apperr.NewUnauthorized()
+	}
+	return nil
+}
+
+// RevokeLoginSession revokes one login session.
+func (s *Store) RevokeLoginSession(ctx context.Context, sessionID int64, reason string, now time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	err := s.revokeSessions(ctx, now, reason, "id = ? AND revoked_at IS NULL", sessionID)
 	if err != nil {
-		return false, apperr.WrapDatabase(err, "check jwt blacklist")
+		return apperr.WrapDatabase(err, "revoke login session")
 	}
-	return count > 0, nil
+	return nil
+}
+
+// RevokeOtherLoginSessions revokes every login session except the current one.
+func (s *Store) RevokeOtherLoginSessions(ctx context.Context, adminID, keepSessionID int64, reason string, now time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	err := s.revokeSessions(ctx, now, reason, "admin_id = ? AND id <> ? AND revoked_at IS NULL", adminID, keepSessionID)
+	if err != nil {
+		return apperr.WrapDatabase(err, "revoke other login sessions")
+	}
+	return nil
+}
+
+// RevokeLoginSessions revokes all login sessions for one administrator.
+func (s *Store) RevokeLoginSessions(ctx context.Context, adminID int64, reason string, now time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	err := s.revokeSessions(ctx, now, reason, "admin_id = ? AND revoked_at IS NULL", adminID)
+	if err != nil {
+		return apperr.WrapDatabase(err, "revoke login sessions")
+	}
+	return nil
 }
 
 // CheckLoginAttempt rejects a login when the hashed username/client key is
@@ -149,18 +213,6 @@ func (s *Store) ResetLoginAttempts(ctx context.Context, key string) error {
 	return nil
 }
 
-type jwtBlacklistModel struct {
-	ID        int64     `gorm:"primaryKey"`
-	TokenHash string    `gorm:"type:char(64);not null;uniqueIndex"`
-	ExpiresAt time.Time `gorm:"not null;index"`
-	CreatedAt time.Time `gorm:"not null"`
-	UpdatedAt time.Time `gorm:"not null"`
-}
-
-func (jwtBlacklistModel) TableName() string {
-	return "auth_jwt_blacklists"
-}
-
 type loginAttemptModel struct {
 	AttemptKey    string     `gorm:"primaryKey;type:varchar(128)"`
 	Failures      int        `gorm:"not null"`
@@ -173,6 +225,62 @@ type loginAttemptModel struct {
 
 func (loginAttemptModel) TableName() string {
 	return "auth_login_attempts"
+}
+
+type loginSessionModel struct {
+	ID                int64      `gorm:"primaryKey"`
+	AdminID           int64      `gorm:"not null;index"`
+	ActiveRoleID      int64      `gorm:"not null"`
+	TokenHash         string     `gorm:"type:char(64);not null;uniqueIndex"`
+	IP                string     `gorm:"type:varchar(64);not null"`
+	UserAgent         string     `gorm:"type:varchar(512);not null"`
+	CreatedAt         time.Time  `gorm:"not null"`
+	LastSeenAt        time.Time  `gorm:"not null"`
+	IdleExpiresAt     time.Time  `gorm:"not null;index"`
+	AbsoluteExpiresAt time.Time  `gorm:"not null;index"`
+	RevokedAt         *time.Time `gorm:"index"`
+	RevokedReason     string     `gorm:"type:varchar(64);not null"`
+	UpdatedAt         time.Time  `gorm:"not null"`
+}
+
+func (loginSessionModel) TableName() string {
+	return "login_sessions"
+}
+
+func loginSessionModelFromDomain(session authdomain.LoginSession) loginSessionModel {
+	return loginSessionModel{
+		ID:                session.ID,
+		AdminID:           session.AdminID,
+		ActiveRoleID:      session.ActiveRoleID,
+		TokenHash:         session.TokenHash,
+		IP:                truncate(session.IP, 64),
+		UserAgent:         truncate(session.UserAgent, 512),
+		CreatedAt:         session.CreatedAt,
+		LastSeenAt:        session.LastSeenAt,
+		IdleExpiresAt:     session.IdleExpiresAt,
+		AbsoluteExpiresAt: session.AbsoluteExpiresAt,
+		RevokedAt:         session.RevokedAt,
+		RevokedReason:     truncate(session.RevokedReason, 64),
+		UpdatedAt:         session.UpdatedAt,
+	}
+}
+
+func (m loginSessionModel) toDomain() (authdomain.LoginSession, error) {
+	return authdomain.RestoreLoginSession(
+		m.ID,
+		m.AdminID,
+		m.ActiveRoleID,
+		m.TokenHash,
+		m.IP,
+		m.UserAgent,
+		m.CreatedAt,
+		m.LastSeenAt,
+		m.IdleExpiresAt,
+		m.AbsoluteExpiresAt,
+		m.RevokedAt,
+		m.RevokedReason,
+		m.UpdatedAt,
+	)
 }
 
 func (s *Store) findLoginAttempt(ctx context.Context, key string) (loginAttemptModel, bool, error) {
@@ -259,4 +367,27 @@ func normalizeLoginAttemptKey(key string) (string, error) {
 func isDuplicateKey(err error) bool {
 	var mysqlErr *drivermysql.MySQLError
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
+}
+
+func (s *Store) revokeSessions(ctx context.Context, now time.Time, reason, where string, args ...any) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "revoked"
+	}
+	return s.db.WithContext(ctx).
+		Model(&loginSessionModel{}).
+		Where(where, args...).
+		Updates(map[string]any{
+			"revoked_at":     now.UTC(),
+			"revoked_reason": truncate(reason, 64),
+			"updated_at":     now.UTC(),
+		}).Error
+}
+
+func truncate(value string, max int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= max {
+		return value
+	}
+	return value[:max]
 }
