@@ -54,6 +54,9 @@ export async function getInitialState(): Promise<{
         return undefined;
       }
       const { pathname, search, hash } = history.location;
+      if (pathname === loginPath || pathname === setupPath) {
+        return undefined;
+      }
       history.replace(
         `${loginPath}?redirect=${encodeURIComponent(pathname + search + hash)}`,
       );

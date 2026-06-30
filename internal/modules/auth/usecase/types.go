@@ -29,7 +29,7 @@ type MenuReader interface {
 
 // APIReader reads managed backend routes needed for API-level authorization.
 type APIReader interface {
-	ListAPIs(context.Context) ([]accessdomain.API, error)
+	FindAPIByRoute(context.Context, string, string) (accessdomain.API, error)
 }
 
 // LoginRecorder stores sign-in attempts without exposing audit storage details.

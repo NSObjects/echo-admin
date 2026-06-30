@@ -78,6 +78,9 @@ func (a *App) mountModules() error {
 	if a == nil {
 		return errors.New("mount modules: nil app")
 	}
+	if err := a.installAPIAuthorization(); err != nil {
+		return fmt.Errorf("install api authorization: %w", err)
+	}
 	return mountModules(Context{
 		Config:    a.config,
 		Server:    a.server,

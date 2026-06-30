@@ -20,15 +20,12 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
-func TestCreateRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestCreateRoleRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/roles", `{"code":"operator","name":"运营","permissions":["log:read"],"menu_ids":[1],"active":true}`, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create role status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleCreate)
 	}
 	if store.createRoleCalls != 1 {
 		t.Fatalf("createRoleCalls = %d, want 1", store.createRoleCalls)
@@ -47,16 +44,13 @@ func TestCreateRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestCopyRoleRequiresCreatePermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestCopyRoleRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 	store.roles = twoRoles(t)
 
 	rec := doJSON(t, e, http.MethodPost, "/api/roles/2/copy", `{"code":"operator_copy","name":"运营副本"}`, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("copy role status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleCreate)
 	}
 	if store.createRoleCalls != 1 {
 		t.Fatalf("createRoleCalls = %d, want 1", store.createRoleCalls)
@@ -72,54 +66,21 @@ func TestCopyRoleRequiresCreatePermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListMenusRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newAccessEcho(apperr.NewPermissionDenied("menu", "read"))
-
-	rec := doJSON(t, e, http.MethodGet, "/api/menus", "", "42")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("list menus status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.listMenuCalls != 0 {
-		t.Fatalf("listMenuCalls = %d, want 0", store.listMenuCalls)
-	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
-	}
-}
-
 func TestListPermissionsRequiresRoleReadPermission(t *testing.T) {
-	e, _, _, auth := newAccessEcho(nil)
+	e, _, _ := newAccessEcho()
 
 	rec := doJSON(t, e, http.MethodGet, "/api/permissions", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list permissions status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleRead)
-	}
-}
-
-func TestListPermissionsRejectsUnauthorizedBeforeCatalog(t *testing.T) {
-	e, _, _, auth := newAccessEcho(apperr.NewPermissionDenied("role", "read"))
-
-	rec := doJSON(t, e, http.MethodGet, "/api/permissions", "", "42")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("list permissions status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleRead)
-	}
 }
 
 func TestCreateMenuAcceptsMetaAndButtons(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+	e, store, recorder := newAccessEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/menus", `{"name":"菜单管理","path":"/menus","icon":"menu","component":"./Menus","meta":{"keep_alive":true},"permission":"menu:read","sort":40,"active":true,"buttons":[{"name":"create","description":"新增菜单"}]}`, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create menu status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionMenuCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionMenuCreate)
 	}
 	if store.createdMenu.Component != "./Menus" {
 		t.Fatalf("created menu component = %q, want ./Menus", store.createdMenu.Component)
@@ -135,8 +96,8 @@ func TestCreateMenuAcceptsMetaAndButtons(t *testing.T) {
 	}
 }
 
-func TestReadMenuRequiresPermission(t *testing.T) {
-	e, store, _, auth := newAccessEcho(nil)
+func TestReadMenu(t *testing.T) {
+	e, store, _ := newAccessEcho()
 	menu, err := accessdomain.RestoreMenu(2, 0, "菜单管理", "/menus", "menu", false, "./Menus", accessdomain.MenuMeta{}, accessdomain.PermissionMenuRead, 20, true, nil, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreMenu() error = %v", err)
@@ -147,21 +108,15 @@ func TestReadMenuRequiresPermission(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get menu status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionMenuRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionMenuRead)
-	}
 }
 
-func TestDeleteRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestDeleteRoleRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 	store.roles = twoRoles(t)
 
 	rec := doJSON(t, e, http.MethodDelete, "/api/roles/2", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete role status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleDelete)
 	}
 	if store.deletedRoleID != 2 {
 		t.Fatalf("deletedRoleID = %d, want 2", store.deletedRoleID)
@@ -174,8 +129,8 @@ func TestDeleteRoleRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestDeleteMenuRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestDeleteMenuRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 	menu, err := accessdomain.RestoreMenu(2, 0, "临时菜单", "/scratch", "menu", false, "./Scratch", accessdomain.MenuMeta{}, "", 20, true, nil, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreMenu() error = %v", err)
@@ -185,9 +140,6 @@ func TestDeleteMenuRequiresPermissionAndRecordsOperation(t *testing.T) {
 	rec := doJSON(t, e, http.MethodDelete, "/api/menus/2", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete menu status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionMenuDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionMenuDelete)
 	}
 	if store.deletedMenuID != 2 {
 		t.Fatalf("deletedMenuID = %d, want 2", store.deletedMenuID)
@@ -200,8 +152,8 @@ func TestDeleteMenuRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestSetMenuRolesRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestSetMenuRolesRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 	store.roles = twoRoles(t)
 	menu, err := accessdomain.RestoreMenu(2, 0, "菜单管理", "/menus", "menu", false, "./Menus", accessdomain.MenuMeta{}, accessdomain.PermissionMenuRead, 20, true, nil, fixedTime(), fixedTime())
 	if err != nil {
@@ -212,9 +164,6 @@ func TestSetMenuRolesRequiresPermissionAndRecordsOperation(t *testing.T) {
 	rec := doJSON(t, e, http.MethodPut, "/api/menus/2/roles", `{"role_ids":[2]}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("set menu roles status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionMenuUpdate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionMenuUpdate)
 	}
 	if len(store.updatedRoles) != 1 || store.updatedRoles[0].ID != 2 {
 		t.Fatalf("updatedRoles = %#v, want role 2 update", store.updatedRoles)
@@ -227,15 +176,12 @@ func TestSetMenuRolesRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestCreateAPIRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestCreateAPIRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/apis", `{"method":"GET","path":"/api/example","description":"示例API","group":"example","permission":"log:read","public":false}`, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create api status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPICreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPICreate)
 	}
 	if got := store.createdAPI.Path; got != "/api/example" {
 		t.Fatalf("created api path = %q, want /api/example", got)
@@ -248,8 +194,8 @@ func TestCreateAPIRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListAPIGroupsRequiresPermission(t *testing.T) {
-	e, store, _, auth := newAccessEcho(nil)
+func TestListAPIGroups(t *testing.T) {
+	e, store, _ := newAccessEcho()
 	firstAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/a", "A", "admin", accessdomain.PermissionAdminRead, false, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI(first) error = %v", err)
@@ -264,13 +210,10 @@ func TestListAPIGroupsRequiresPermission(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list api groups status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPIRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPIRead)
-	}
 }
 
-func TestReadAPIRequiresPermission(t *testing.T) {
-	e, store, _, auth := newAccessEcho(nil)
+func TestReadAPI(t *testing.T) {
+	e, store, _ := newAccessEcho()
 	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI() error = %v", err)
@@ -281,13 +224,10 @@ func TestReadAPIRequiresPermission(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPIRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPIRead)
-	}
 }
 
-func TestReadAPIRolesRequiresPermission(t *testing.T) {
-	e, store, _, auth := newAccessEcho(nil)
+func TestReadAPIRoles(t *testing.T) {
+	e, store, _ := newAccessEcho()
 	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI() error = %v", err)
@@ -299,13 +239,10 @@ func TestReadAPIRolesRequiresPermission(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get api roles status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPIRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPIRead)
-	}
 }
 
-func TestBatchDeleteAPIsRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestBatchDeleteAPIsRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 	firstAPI, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI(first) error = %v", err)
@@ -320,9 +257,6 @@ func TestBatchDeleteAPIsRequiresPermissionAndRecordsOperation(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPIDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPIDelete)
-	}
 	if !sameInt64s(store.deletedAPIIDs, []int64{3, 4}) {
 		t.Fatalf("deletedAPIIDs = %v, want [3 4]", store.deletedAPIIDs)
 	}
@@ -334,8 +268,8 @@ func TestBatchDeleteAPIsRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestDeleteAPIRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newAccessEcho(nil)
+func TestDeleteAPIRecordsOperation(t *testing.T) {
+	e, store, recorder := newAccessEcho()
 	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI() error = %v", err)
@@ -345,9 +279,6 @@ func TestDeleteAPIRequiresPermissionAndRecordsOperation(t *testing.T) {
 	rec := doJSON(t, e, http.MethodDelete, "/api/apis/3", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPIDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPIDelete)
 	}
 	if !sameInt64s(store.deletedAPIIDs, []int64{3}) {
 		t.Fatalf("deletedAPIIDs = %v, want [3]", store.deletedAPIIDs)
@@ -360,18 +291,17 @@ func TestDeleteAPIRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func newAccessEcho(authErr error) (*echo.Echo, *accessStore, *operationRecorder, *accessAuthorizer) {
+func newAccessEcho() (*echo.Echo, *accessStore, *operationRecorder) {
 	store := &accessStore{}
 	uc := accessusecase.New(store, accessAdminRoleReader{})
-	auth := &accessAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
-	handler := accesshttp.New(uc, auth, recorder)
+	handler := accesshttp.New(uc, recorder)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	accesshttp.Register(e.Group("/api"), handler)
-	return e, store, recorder, auth
+	return e, store, recorder
 }
 
 func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
@@ -470,6 +400,18 @@ func (s *accessStore) FindAPIByID(ctx context.Context, id int64) (accessdomain.A
 	return accessdomain.RestoreAPI(id, "GET", "/api/existing", "Existing", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
 }
 
+func (s *accessStore) FindAPIByRoute(ctx context.Context, method, path string) (accessdomain.API, error) {
+	if err := ctx.Err(); err != nil {
+		return accessdomain.API{}, err
+	}
+	for _, api := range s.apis {
+		if api.Method == method && api.Path == path {
+			return api, nil
+		}
+	}
+	return accessdomain.API{}, apperr.NewNotFound("api")
+}
+
 func (s *accessStore) ListAPIs(ctx context.Context) ([]accessdomain.API, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -535,16 +477,6 @@ func (s *accessStore) UpdateMenu(ctx context.Context, menu accessdomain.Menu) (a
 func (s *accessStore) DeleteMenu(_ context.Context, id int64) error {
 	s.deletedMenuID = id
 	return nil
-}
-
-type accessAuthorizer struct {
-	err         error
-	permissions []string
-}
-
-func (a *accessAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
-	a.permissions = append(a.permissions, permission)
-	return a.err
 }
 
 type operationRecorder struct {

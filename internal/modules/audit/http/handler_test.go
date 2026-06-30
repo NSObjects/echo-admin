@@ -11,7 +11,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditdomain "github.com/NSObjects/echo-admin/internal/modules/audit/domain"
 	audithttp "github.com/NSObjects/echo-admin/internal/modules/audit/http"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
@@ -20,117 +19,84 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
-func TestListOperationLogsRequiresPermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestListOperationLogs(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doGET(e, "/api/logs/operations")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("operation logs status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogRead)
 	}
 	if store.listOperationCalls != 1 {
 		t.Fatalf("listOperationCalls = %d, want 1", store.listOperationCalls)
 	}
 }
 
-func TestListLoginLogsRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, _ := newAuditEcho(t, apperr.NewPermissionDenied("log", "read"))
-
-	rec := doGET(e, "/api/logs/logins")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("login logs status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.listLoginCalls != 0 {
-		t.Fatalf("listLoginCalls = %d, want 0", store.listLoginCalls)
-	}
-}
-
-func TestListSystemErrorLogsRequiresPermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestListSystemErrorLogs(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doGET(e, "/api/logs/errors")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("system error logs status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogRead)
 	}
 	if store.listSystemErrorCalls != 1 {
 		t.Fatalf("listSystemErrorCalls = %d, want 1", store.listSystemErrorCalls)
 	}
 }
 
-func TestReadOperationLogRequiresPermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestReadOperationLog(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doGET(e, "/api/logs/operations/1")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get operation log status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogRead)
 	}
 	if store.findOperationCalls != 1 {
 		t.Fatalf("findOperationCalls = %d, want 1", store.findOperationCalls)
 	}
 }
 
-func TestReadLoginLogRequiresPermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestReadLoginLog(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doGET(e, "/api/logs/logins/1")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get login log status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogRead)
 	}
 	if store.findLoginCalls != 1 {
 		t.Fatalf("findLoginCalls = %d, want 1", store.findLoginCalls)
 	}
 }
 
-func TestReadSystemErrorLogRequiresPermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestReadSystemErrorLog(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doGET(e, "/api/logs/errors/1")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get system error log status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogRead)
 	}
 	if store.findSystemErrorCalls != 1 {
 		t.Fatalf("findSystemErrorCalls = %d, want 1", store.findSystemErrorCalls)
 	}
 }
 
-func TestDeleteOperationLogRequiresPermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestDeleteOperationLog(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doDELETE(e, "/api/logs/operations/1")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete operation log status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogDelete)
 	}
 	if !sameInt64s(store.deletedOperationIDs, []int64{1}) {
 		t.Fatalf("deleted operation ids = %v, want [1]", store.deletedOperationIDs)
 	}
 }
 
-func TestBatchDeleteLoginLogsRequiresDeletePermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+func TestBatchDeleteLoginLogsDeletesSelectedRecords(t *testing.T) {
+	e, store := newAuditEcho(t)
 
 	rec := doPOST(e, "/api/logs/logins/batch-delete", `{"ids":[1,2]}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete login logs status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogDelete)
 	}
 	if !sameInt64s(store.deletedLoginIDs, []int64{1, 2}) {
 		t.Fatalf("deleted login ids = %v, want [1 2]", store.deletedLoginIDs)
@@ -138,14 +104,11 @@ func TestBatchDeleteLoginLogsRequiresDeletePermission(t *testing.T) {
 }
 
 func TestResolveSystemErrorLogRequiresResolvePermission(t *testing.T) {
-	e, store, auth := newAuditEcho(t, nil)
+	e, store := newAuditEcho(t)
 
 	rec := doPOST(e, "/api/logs/errors/1/resolve", `{"note":"handled by restart"}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("resolve system error status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionLogResolve {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionLogResolve)
 	}
 	if !store.updatedSystemError.Resolved {
 		t.Fatal("updated system error resolved = false, want true")
@@ -159,7 +122,7 @@ func TestResolveSystemErrorLogRequiresResolvePermission(t *testing.T) {
 }
 
 func TestReopenSystemErrorLogClearsResolution(t *testing.T) {
-	e, store, _ := newAuditEcho(t, nil)
+	e, store := newAuditEcho(t)
 	resolved, err := store.systemErrorLog.Resolve("fixed", 42, fixedTime())
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
@@ -178,18 +141,17 @@ func TestReopenSystemErrorLogClearsResolution(t *testing.T) {
 	}
 }
 
-func newAuditEcho(t *testing.T, authErr error) (*echo.Echo, *auditStore, *auditAuthorizer) {
+func newAuditEcho(t *testing.T) (*echo.Echo, *auditStore) {
 	t.Helper()
 	store := newAuditStore(t)
 	uc := auditusecase.New(store)
-	auth := &auditAuthorizer{err: authErr}
-	handler := audithttp.New(uc, auth)
+	handler := audithttp.New(uc)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	audithttp.Register(e.Group("/api"), handler)
-	return e, store, auth
+	return e, store
 }
 
 func doGET(e *echo.Echo, path string) *httptest.ResponseRecorder {
@@ -336,16 +298,6 @@ func (s *auditStore) UpdateSystemErrorLog(_ context.Context, log auditdomain.Sys
 func (s *auditStore) DeleteSystemErrorLogs(_ context.Context, ids []int64) error {
 	s.deletedSystemErrIDs = append([]int64(nil), ids...)
 	return nil
-}
-
-type auditAuthorizer struct {
-	err         error
-	permissions []string
-}
-
-func (a *auditAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
-	a.permissions = append(a.permissions, permission)
-	return a.err
 }
 
 func fixedTime() time.Time {

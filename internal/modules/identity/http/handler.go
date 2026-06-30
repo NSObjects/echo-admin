@@ -7,7 +7,6 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/identity/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -18,11 +17,6 @@ import (
 
 const defaultPageSize = 20
 
-// Authorizer checks whether the current request can perform an action.
-type Authorizer interface {
-	RequireRoutePermission(context.Context, string, string, string) error
-}
-
 // OperationRecorder records administrator mutations for audit.
 type OperationRecorder interface {
 	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
@@ -31,13 +25,12 @@ type OperationRecorder interface {
 // Handler adapts administrator HTTP requests to the identity usecase.
 type Handler struct {
 	usecase   *usecase.Usecase
-	auth      Authorizer
 	operation OperationRecorder
 }
 
 // New creates an identity HTTP handler.
-func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, auth: auth, operation: operation}
+func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
+	return &Handler{usecase: uc, operation: operation}
 }
 
 // Register mounts administrator routes on group.
@@ -52,7 +45,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListAdmins returns administrators.
 func (h *Handler) ListAdmins(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -68,7 +61,7 @@ func (h *Handler) ListAdmins(c *echo.Context) error {
 
 // CreateAdmin creates an administrator.
 func (h *Handler) CreateAdmin(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req createAdminRequest
@@ -95,7 +88,7 @@ func (h *Handler) CreateAdmin(c *echo.Context) error {
 
 // UpdateAdmin updates an administrator.
 func (h *Handler) UpdateAdmin(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "admin")
@@ -126,7 +119,7 @@ func (h *Handler) UpdateAdmin(c *echo.Context) error {
 
 // DeleteAdmin deletes an administrator.
 func (h *Handler) DeleteAdmin(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAdminDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "admin")
@@ -144,7 +137,7 @@ func (h *Handler) DeleteAdmin(c *echo.Context) error {
 
 // ListRoleAdmins returns administrator ids assigned to a role.
 func (h *Handler) ListRoleAdmins(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "role")
@@ -160,7 +153,7 @@ func (h *Handler) ListRoleAdmins(c *echo.Context) error {
 
 // SetRoleAdmins replaces administrator assignments for a role.
 func (h *Handler) SetRoleAdmins(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "role")
@@ -184,13 +177,6 @@ func (h *Handler) SetRoleAdmins(c *echo.Context) error {
 	return httpresp.OK(c, adminIDsResponse{AdminIDs: adminIDs})
 }
 
-func (h *Handler) authorize(c *echo.Context, permission string) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
-}
-
 func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
 	actorID, err := strconv.ParseInt(requestctx.GetUserID(c.Request().Context()), 10, 64)
 	if err != nil {
@@ -212,7 +198,7 @@ func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID,
 }
 
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.auth == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.operation == nil {
 		return apperr.New(apperr.ErrInternalServer, "identity handler is not configured")
 	}
 	return nil

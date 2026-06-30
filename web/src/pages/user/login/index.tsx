@@ -232,6 +232,7 @@ const safeRedirect = (redirect: string | null, fallback: string): string => {
   try {
     const parsed = new URL(redirect, window.location.origin);
     if (parsed.origin !== window.location.origin) return fallback;
+    if (parsed.pathname === loginPath) return fallback;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return fallback;

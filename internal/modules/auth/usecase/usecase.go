@@ -320,11 +320,10 @@ func (u *Usecase) RequirePermission(ctx context.Context, permission string) erro
 	return requirePermission(snapshot, permission)
 }
 
-// RequireRoutePermission verifies both the semantic permission token and the
-// managed API route grant for the active role. The route check is intentionally
-// tied to Echo's registered route pattern, not the raw URL, so IDs and other
-// path parameters do not need to be persisted as concrete values.
-func (u *Usecase) RequireRoutePermission(ctx context.Context, permission, method, path string) error {
+// AuthorizeRoute verifies that the current active role may call the managed
+// API route. The path must be Echo's registered route pattern rather than the
+// raw URL, so IDs and other path parameters are authorized by one catalog row.
+func (u *Usecase) AuthorizeRoute(ctx context.Context, method, path string) error {
 	if err := u.ready(); err != nil {
 		return err
 	}
@@ -338,9 +337,6 @@ func (u *Usecase) RequireRoutePermission(ctx context.Context, permission, method
 	}
 	api, err := u.findRouteAPI(ctx, method, path)
 	if err != nil {
-		return err
-	}
-	if err := requireDeclaredRoutePermissions(snapshot, permission, api.Permission); err != nil {
 		return err
 	}
 	return requireAssignedRouteAPI(snapshot.activeRole, api)
@@ -471,28 +467,14 @@ func (u *Usecase) findRouteAPI(ctx context.Context, method, path string) (access
 	if method == "" || path == "" {
 		return accessdomain.API{}, apperr.NewPermissionDenied("api", "route")
 	}
-	apis, err := u.apis.ListAPIs(ctx)
+	api, err := u.apis.FindAPIByRoute(ctx, method, path)
 	if err != nil {
+		if appErr, ok := apperr.Parse(err); ok && appErr.Code() == apperr.ErrNotFound {
+			return accessdomain.API{}, apperr.NewPermissionDenied("api", path)
+		}
 		return accessdomain.API{}, err
 	}
-	for _, api := range apis {
-		if api.Method == method && api.Path == path {
-			return api, nil
-		}
-	}
-	return accessdomain.API{}, apperr.NewPermissionDenied("api", path)
-}
-
-func requireDeclaredRoutePermissions(snapshot rbacSnapshot, handlerPermission, apiPermission string) error {
-	if apiPermission != "" {
-		if err := requirePermission(snapshot, apiPermission); err != nil {
-			return err
-		}
-	}
-	if handlerPermission == "" || handlerPermission == apiPermission {
-		return nil
-	}
-	return requirePermission(snapshot, handlerPermission)
+	return api, nil
 }
 
 func requireAssignedRouteAPI(role Role, api accessdomain.API) error {

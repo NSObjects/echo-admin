@@ -20,6 +20,7 @@ import (
 	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
@@ -222,8 +223,8 @@ func (s *authStore) ListMenus(context.Context) ([]accessdomain.Menu, error) {
 	return []accessdomain.Menu{s.menu}, nil
 }
 
-func (s *authStore) ListAPIs(context.Context) ([]accessdomain.API, error) {
-	return nil, nil
+func (s *authStore) FindAPIByRoute(context.Context, string, string) (accessdomain.API, error) {
+	return accessdomain.API{}, apperr.NewNotFound("api")
 }
 
 func (s *authStore) CreateLoginSession(_ context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {

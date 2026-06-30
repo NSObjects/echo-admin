@@ -22,6 +22,7 @@ type Store interface {
 	UpdateRole(context.Context, domain.Role) (domain.Role, error)
 	DeleteRole(context.Context, int64) error
 	FindAPIByID(context.Context, int64) (domain.API, error)
+	FindAPIByRoute(context.Context, string, string) (domain.API, error)
 	ListAPIs(context.Context) ([]domain.API, error)
 	CreateAPI(context.Context, domain.API) (domain.API, error)
 	UpdateAPI(context.Context, domain.API) (domain.API, error)

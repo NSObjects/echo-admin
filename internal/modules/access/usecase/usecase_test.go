@@ -615,6 +615,15 @@ func (s *storeSpy) FindAPIByID(_ context.Context, id int64) (accessdomain.API, e
 	return accessdomain.RestoreAPI(id, "GET", "/api/existing", "Existing", "example", accessdomain.PermissionLogRead, false, time.Now(), time.Now())
 }
 
+func (s *storeSpy) FindAPIByRoute(_ context.Context, method, path string) (accessdomain.API, error) {
+	for _, api := range s.apis {
+		if api.Method == method && api.Path == path {
+			return api, nil
+		}
+	}
+	return accessdomain.API{}, apperr.NewNotFound("api")
+}
+
 func (s *storeSpy) ListAPIs(context.Context) ([]accessdomain.API, error) {
 	return s.apis, nil
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	identityhttp "github.com/NSObjects/echo-admin/internal/modules/identity/http"
@@ -21,15 +20,12 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
-func TestCreateAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newIdentityEcho(nil)
+func TestCreateAdminRecordsOperation(t *testing.T) {
+	e, store, recorder := newIdentityEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/admins", `{"username":"operator","display_name":"运营","email":"operator@example.com","password":"operator123","role_ids":[1],"active":true}`, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create admin status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAdminCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAdminCreate)
 	}
 	if store.createCalls != 1 {
 		t.Fatalf("createCalls = %d, want 1", store.createCalls)
@@ -48,23 +44,8 @@ func TestCreateAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListAdminsRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newIdentityEcho(apperr.NewPermissionDenied("admin", "read"))
-
-	rec := doJSON(t, e, http.MethodGet, "/api/admins", "", "42")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("list admins status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.listCalls != 0 {
-		t.Fatalf("listCalls = %d, want 0", store.listCalls)
-	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
-	}
-}
-
-func TestDeleteAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newIdentityEcho(nil)
+func TestDeleteAdminRecordsOperation(t *testing.T) {
+	e, store, recorder := newIdentityEcho()
 	store.admins = map[int64]identitydomain.Admin{
 		7: newAdmin(t, 7, "operator"),
 	}
@@ -72,9 +53,6 @@ func TestDeleteAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
 	rec := doJSON(t, e, http.MethodDelete, "/api/admins/7", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete admin status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAdminDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAdminDelete)
 	}
 	if store.deletedID != 7 {
 		t.Fatalf("deletedID = %d, want 7", store.deletedID)
@@ -87,8 +65,8 @@ func TestDeleteAdminRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListRoleAdminsRequiresPermission(t *testing.T) {
-	e, store, _, auth := newIdentityEcho(nil)
+func TestListRoleAdmins(t *testing.T) {
+	e, store, _ := newIdentityEcho()
 	store.admins = map[int64]identitydomain.Admin{
 		7: newAdmin(t, 7, "operator"),
 	}
@@ -97,13 +75,10 @@ func TestListRoleAdminsRequiresPermission(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get role admins status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleRead)
-	}
 }
 
-func TestSetRoleAdminsRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newIdentityEcho(nil)
+func TestSetRoleAdminsRecordsOperation(t *testing.T) {
+	e, store, recorder := newIdentityEcho()
 	store.admins = map[int64]identitydomain.Admin{
 		7: newAdmin(t, 7, "operator"),
 	}
@@ -111,9 +86,6 @@ func TestSetRoleAdminsRequiresPermissionAndRecordsOperation(t *testing.T) {
 	rec := doJSON(t, e, http.MethodPut, "/api/roles/1/admins", `{"admin_ids":[7]}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("set role admins status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionRoleUpdate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionRoleUpdate)
 	}
 	if len(recorder.records) != 1 {
 		t.Fatalf("operation records = %d, want 1", len(recorder.records))
@@ -123,18 +95,17 @@ func TestSetRoleAdminsRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func newIdentityEcho(authErr error) (*echo.Echo, *identityStore, *operationRecorder, *identityAuthorizer) {
+func newIdentityEcho() (*echo.Echo, *identityStore, *operationRecorder) {
 	store := &identityStore{}
 	uc := identityusecase.New(store, identityRoleScope{}, identitySessionRevoker{})
-	auth := &identityAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
-	handler := identityhttp.New(uc, auth, recorder)
+	handler := identityhttp.New(uc, recorder)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	identityhttp.Register(e.Group("/api"), handler)
-	return e, store, recorder, auth
+	return e, store, recorder
 }
 
 func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
@@ -203,16 +174,6 @@ func (s *identityStore) Update(ctx context.Context, admin identitydomain.Admin) 
 func (s *identityStore) Delete(_ context.Context, id int64) error {
 	s.deletedID = id
 	return nil
-}
-
-type identityAuthorizer struct {
-	err         error
-	permissions []string
-}
-
-func (a *identityAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
-	a.permissions = append(a.permissions, permission)
-	return a.err
 }
 
 type operationRecorder struct {

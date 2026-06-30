@@ -7,7 +7,6 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	"github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
@@ -17,20 +16,14 @@ import (
 
 const defaultPageSize = 20
 
-// Authorizer checks whether the current request can perform an action.
-type Authorizer interface {
-	RequireRoutePermission(context.Context, string, string, string) error
-}
-
 // Handler adapts audit HTTP requests to the audit usecase.
 type Handler struct {
 	usecase *usecase.Usecase
-	auth    Authorizer
 }
 
 // New creates an audit HTTP handler.
-func New(uc *usecase.Usecase, auth Authorizer) *Handler {
-	return &Handler{usecase: uc, auth: auth}
+func New(uc *usecase.Usecase) *Handler {
+	return &Handler{usecase: uc}
 }
 
 // Register mounts audit routes on group.
@@ -53,7 +46,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListOperationLogs returns operation logs.
 func (h *Handler) ListOperationLogs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -69,7 +62,7 @@ func (h *Handler) ListOperationLogs(c *echo.Context) error {
 
 // ReadOperationLog returns one operation log.
 func (h *Handler) ReadOperationLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "operation log")
@@ -85,7 +78,7 @@ func (h *Handler) ReadOperationLog(c *echo.Context) error {
 
 // DeleteOperationLog removes one operation log.
 func (h *Handler) DeleteOperationLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "operation log")
@@ -112,7 +105,7 @@ func (h *Handler) BatchDeleteOperationLogs(c *echo.Context) error {
 
 // ListLoginLogs returns login logs.
 func (h *Handler) ListLoginLogs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -128,7 +121,7 @@ func (h *Handler) ListLoginLogs(c *echo.Context) error {
 
 // ReadLoginLog returns one login log.
 func (h *Handler) ReadLoginLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "login log")
@@ -144,7 +137,7 @@ func (h *Handler) ReadLoginLog(c *echo.Context) error {
 
 // DeleteLoginLog removes one login log.
 func (h *Handler) DeleteLoginLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "login log")
@@ -171,7 +164,7 @@ func (h *Handler) BatchDeleteLoginLogs(c *echo.Context) error {
 
 // ListSystemErrorLogs returns internal API failure logs.
 func (h *Handler) ListSystemErrorLogs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -187,7 +180,7 @@ func (h *Handler) ListSystemErrorLogs(c *echo.Context) error {
 
 // ReadSystemErrorLog returns one system error log.
 func (h *Handler) ReadSystemErrorLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system error log")
@@ -203,7 +196,7 @@ func (h *Handler) ReadSystemErrorLog(c *echo.Context) error {
 
 // ResolveSystemErrorLog marks one system error as handled.
 func (h *Handler) ResolveSystemErrorLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogResolve); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system error log")
@@ -231,7 +224,7 @@ func (h *Handler) ResolveSystemErrorLog(c *echo.Context) error {
 
 // ReopenSystemErrorLog clears the handled state for one system error.
 func (h *Handler) ReopenSystemErrorLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogResolve); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system error log")
@@ -247,7 +240,7 @@ func (h *Handler) ReopenSystemErrorLog(c *echo.Context) error {
 
 // DeleteSystemErrorLog removes one system error log.
 func (h *Handler) DeleteSystemErrorLog(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionLogDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system error log")
@@ -272,15 +265,8 @@ func (h *Handler) BatchDeleteSystemErrorLogs(c *echo.Context) error {
 	return httpresp.OK(c, deletedResponse{IDs: ids})
 }
 
-func (h *Handler) authorize(c *echo.Context, permission string) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
-}
-
 func (h *Handler) deleteIDs(c *echo.Context) ([]int64, error) {
-	if err := h.authorize(c, accessdomain.PermissionLogDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return nil, err
 	}
 	var req idsRequest
@@ -291,7 +277,7 @@ func (h *Handler) deleteIDs(c *echo.Context) ([]int64, error) {
 }
 
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.auth == nil {
+	if h == nil || h.usecase == nil {
 		return apperr.New(apperr.ErrInternalServer, "audit handler is not configured")
 	}
 	return nil

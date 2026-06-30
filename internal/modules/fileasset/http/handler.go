@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/fileasset/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -30,11 +29,6 @@ const (
 	maxUploadBytes  = 10 << 20
 )
 
-// Authorizer checks whether the current request can perform an action.
-type Authorizer interface {
-	RequireRoutePermission(context.Context, string, string, string) error
-}
-
 // OperationRecorder records file mutations for audit.
 type OperationRecorder interface {
 	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
@@ -43,14 +37,13 @@ type OperationRecorder interface {
 // Handler adapts file HTTP requests to the file usecase.
 type Handler struct {
 	usecase   *usecase.Usecase
-	auth      Authorizer
 	operation OperationRecorder
 	uploadDir string
 }
 
 // New creates a file HTTP handler.
-func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder, uploadDir string) *Handler {
-	return &Handler{usecase: uc, auth: auth, operation: operation, uploadDir: uploadDir}
+func New(uc *usecase.Usecase, operation OperationRecorder, uploadDir string) *Handler {
+	return &Handler{usecase: uc, operation: operation, uploadDir: uploadDir}
 }
 
 // Register mounts file routes on group.
@@ -69,7 +62,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListCategories returns the category tree used by file management.
 func (h *Handler) ListCategories(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	categories, err := h.usecase.ListCategories(c.Request().Context())
@@ -81,7 +74,7 @@ func (h *Handler) ListCategories(c *echo.Context) error {
 
 // CreateCategory adds one file category.
 func (h *Handler) CreateCategory(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileCategoryCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req categoryRequest
@@ -109,7 +102,7 @@ func (h *Handler) CreateCategory(c *echo.Context) error {
 
 // UpdateCategory changes one file category.
 func (h *Handler) UpdateCategory(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileCategoryUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "file category")
@@ -142,7 +135,7 @@ func (h *Handler) UpdateCategory(c *echo.Context) error {
 
 // DeleteCategory removes one file category without deleting files.
 func (h *Handler) DeleteCategory(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileCategoryDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "file category")
@@ -166,7 +159,7 @@ func (h *Handler) DeleteCategory(c *echo.Context) error {
 
 // ListFiles returns uploaded file records.
 func (h *Handler) ListFiles(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -182,7 +175,7 @@ func (h *Handler) ListFiles(c *echo.Context) error {
 
 // UploadFile stores one uploaded file and records its metadata.
 func (h *Handler) UploadFile(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileUpload); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	header, err := c.FormFile("file")
@@ -213,7 +206,7 @@ func (h *Handler) UploadFile(c *echo.Context) error {
 
 // ImportURL registers an external HTTP(S) URL as a file asset.
 func (h *Handler) ImportURL(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileUpload); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req importURLRequest
@@ -236,7 +229,7 @@ func (h *Handler) ImportURL(c *echo.Context) error {
 
 // RenameFile updates one file display name.
 func (h *Handler) RenameFile(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "file")
@@ -264,7 +257,7 @@ func (h *Handler) RenameFile(c *echo.Context) error {
 
 // DeleteFile removes one file metadata record and its local upload when present.
 func (h *Handler) DeleteFile(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "file")
@@ -286,10 +279,10 @@ func (h *Handler) DeleteFile(c *echo.Context) error {
 	return httpresp.OK(c, deletedResponse{ID: file.ID})
 }
 
-// ServeUpload returns one local uploaded file after the same route/API grant
-// check used by file metadata reads.
+// ServeUpload returns one local uploaded file after boot-level route
+// authorization has accepted the request.
 func (h *Handler) ServeUpload(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionFileRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	storedName, err := cleanStoredUploadName(c.Param("*"))
@@ -297,13 +290,6 @@ func (h *Handler) ServeUpload(c *echo.Context) error {
 		return err
 	}
 	return c.FileFS(storedName, os.DirFS(h.uploadDir))
-}
-
-func (h *Handler) authorize(c *echo.Context, permission string) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
 }
 
 func (h *Handler) saveUploadedFile(c *echo.Context, header *multipart.FileHeader) (usecase.FileInput, error) {
@@ -384,7 +370,7 @@ func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID,
 }
 
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.auth == nil || h.operation == nil || strings.TrimSpace(h.uploadDir) == "" {
+	if h == nil || h.usecase == nil || h.operation == nil || strings.TrimSpace(h.uploadDir) == "" {
 		return apperr.New(apperr.ErrInternalServer, "file handler is not configured")
 	}
 	return nil

@@ -218,11 +218,11 @@ func newAccessUsecase(i do.Injector) (*accessusecase.Usecase, error) {
 }
 
 func newAccessHandler(i do.Injector) (*accesshttp.Handler, error) {
-	uc, auth, audit, err := accessHandlerDeps(i)
+	uc, audit, err := accessHandlerDeps(i)
 	if err != nil {
 		return nil, err
 	}
-	return accesshttp.New(uc, auth, audit), nil
+	return accesshttp.New(uc, audit), nil
 }
 
 func newIdentityStore(i do.Injector) (*identitymysql.Store, error) {
@@ -254,15 +254,11 @@ func newIdentityHandler(i do.Injector) (*identityhttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth, err := do.Invoke[*authusecase.Usecase](i)
-	if err != nil {
-		return nil, err
-	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
 		return nil, err
 	}
-	return identityhttp.New(uc, auth, audit), nil
+	return identityhttp.New(uc, audit), nil
 }
 
 func newAuditStore(i do.Injector) (*auditmysql.Store, error) {
@@ -294,11 +290,7 @@ func newAuditHandler(i do.Injector) (*audithttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth, err := do.Invoke[*authusecase.Usecase](i)
-	if err != nil {
-		return nil, err
-	}
-	return audithttp.New(uc, auth), nil
+	return audithttp.New(uc), nil
 }
 
 func newAPITokenStore(i do.Injector) (*apitokenmysql.Store, error) {
@@ -342,15 +334,11 @@ func newAPITokenHandler(i do.Injector) (*apitokenhttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth, err := do.Invoke[*authusecase.Usecase](i)
-	if err != nil {
-		return nil, err
-	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
 		return nil, err
 	}
-	return apitokenhttp.New(uc, auth, audit), nil
+	return apitokenhttp.New(uc, audit), nil
 }
 
 func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
@@ -495,15 +483,11 @@ func newSettingsHandler(i do.Injector) (*settingshttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth, err := do.Invoke[*authusecase.Usecase](i)
-	if err != nil {
-		return nil, err
-	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
 		return nil, err
 	}
-	return settingshttp.New(uc, auth, audit), nil
+	return settingshttp.New(uc, audit), nil
 }
 
 func newFileStore(i do.Injector) (*filemysql.Store, error) {
@@ -527,10 +511,6 @@ func newFileHandler(i do.Injector) (*filehttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth, err := do.Invoke[*authusecase.Usecase](i)
-	if err != nil {
-		return nil, err
-	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
 		return nil, err
@@ -539,7 +519,7 @@ func newFileHandler(i do.Injector) (*filehttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return filehttp.New(uc, auth, audit, cfg.Admin.UploadDir), nil
+	return filehttp.New(uc, audit, cfg.Admin.UploadDir), nil
 }
 
 func startupMySQL(i do.Injector) (context.Context, *gorm.DB, error) {
@@ -554,20 +534,16 @@ func startupMySQL(i do.Injector) (context.Context, *gorm.DB, error) {
 	return ctx, db, nil
 }
 
-func accessHandlerDeps(i do.Injector) (*accessusecase.Usecase, *authusecase.Usecase, *auditusecase.Usecase, error) {
+func accessHandlerDeps(i do.Injector) (*accessusecase.Usecase, *auditusecase.Usecase, error) {
 	uc, err := do.Invoke[*accessusecase.Usecase](i)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	auth, err := do.Invoke[*authusecase.Usecase](i)
-	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return uc, auth, audit, nil
+	return uc, audit, nil
 }
 
 type authLoginRecorder struct {

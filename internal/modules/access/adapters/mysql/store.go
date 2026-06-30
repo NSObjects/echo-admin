@@ -4,6 +4,7 @@ package mysql
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	drivermysql "github.com/go-sql-driver/mysql"
@@ -160,6 +161,21 @@ func (s *Store) FindAPIByID(ctx context.Context, id int64) (domain.API, error) {
 	err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error
 	if err != nil {
 		return domain.API{}, mapReadError(err, "api", "find api")
+	}
+	return model.toDomain()
+}
+
+// FindAPIByRoute returns one API route by normalized HTTP method and Echo path.
+func (s *Store) FindAPIByRoute(ctx context.Context, method, path string) (domain.API, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.API{}, err
+	}
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	var model apiModel
+	err := s.db.WithContext(ctx).First(&model, "method = ? AND path = ?", method, path).Error
+	if err != nil {
+		return domain.API{}, mapReadError(err, "api", "find api by route")
 	}
 	return model.toDomain()
 }
@@ -452,9 +468,14 @@ func (s *Store) seedMenus(ctx context.Context) ([]int64, []int64, error) {
 }
 
 func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, []int64, error) {
+	parentID, err := s.seedMenuParentID(ctx, seed)
+	if err != nil {
+		return 0, nil, err
+	}
 	var existing menuModel
-	err := s.db.WithContext(ctx).Where("path = ?", seed.path).First(&existing).Error
+	err = s.db.WithContext(ctx).Where("path = ?", seed.path).First(&existing).Error
 	if err == nil {
+		existing.ParentID = parentID
 		existing.Name = seed.name
 		existing.Icon = seed.icon
 		existing.Hidden = seed.hidden
@@ -477,7 +498,7 @@ func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, []int64, 
 		return 0, nil, apperr.WrapDatabase(err, "find seed menu")
 	}
 	now := time.Now().UTC()
-	menu, err := domain.RestoreMenu(0, 0, seed.name, seed.path, seed.icon, seed.hidden, seed.component, seed.meta, seed.permission, seed.sort, true, nil, now, now)
+	menu, err := domain.RestoreMenu(0, parentID, seed.name, seed.path, seed.icon, seed.hidden, seed.component, seed.meta, seed.permission, seed.sort, true, nil, now, now)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -487,6 +508,21 @@ func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, []int64, 
 	}
 	buttonIDs, buttonErr := s.ensureSeedButtons(ctx, model.ID, seed.buttons)
 	return model.ID, buttonIDs, buttonErr
+}
+
+func (s *Store) seedMenuParentID(ctx context.Context, seed menuSeed) (int64, error) {
+	if seed.parentPath == "" {
+		return 0, nil
+	}
+	var parent menuModel
+	err := s.db.WithContext(ctx).Where("path = ?", seed.parentPath).First(&parent).Error
+	if err == nil {
+		return parent.ID, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, apperr.Newf(apperr.ErrInternalServer, "seed menu parent %s is missing", seed.parentPath)
+	}
+	return 0, apperr.WrapDatabase(err, "find seed menu parent")
 }
 
 func (s *Store) ensureSeedButtons(ctx context.Context, menuID int64, seeds []menuButtonSeed) ([]int64, error) {
@@ -578,6 +614,7 @@ func (s *Store) allRoleIDs(ctx context.Context) ([]int64, error) {
 type menuSeed struct {
 	name       string
 	path       string
+	parentPath string
 	icon       string
 	hidden     bool
 	component  string
@@ -587,61 +624,67 @@ type menuSeed struct {
 	buttons    []menuButtonSeed
 }
 
+const seedMenuGroupComponent = "Layout"
+
 type menuButtonSeed struct {
 	name        string
 	description string
 }
 
-// defaultMenuSeeds is the initial navigation and page-button catalog used by
-// explicit system first initialization.
+// defaultMenuSeeds is the initial navigation and page-button catalog. Parent
+// group rows intentionally keep stable paths so later business modules can be
+// added under a small back-office information architecture instead of another
+// flat first-level menu.
 var defaultMenuSeeds = []menuSeed{
 	{name: "工作台", path: "/dashboard", icon: "dashboard", component: "./Dashboard", sort: 10},
-	{name: "管理员管理", path: "/admins", icon: "user", component: "./Admins", permission: domain.PermissionAdminRead, sort: 20, buttons: []menuButtonSeed{
+	{name: "组织权限", path: "/access", icon: "safety", component: seedMenuGroupComponent, sort: 20},
+	{name: "管理员管理", path: "/admins", parentPath: "/access", icon: "user", component: "./Admins", permission: domain.PermissionAdminRead, sort: 21, buttons: []menuButtonSeed{
 		{name: "create", description: "新增管理员"},
 		{name: "update", description: "编辑管理员"},
 		{name: "delete", description: "删除管理员"},
 	}},
-	{name: "角色权限", path: "/roles", icon: "safety", component: "./Roles", permission: domain.PermissionRoleRead, sort: 30, buttons: []menuButtonSeed{
+	{name: "角色权限", path: "/roles", parentPath: "/access", icon: "safety", component: "./Roles", permission: domain.PermissionRoleRead, sort: 22, buttons: []menuButtonSeed{
 		{name: "create", description: "新增角色"},
 		{name: "update", description: "编辑角色"},
 		{name: "delete", description: "删除角色"},
 		{name: "copy", description: "复制角色"},
 		{name: "members", description: "授权角色成员"},
 	}},
-	{name: "菜单管理", path: "/menus", icon: "menu", component: "./Menus", permission: domain.PermissionMenuRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 40, buttons: []menuButtonSeed{
+	{name: "菜单管理", path: "/menus", parentPath: "/access", icon: "menu", component: "./Menus", permission: domain.PermissionMenuRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 23, buttons: []menuButtonSeed{
 		{name: "create", description: "新增菜单"},
 		{name: "update", description: "编辑菜单"},
 		{name: "delete", description: "删除菜单"},
 		{name: "roles", description: "授权菜单角色"},
 	}},
-	{name: "API管理", path: "/apis", icon: "api", component: "./APIs", permission: domain.PermissionAPIRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 50, buttons: []menuButtonSeed{
+	{name: "API管理", path: "/apis", parentPath: "/access", icon: "api", component: "./APIs", permission: domain.PermissionAPIRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 24, buttons: []menuButtonSeed{
 		{name: "create", description: "新增API"},
 		{name: "update", description: "编辑API"},
 		{name: "delete", description: "删除API"},
 		{name: "roles", description: "授权API角色"},
 	}},
-	{name: "API Token", path: "/api-tokens", icon: "key", component: "./APITokens", permission: domain.PermissionAPITokenRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 55, buttons: []menuButtonSeed{
+	{name: "API Token", path: "/api-tokens", parentPath: "/access", icon: "key", component: "./APITokens", permission: domain.PermissionAPITokenRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 25, buttons: []menuButtonSeed{
 		{name: "create", description: "新增API Token"},
 		{name: "update", description: "编辑API Token"},
 		{name: "delete", description: "删除API Token"},
 	}},
-	{name: "系统配置", path: "/configs", icon: "setting", component: "./Configs", permission: domain.PermissionConfigRead, sort: 60, buttons: []menuButtonSeed{
+	{name: "系统管理", path: "/system", icon: "setting", component: seedMenuGroupComponent, sort: 30},
+	{name: "系统配置", path: "/configs", parentPath: "/system", icon: "setting", component: "./Configs", permission: domain.PermissionConfigRead, sort: 31, buttons: []menuButtonSeed{
 		{name: "update", description: "更新配置"},
 		{name: "delete", description: "删除配置"},
 	}},
-	{name: "系统参数", path: "/params", icon: "control", component: "./Params", permission: domain.PermissionParamRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 65, buttons: []menuButtonSeed{
+	{name: "系统参数", path: "/params", parentPath: "/system", icon: "control", component: "./Params", permission: domain.PermissionParamRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 32, buttons: []menuButtonSeed{
 		{name: "create", description: "新增参数"},
 		{name: "update", description: "编辑参数"},
 		{name: "delete", description: "删除参数"},
 	}},
-	{name: "版本管理", path: "/versions", icon: "server", component: "./Versions", permission: domain.PermissionVersionRead, sort: 68, buttons: []menuButtonSeed{
+	{name: "版本管理", path: "/versions", parentPath: "/system", icon: "server", component: "./Versions", permission: domain.PermissionVersionRead, sort: 33, buttons: []menuButtonSeed{
 		{name: "create", description: "新增版本记录"},
 		{name: "export", description: "导出版本包"},
 		{name: "import", description: "导入版本包"},
 		{name: "update", description: "编辑版本记录"},
 		{name: "delete", description: "删除版本记录"},
 	}},
-	{name: "数据字典", path: "/dictionaries", icon: "profile", component: "./Dictionaries", permission: domain.PermissionDictRead, sort: 70, buttons: []menuButtonSeed{
+	{name: "数据字典", path: "/dictionaries", parentPath: "/system", icon: "profile", component: "./Dictionaries", permission: domain.PermissionDictRead, sort: 34, buttons: []menuButtonSeed{
 		{name: "create", description: "新增字典"},
 		{name: "export", description: "导出字典"},
 		{name: "import", description: "导入字典"},
@@ -651,7 +694,8 @@ var defaultMenuSeeds = []menuSeed{
 		{name: "item_update", description: "编辑字典项"},
 		{name: "item_delete", description: "删除字典项"},
 	}},
-	{name: "文件上传", path: "/files", icon: "upload", component: "./Files", permission: domain.PermissionFileRead, sort: 80, buttons: []menuButtonSeed{
+	{name: "资源管理", path: "/resources", icon: "folder", component: seedMenuGroupComponent, sort: 40},
+	{name: "文件上传", path: "/files", parentPath: "/resources", icon: "upload", component: "./Files", permission: domain.PermissionFileRead, sort: 41, buttons: []menuButtonSeed{
 		{name: "upload", description: "上传文件"},
 		{name: "update", description: "重命名文件"},
 		{name: "delete", description: "删除文件"},
@@ -659,7 +703,8 @@ var defaultMenuSeeds = []menuSeed{
 		{name: "category_update", description: "编辑文件分类"},
 		{name: "category_delete", description: "删除文件分类"},
 	}},
-	{name: "审计日志", path: "/logs", icon: "fileSearch", component: "./Logs", permission: domain.PermissionLogRead, sort: 90, buttons: []menuButtonSeed{
+	{name: "运维审计", path: "/audit", icon: "fileSearch", component: seedMenuGroupComponent, sort: 50},
+	{name: "审计日志", path: "/logs", parentPath: "/audit", icon: "fileSearch", component: "./Logs", permission: domain.PermissionLogRead, sort: 51, buttons: []menuButtonSeed{
 		{name: "resolve", description: "处理系统错误"},
 		{name: "delete", description: "删除日志"},
 	}},
@@ -674,9 +719,9 @@ type apiSeed struct {
 	public      bool
 }
 
-// apiSeeds is the initial API authorization catalog. Private handler routes
-// must have a matching method/path row because auth checks both the permission
-// token and the active role's assigned API ids.
+// apiSeeds is the initial API authorization catalog. Private routes must have
+// a matching method/path row because the boot route middleware authorizes
+// requests by the active role's assigned API ids.
 var apiSeeds = []apiSeed{
 	{method: "GET", path: "/api/health", description: "进程存活检查", group: "system", public: true},
 	{method: "GET", path: "/api/info", description: "应用信息", group: "system", public: true},

@@ -7,7 +7,6 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	"github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -18,11 +17,6 @@ import (
 
 const defaultPageSize = 20
 
-// Authorizer checks whether the current request can perform an action.
-type Authorizer interface {
-	RequireRoutePermission(context.Context, string, string, string) error
-}
-
 // OperationRecorder records access mutations for audit.
 type OperationRecorder interface {
 	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
@@ -31,13 +25,12 @@ type OperationRecorder interface {
 // Handler adapts role and menu HTTP requests to the access usecase.
 type Handler struct {
 	usecase   *usecase.Usecase
-	auth      Authorizer
 	operation OperationRecorder
 }
 
 // New creates an access HTTP handler.
-func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, auth: auth, operation: operation}
+func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
+	return &Handler{usecase: uc, operation: operation}
 }
 
 // Register mounts role and menu routes on group.
@@ -68,7 +61,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListPermissions returns grant metadata.
 func (h *Handler) ListPermissions(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	// The catalog feeds role editors. Route authorization keeps disabled
@@ -83,7 +76,7 @@ func (h *Handler) ListPermissions(c *echo.Context) error {
 
 // ListRoles returns roles.
 func (h *Handler) ListRoles(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -99,7 +92,7 @@ func (h *Handler) ListRoles(c *echo.Context) error {
 
 // CreateRole creates a role.
 func (h *Handler) CreateRole(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req createRoleRequest
@@ -118,7 +111,7 @@ func (h *Handler) CreateRole(c *echo.Context) error {
 
 // UpdateRole updates a role.
 func (h *Handler) UpdateRole(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := updateRoleInput(c)
@@ -137,7 +130,7 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 
 // DeleteRole deletes a role.
 func (h *Handler) DeleteRole(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "role")
@@ -155,7 +148,7 @@ func (h *Handler) DeleteRole(c *echo.Context) error {
 
 // CopyRole copies a role with its grants.
 func (h *Handler) CopyRole(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionRoleCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "role")
@@ -185,7 +178,7 @@ func (h *Handler) CopyRole(c *echo.Context) error {
 
 // ListAPIs returns API routes.
 func (h *Handler) ListAPIs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -201,7 +194,7 @@ func (h *Handler) ListAPIs(c *echo.Context) error {
 
 // ListAPIGroups returns API group names.
 func (h *Handler) ListAPIGroups(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	groups, err := h.usecase.APIGroups(c.Request().Context())
@@ -213,7 +206,7 @@ func (h *Handler) ListAPIGroups(c *echo.Context) error {
 
 // ReadAPI returns one API route.
 func (h *Handler) ReadAPI(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "api")
@@ -229,7 +222,7 @@ func (h *Handler) ReadAPI(c *echo.Context) error {
 
 // CreateAPI creates an API route.
 func (h *Handler) CreateAPI(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPICreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req apiRequest
@@ -248,7 +241,7 @@ func (h *Handler) CreateAPI(c *echo.Context) error {
 
 // UpdateAPI updates an API route.
 func (h *Handler) UpdateAPI(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "api")
@@ -279,7 +272,7 @@ func (h *Handler) UpdateAPI(c *echo.Context) error {
 
 // BatchDeleteAPIs removes API routes by id.
 func (h *Handler) BatchDeleteAPIs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req idsRequest
@@ -297,7 +290,7 @@ func (h *Handler) BatchDeleteAPIs(c *echo.Context) error {
 
 // DeleteAPI deletes an API route.
 func (h *Handler) DeleteAPI(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "api")
@@ -315,7 +308,7 @@ func (h *Handler) DeleteAPI(c *echo.Context) error {
 
 // ReadAPIRoles returns role ids assigned to an API route.
 func (h *Handler) ReadAPIRoles(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPIRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "api")
@@ -331,14 +324,14 @@ func (h *Handler) ReadAPIRoles(c *echo.Context) error {
 
 // SetAPIRoles replaces role assignments for an API route.
 func (h *Handler) SetAPIRoles(c *echo.Context) error {
-	return h.setRoleAssignments(c, accessdomain.PermissionAPIUpdate, "api", "updated api roles", func(ctx context.Context, id int64, roleIDs []int64) ([]int64, error) {
+	return h.setRoleAssignments(c, "api", "updated api roles", func(ctx context.Context, id int64, roleIDs []int64) ([]int64, error) {
 		return h.usecase.SetAPIRoles(ctx, usecase.APIRolesInput{APIID: id, RoleIDs: roleIDs})
 	})
 }
 
 // ListMenus returns menus.
 func (h *Handler) ListMenus(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	menus, err := h.usecase.ListMenus(c.Request().Context())
@@ -350,7 +343,7 @@ func (h *Handler) ListMenus(c *echo.Context) error {
 
 // ReadMenu returns one menu.
 func (h *Handler) ReadMenu(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "menu")
@@ -366,7 +359,7 @@ func (h *Handler) ReadMenu(c *echo.Context) error {
 
 // CreateMenu creates a menu.
 func (h *Handler) CreateMenu(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req menuRequest
@@ -385,7 +378,7 @@ func (h *Handler) CreateMenu(c *echo.Context) error {
 
 // UpdateMenu updates a menu.
 func (h *Handler) UpdateMenu(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := updateMenuInput(c)
@@ -404,7 +397,7 @@ func (h *Handler) UpdateMenu(c *echo.Context) error {
 
 // DeleteMenu deletes a menu.
 func (h *Handler) DeleteMenu(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "menu")
@@ -422,7 +415,7 @@ func (h *Handler) DeleteMenu(c *echo.Context) error {
 
 // ReadMenuRoles returns role ids assigned to a menu.
 func (h *Handler) ReadMenuRoles(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionMenuRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "menu")
@@ -438,19 +431,18 @@ func (h *Handler) ReadMenuRoles(c *echo.Context) error {
 
 // SetMenuRoles replaces role assignments for a menu.
 func (h *Handler) SetMenuRoles(c *echo.Context) error {
-	return h.setRoleAssignments(c, accessdomain.PermissionMenuUpdate, "menu", "updated menu roles", func(ctx context.Context, id int64, roleIDs []int64) ([]int64, error) {
+	return h.setRoleAssignments(c, "menu", "updated menu roles", func(ctx context.Context, id int64, roleIDs []int64) ([]int64, error) {
 		return h.usecase.SetMenuRoles(ctx, usecase.MenuRolesInput{MenuID: id, RoleIDs: roleIDs})
 	})
 }
 
 func (h *Handler) setRoleAssignments(
 	c *echo.Context,
-	permission string,
 	resource string,
 	message string,
 	assign func(context.Context, int64, []int64) ([]int64, error),
 ) error {
-	if err := h.authorize(c, permission); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", resource)
@@ -469,13 +461,6 @@ func (h *Handler) setRoleAssignments(
 		return err
 	}
 	return httpresp.OK(c, roleIDsResponse{RoleIDs: roleIDs})
-}
-
-func (h *Handler) authorize(c *echo.Context, permission string) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
 }
 
 func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
@@ -499,7 +484,7 @@ func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID,
 }
 
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.auth == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.operation == nil {
 		return apperr.New(apperr.ErrInternalServer, "access handler is not configured")
 	}
 	return nil

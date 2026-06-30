@@ -9,7 +9,6 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/settings/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -20,11 +19,6 @@ import (
 
 const defaultPageSize = 20
 
-// Authorizer checks whether the current request can perform an action.
-type Authorizer interface {
-	RequireRoutePermission(context.Context, string, string, string) error
-}
-
 // OperationRecorder records setting mutations for audit.
 type OperationRecorder interface {
 	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
@@ -33,13 +27,12 @@ type OperationRecorder interface {
 // Handler adapts setting and dictionary HTTP requests to the settings usecase.
 type Handler struct {
 	usecase   *usecase.Usecase
-	auth      Authorizer
 	operation OperationRecorder
 }
 
 // New creates a settings HTTP handler.
-func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, auth: auth, operation: operation}
+func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
+	return &Handler{usecase: uc, operation: operation}
 }
 
 // Register mounts setting and dictionary routes on group.
@@ -76,7 +69,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListConfigs returns system configs.
 func (h *Handler) ListConfigs(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionConfigRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	configs, err := h.usecase.ListConfigs(c.Request().Context())
@@ -88,7 +81,7 @@ func (h *Handler) ListConfigs(c *echo.Context) error {
 
 // UpsertConfig creates or updates a system config.
 func (h *Handler) UpsertConfig(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionConfigUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req configRequest
@@ -113,7 +106,7 @@ func (h *Handler) UpsertConfig(c *echo.Context) error {
 
 // DeleteConfig deletes a system config.
 func (h *Handler) DeleteConfig(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionConfigDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	key := c.Param("key")
@@ -128,7 +121,7 @@ func (h *Handler) DeleteConfig(c *echo.Context) error {
 
 // ListParams returns system parameters.
 func (h *Handler) ListParams(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := paramListInput(c)
@@ -144,7 +137,7 @@ func (h *Handler) ListParams(c *echo.Context) error {
 
 // FindParam returns one system parameter by id.
 func (h *Handler) FindParam(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system param")
@@ -160,7 +153,7 @@ func (h *Handler) FindParam(c *echo.Context) error {
 
 // FindParamByKey returns one system parameter by key.
 func (h *Handler) FindParamByKey(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	param, err := h.usecase.FindParamByKey(c.Request().Context(), c.Param("key"))
@@ -172,7 +165,7 @@ func (h *Handler) FindParamByKey(c *echo.Context) error {
 
 // CreateParam creates one system parameter.
 func (h *Handler) CreateParam(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req paramRequest
@@ -191,7 +184,7 @@ func (h *Handler) CreateParam(c *echo.Context) error {
 
 // UpdateParam updates one system parameter.
 func (h *Handler) UpdateParam(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system param")
@@ -214,7 +207,7 @@ func (h *Handler) UpdateParam(c *echo.Context) error {
 
 // DeleteParam deletes one system parameter.
 func (h *Handler) DeleteParam(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system param")
@@ -232,7 +225,7 @@ func (h *Handler) DeleteParam(c *echo.Context) error {
 
 // BatchDeleteParams deletes system parameters by id.
 func (h *Handler) BatchDeleteParams(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionParamDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req idsRequest
@@ -250,7 +243,7 @@ func (h *Handler) BatchDeleteParams(c *echo.Context) error {
 
 // ListDictionaries returns dictionaries.
 func (h *Handler) ListDictionaries(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	dictionaries, err := h.usecase.ListDictionaries(c.Request().Context())
@@ -262,7 +255,7 @@ func (h *Handler) ListDictionaries(c *echo.Context) error {
 
 // ExportDictionaries downloads all dictionaries as a JSON bundle.
 func (h *Handler) ExportDictionaries(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	data, err := h.usecase.DictionaryBundleJSON(c.Request().Context())
@@ -275,7 +268,7 @@ func (h *Handler) ExportDictionaries(c *echo.Context) error {
 
 // ImportDictionaries imports dictionaries from a JSON bundle.
 func (h *Handler) ImportDictionaries(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var bundle usecase.DictionaryBundle
@@ -294,7 +287,7 @@ func (h *Handler) ImportDictionaries(c *echo.Context) error {
 
 // CreateDictionary creates a dictionary.
 func (h *Handler) CreateDictionary(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req dictionaryRequest
@@ -316,7 +309,7 @@ func (h *Handler) CreateDictionary(c *echo.Context) error {
 
 // UpdateDictionary updates a dictionary.
 func (h *Handler) UpdateDictionary(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req updateDictionaryRequest
@@ -338,7 +331,7 @@ func (h *Handler) UpdateDictionary(c *echo.Context) error {
 
 // DeleteDictionary deletes a dictionary.
 func (h *Handler) DeleteDictionary(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	code := c.Param("code")
@@ -353,7 +346,7 @@ func (h *Handler) DeleteDictionary(c *echo.Context) error {
 
 // AddDictionaryItem appends one dictionary item.
 func (h *Handler) AddDictionaryItem(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req dictionaryItemRequest
@@ -379,7 +372,7 @@ func (h *Handler) AddDictionaryItem(c *echo.Context) error {
 
 // UpdateDictionaryItem updates one dictionary item.
 func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	itemID, err := httpreq.PathID(c, "item_id", "dictionary item")
@@ -410,7 +403,7 @@ func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
 
 // DeleteDictionaryItem deletes one dictionary item.
 func (h *Handler) DeleteDictionaryItem(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionDictDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	itemID, err := httpreq.PathID(c, "item_id", "dictionary item")
@@ -429,7 +422,7 @@ func (h *Handler) DeleteDictionaryItem(c *echo.Context) error {
 
 // ListVersions returns release records.
 func (h *Handler) ListVersions(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	versions, err := h.usecase.ListVersions(c.Request().Context())
@@ -441,7 +434,7 @@ func (h *Handler) ListVersions(c *echo.Context) error {
 
 // FindVersion returns one release record.
 func (h *Handler) FindVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system version")
@@ -457,7 +450,7 @@ func (h *Handler) FindVersion(c *echo.Context) error {
 
 // DownloadVersion returns one release record as a JSON attachment.
 func (h *Handler) DownloadVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system version")
@@ -475,7 +468,7 @@ func (h *Handler) DownloadVersion(c *echo.Context) error {
 
 // CreateVersion creates a release record.
 func (h *Handler) CreateVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req versionRequest
@@ -499,7 +492,7 @@ func (h *Handler) CreateVersion(c *echo.Context) error {
 
 // ExportVersion creates a portable version bundle from selected resources.
 func (h *Handler) ExportVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req exportVersionRequest
@@ -525,7 +518,7 @@ func (h *Handler) ExportVersion(c *echo.Context) error {
 
 // ImportVersion imports a portable version bundle.
 func (h *Handler) ImportVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var bundle usecase.VersionBundle
@@ -544,7 +537,7 @@ func (h *Handler) ImportVersion(c *echo.Context) error {
 
 // UpdateVersion updates a release record.
 func (h *Handler) UpdateVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system version")
@@ -573,7 +566,7 @@ func (h *Handler) UpdateVersion(c *echo.Context) error {
 
 // DeleteVersion deletes a release record.
 func (h *Handler) DeleteVersion(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "system version")
@@ -591,7 +584,7 @@ func (h *Handler) DeleteVersion(c *echo.Context) error {
 
 // BatchDeleteVersions deletes release records by id.
 func (h *Handler) BatchDeleteVersions(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionVersionDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req idsRequest
@@ -605,13 +598,6 @@ func (h *Handler) BatchDeleteVersions(c *echo.Context) error {
 		return err
 	}
 	return httpresp.OK(c, deletedIDsResponse(req))
-}
-
-func (h *Handler) authorize(c *echo.Context, permission string) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
 }
 
 func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
@@ -635,7 +621,7 @@ func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID,
 }
 
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.auth == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.operation == nil {
 		return apperr.New(apperr.ErrInternalServer, "settings handler is not configured")
 	}
 	return nil

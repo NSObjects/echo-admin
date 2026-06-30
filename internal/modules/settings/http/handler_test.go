@@ -11,7 +11,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	settingsdomain "github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 	settingshttp "github.com/NSObjects/echo-admin/internal/modules/settings/http"
@@ -23,15 +22,12 @@ import (
 
 const statusDictionaryImportBody = `{"dictionaries":[{"code":"status","name":"状态","items":[{"label":"启用","value":"enabled","sort":10,"active":true}]}]}`
 
-func TestUpsertConfigRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestUpsertConfigRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodPut, "/api/system/configs/site_name", `{"name":"站点名称","value":"Echo Admin","public":true}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("upsert config status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionConfigUpdate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionConfigUpdate)
 	}
 	if store.upsertCalls != 1 {
 		t.Fatalf("upsertCalls = %d, want 1", store.upsertCalls)
@@ -47,29 +43,13 @@ func TestUpsertConfigRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListDictionariesRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newSettingsEcho(apperr.NewPermissionDenied("dict", "read"))
-
-	rec := doJSON(t, e, http.MethodGet, "/api/dictionaries", "", "42")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("list dictionaries status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.listDictionaryCalls != 0 {
-		t.Fatalf("listDictionaryCalls = %d, want 0", store.listDictionaryCalls)
-	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
-	}
-}
-
-func TestDeleteConfigRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestDeleteConfigRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodDelete, "/api/system/configs/feature_flag", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete config status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionConfigDelete)
 	if got := store.deletedConfigKey; got != "feature_flag" {
 		t.Fatalf("deletedConfigKey = %q, want feature_flag", got)
 	}
@@ -79,15 +59,14 @@ func TestDeleteConfigRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestCreateParamRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestCreateParamRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	body := `{"name":"支付超时","key":"pay_timeout","value":"30","desc":"秒"}`
 	rec := doJSON(t, e, http.MethodPost, "/api/system/params", body, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create param status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionParamCreate)
 	if store.createdParam.Key != "pay_timeout" {
 		t.Fatalf("createdParam.Key = %q, want pay_timeout", store.createdParam.Key)
 	}
@@ -97,29 +76,13 @@ func TestCreateParamRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListParamsRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newSettingsEcho(apperr.NewPermissionDenied("param", "read"))
-
-	rec := doJSON(t, e, http.MethodGet, "/api/system/params", "", "42")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("list params status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.listParamCalls != 0 {
-		t.Fatalf("listParamCalls = %d, want 0", store.listParamCalls)
-	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
-	}
-}
-
-func TestBatchDeleteParamsRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestBatchDeleteParamsRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/system/params/batch-delete", `{"ids":[1,2]}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete params status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionParamDelete)
 	if !sameInt64s(store.deletedParamIDs, []int64{1, 2}) {
 		t.Fatalf("deletedParamIDs = %v, want [1 2]", store.deletedParamIDs)
 	}
@@ -129,14 +92,13 @@ func TestBatchDeleteParamsRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestDeleteDictionaryRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestDeleteDictionaryRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodDelete, "/api/dictionaries/color", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete dictionary status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionDictDelete)
 	if got := store.deletedDictionaryCode; got != "color" {
 		t.Fatalf("deletedDictionaryCode = %q, want color", got)
 	}
@@ -146,8 +108,8 @@ func TestDeleteDictionaryRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestExportDictionariesRequiresPermission(t *testing.T) {
-	e, store, _, auth := newSettingsEcho(nil)
+func TestExportDictionaries(t *testing.T) {
+	e, store, _ := newSettingsEcho()
 	item, err := settingsdomain.RestoreDictionaryItem(1, 0, "启用", "enabled", "", 10, true, 0, "", nil)
 	if err != nil {
 		t.Fatalf("RestoreDictionaryItem() error = %v", err)
@@ -162,7 +124,6 @@ func TestExportDictionariesRequiresPermission(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("export dictionaries status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionDictRead)
 	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Fatalf("content-type = %q, want application/json; charset=utf-8", got)
 	}
@@ -171,28 +132,24 @@ func TestExportDictionariesRequiresPermission(t *testing.T) {
 	}
 }
 
-func TestImportDictionariesRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestImportDictionariesRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/dictionaries/import", statusDictionaryImportBody, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("import dictionaries status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionDictCreate)
 	assertImportedStatusDictionary(t, store)
 	assertOperationAction(t, recorder, "import")
 }
 
-func TestCreateVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestCreateVersionRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":"v1.2.3","name":"稳定版","description":"权限后台初始化","published_at":"2026-06-20T08:00:00Z"}`
 	rec := doJSON(t, e, http.MethodPost, "/api/system/versions", body, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create version status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionVersionCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionVersionCreate)
 	}
 	if store.createdVersion.Version != "v1.2.3" {
 		t.Fatalf("created version = %q, want v1.2.3", store.createdVersion.Version)
@@ -205,15 +162,14 @@ func TestCreateVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestExportVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestExportVersionRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":"v2.0.0","name":"权限包","description":"初始化权限"}`
 	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/export", body, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("export version status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionVersionCreate)
 	if store.createdVersion.Data == "" {
 		t.Fatal("createdVersion.Data is empty, want exported bundle")
 	}
@@ -223,40 +179,37 @@ func TestExportVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestImportVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestImportVersionRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":{"code":"v2.0.0","name":"权限包","description":"初始化权限"},"dictionaries":[{"code":"status","name":"状态","items":[{"label":"启用","value":"enabled","sort":10,"active":true}]}]}`
 	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/import", body, "42")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("import version status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionVersionCreate)
 	assertImportedStatusDictionary(t, store)
 	assertOperationAction(t, recorder, "import")
 }
 
-func TestDownloadVersionRequiresPermission(t *testing.T) {
-	e, _, _, auth := newSettingsEcho(nil)
+func TestDownloadVersion(t *testing.T) {
+	e, _, _ := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodGet, "/api/system/versions/3/download", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("download version status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionVersionRead)
 	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Fatalf("content-type = %q, want application/json; charset=utf-8", got)
 	}
 }
 
-func TestDeleteVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestDeleteVersionRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodDelete, "/api/system/versions/7", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete version status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionVersionDelete)
 	if got := store.deletedVersionID; got != 7 {
 		t.Fatalf("deletedVersionID = %d, want 7", got)
 	}
@@ -266,14 +219,13 @@ func TestDeleteVersionRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestBatchDeleteVersionsRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newSettingsEcho(nil)
+func TestBatchDeleteVersionsRecordsOperation(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/batch-delete", `{"ids":[7,8]}`, "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete versions status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	assertPermission(t, auth, accessdomain.PermissionVersionDelete)
 	if !sameInt64s(store.deletedVersionIDs, []int64{7, 8}) {
 		t.Fatalf("deletedVersionIDs = %v, want [7 8]", store.deletedVersionIDs)
 	}
@@ -283,18 +235,17 @@ func TestBatchDeleteVersionsRequiresPermissionAndRecordsOperation(t *testing.T) 
 	}
 }
 
-func newSettingsEcho(authErr error) (*echo.Echo, *settingsStore, *operationRecorder, *settingsAuthorizer) {
+func newSettingsEcho() (*echo.Echo, *settingsStore, *operationRecorder) {
 	store := &settingsStore{}
 	uc := settingsusecase.New(store)
-	auth := &settingsAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
-	handler := settingshttp.New(uc, auth, recorder)
+	handler := settingshttp.New(uc, recorder)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	settingshttp.Register(e.Group("/api"), handler)
-	return e, store, recorder, auth
+	return e, store, recorder
 }
 
 func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
@@ -307,13 +258,6 @@ func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *http
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec
-}
-
-func assertPermission(t *testing.T, auth *settingsAuthorizer, want string) {
-	t.Helper()
-	if len(auth.permissions) != 1 || auth.permissions[0] != want {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, want)
-	}
 }
 
 func onlyOperation(t *testing.T, recorder *operationRecorder) auditusecase.OperationInput {
@@ -552,16 +496,6 @@ func (s *settingsStore) DeleteVersions(ctx context.Context, ids []int64) error {
 	}
 	s.deletedVersionIDs = append([]int64(nil), ids...)
 	return nil
-}
-
-type settingsAuthorizer struct {
-	err         error
-	permissions []string
-}
-
-func (a *settingsAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
-	a.permissions = append(a.permissions, permission)
-	return a.err
 }
 
 type operationRecorder struct {

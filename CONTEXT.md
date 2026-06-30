@@ -40,6 +40,10 @@ _Avoid_: Admin existence check, table existence check
 The highest-authority administrator role created during **System First Initialization**.
 _Avoid_: Custom setup role, normal role
 
+**Administration Authorization**:
+The role-based authorization model that controls what an **Administrator** may see and do in Echo Admin's administration surface.
+_Avoid_: General business permission system, generic data authorization
+
 ## Relationships
 
 - An **Administrator** may have zero or more active **Login Sessions**.
@@ -64,6 +68,12 @@ _Avoid_: Custom setup role, normal role
 - **System First Initialization** creates the first **Administrator** with the **Root Role**.
 - **Installation State** is the source of truth for whether **System First Initialization** is still allowed.
 - **System First Initialization** may be retried until **Installation State** records completion.
+- **Administration Authorization** governs administration features, not arbitrary business-domain data ownership.
+- A **Managed API Route** is an API catalog entry identified by HTTP method and the Echo registered route pattern.
+- **Route Authorization** happens in boot middleware before business HTTP handlers run.
+- **Route Authorization** uses the current active role and **Managed API Route** grants, not handler-declared permission tokens.
+- Permission tokens remain **Administration Authorization** metadata for Casbin permission views, menus, buttons, and grant catalogs.
+- The **Root Role** has the complete **Administration Authorization** baseline.
 
 ## Example Dialogue
 
@@ -73,3 +83,4 @@ _Avoid_: Custom setup role, normal role
 ## Flagged Ambiguities
 
 - "session" was used to mean both browser login state and API credentials; resolved: browser login state is **Login Session**, while machine credentials are **API Token**.
+- "permission system" was used to mean both administration feature authorization and generic business-data authorization; resolved: the current target is **Administration Authorization** only.

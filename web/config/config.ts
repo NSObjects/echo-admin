@@ -121,7 +121,9 @@ export default defineConfig({
   title: 'Echo Admin',
   layout: {
     ...defaultSettings,
-    locale: false,
+    // ProLayout 会用 `menu.<name>` locale key 翻译路由名。
+    // 后端只负责菜单授权和层级，展示文案继续走 ant-design-pro 菜单约定。
+    locale: true,
   },
   /**
    * @name moment2dayjs 插件

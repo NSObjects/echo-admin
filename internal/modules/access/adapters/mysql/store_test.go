@@ -173,6 +173,11 @@ func TestMenuSeedsHaveComponentsAndUniqueButtons(t *testing.T) {
 		if _, ok := seenPaths[seed.path]; ok {
 			t.Fatalf("menu seed path %s is duplicated", seed.path)
 		}
+		if seed.parentPath != "" {
+			if _, ok := seenPaths[seed.parentPath]; !ok {
+				t.Fatalf("menu seed %s parent %s must be declared before child", seed.path, seed.parentPath)
+			}
+		}
 		seenPaths[seed.path] = struct{}{}
 		seenButtons := map[string]struct{}{}
 		for _, button := range seed.buttons {
@@ -186,6 +191,54 @@ func TestMenuSeedsHaveComponentsAndUniqueButtons(t *testing.T) {
 				t.Fatalf("menu seed %s button %s is duplicated", seed.path, button.name)
 			}
 			seenButtons[button.name] = struct{}{}
+		}
+	}
+}
+
+func TestMenuSeedsUseBackOfficeGroups(t *testing.T) {
+	expectedParents := map[string]string{
+		"/admins":       "/access",
+		"/roles":        "/access",
+		"/menus":        "/access",
+		"/apis":         "/access",
+		"/api-tokens":   "/access",
+		"/configs":      "/system",
+		"/params":       "/system",
+		"/versions":     "/system",
+		"/dictionaries": "/system",
+		"/files":        "/resources",
+		"/logs":         "/audit",
+	}
+	expectedGroups := map[string]struct{}{
+		"/access":    {},
+		"/system":    {},
+		"/resources": {},
+		"/audit":     {},
+	}
+	seenGroups := map[string]struct{}{}
+
+	for _, seed := range defaultMenuSeeds {
+		if wantParent, ok := expectedParents[seed.path]; ok && seed.parentPath != wantParent {
+			t.Fatalf("menu seed %s parentPath = %q, want %q", seed.path, seed.parentPath, wantParent)
+		}
+		if _, ok := expectedGroups[seed.path]; !ok {
+			continue
+		}
+		if seed.parentPath != "" {
+			t.Fatalf("menu group %s parentPath = %q, want empty", seed.path, seed.parentPath)
+		}
+		if seed.permission != "" {
+			t.Fatalf("menu group %s permission = %q, want empty", seed.path, seed.permission)
+		}
+		if len(seed.buttons) != 0 {
+			t.Fatalf("menu group %s buttons = %d, want 0", seed.path, len(seed.buttons))
+		}
+		seenGroups[seed.path] = struct{}{}
+	}
+
+	for group := range expectedGroups {
+		if _, ok := seenGroups[group]; !ok {
+			t.Fatalf("menu group %s is missing", group)
 		}
 	}
 }

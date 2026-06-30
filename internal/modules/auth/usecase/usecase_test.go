@@ -131,27 +131,27 @@ func TestRequirePermissionUsesCasbinRBAC(t *testing.T) {
 	}
 }
 
-func TestRequireRoutePermissionUsesAssignedAPIs(t *testing.T) {
+func TestAuthorizeRouteUsesAssignedAPIs(t *testing.T) {
 	uc, _ := newUsecase(t)
 	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
 
-	if err := uc.RequireRoutePermission(ctx, accessdomain.PermissionRoleRead, "GET", "/api/roles"); err != nil {
-		t.Fatalf("RequireRoutePermission(assigned api) error = %v", err)
+	if err := uc.AuthorizeRoute(ctx, "GET", "/api/roles"); err != nil {
+		t.Fatalf("AuthorizeRoute(assigned api) error = %v", err)
 	}
-	if err := uc.RequireRoutePermission(ctx, accessdomain.PermissionRoleRead, "GET", "/api/roles/:id"); err == nil {
-		t.Fatal("RequireRoutePermission(unassigned api) error = nil, want permission denied")
+	if err := uc.AuthorizeRoute(ctx, "GET", "/api/roles/:id"); err == nil {
+		t.Fatal("AuthorizeRoute(unassigned api) error = nil, want permission denied")
 	}
-	if err := uc.RequireRoutePermission(ctx, accessdomain.PermissionRoleRead, "GET", "/api/missing"); err == nil {
-		t.Fatal("RequireRoutePermission(missing api) error = nil, want permission denied")
+	if err := uc.AuthorizeRoute(ctx, "GET", "/api/missing"); err == nil {
+		t.Fatal("AuthorizeRoute(missing api) error = nil, want permission denied")
 	}
 }
 
-func TestRequireRoutePermissionKeepsSuperAdminUnblocked(t *testing.T) {
+func TestAuthorizeRouteKeepsSuperAdminUnblocked(t *testing.T) {
 	uc, _ := newUsecase(t)
 	ctx := requestctx.WithUserID(context.Background(), "1")
 
-	if err := uc.RequireRoutePermission(ctx, accessdomain.PermissionAdminRead, "DELETE", "/api/admins/:id"); err != nil {
-		t.Fatalf("RequireRoutePermission(super admin api not listed on role) error = %v", err)
+	if err := uc.AuthorizeRoute(ctx, "DELETE", "/api/admins/:id"); err != nil {
+		t.Fatalf("AuthorizeRoute(super admin api not listed on role) error = %v", err)
 	}
 }
 
@@ -432,8 +432,13 @@ func (s *authStore) ListMenus(context.Context) ([]accessdomain.Menu, error) {
 	return s.menus, nil
 }
 
-func (s *authStore) ListAPIs(context.Context) ([]accessdomain.API, error) {
-	return s.apis, nil
+func (s *authStore) FindAPIByRoute(_ context.Context, method, path string) (accessdomain.API, error) {
+	for _, api := range s.apis {
+		if api.Method == method && api.Path == path {
+			return api, nil
+		}
+	}
+	return accessdomain.API{}, apperr.NewNotFound("api")
 }
 
 func (s *authStore) CreateLoginSession(_ context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {

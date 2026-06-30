@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockHistory, mockQueryCurrentUser, mockQuerySetupState, mockReplace } =
@@ -108,6 +108,26 @@ describe('app getInitialState', () => {
     expect(mockReplace).toHaveBeenCalledWith(
       `/user/login?redirect=${encodeURIComponent('/admins?page=2#top')}`,
     );
+  });
+
+  it('does not wrap an existing login redirect again', async () => {
+    const { getInitialState } = await import('./app');
+    const redirect = `/user/login?redirect=${encodeURIComponent('/admins')}`;
+    mockQueryCurrentUser.mockImplementation(async () => {
+      mockReplace(redirect);
+      mockHistory.location = {
+        pathname: '/user/login',
+        search: `?redirect=${encodeURIComponent('/admins')}`,
+        hash: '',
+      };
+      throw new Error('unauthorized');
+    });
+
+    const state = await getInitialState();
+
+    expect(state.currentUser).toBeUndefined();
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(redirect);
   });
 
   it('keeps setup redirect when current administrator returns system-uninitialized', async () => {
@@ -226,24 +246,38 @@ describe('app menu filtering', () => {
     expect(filtered.map((item) => item.path)).toEqual(['/dashboard', '/roles']);
   });
 
-  it('keeps parent menus when a child route is granted', async () => {
+  it('builds backend menu groups around flat page routes', async () => {
     const { filterMenuDataByGrantedMenus } = await import('./runtime/menu');
 
     const filtered = filterMenuDataByGrantedMenus(
       [
-        {
-          path: '/system',
-          name: 'system',
-          routes: [
-            { path: '/configs', name: 'configs' },
-            { path: '/dictionaries', name: 'dictionaries' },
-          ],
-        },
+        { path: '/configs', name: 'configs' },
+        { path: '/dictionaries', name: 'dictionaries' },
       ],
       [
         {
           id: 1,
           parent_id: 0,
+          name: '系统管理',
+          path: '/system',
+          icon: 'setting',
+          hidden: false,
+          component: 'Layout',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
+          permission: '',
+          sort: 10,
+          active: true,
+          buttons: [],
+        },
+        {
+          id: 2,
+          parent_id: 1,
           name: '系统配置',
           path: '/configs',
           icon: 'setting',
@@ -257,20 +291,73 @@ describe('app menu filtering', () => {
             transition_type: '',
           },
           permission: 'config:read',
-          sort: 10,
+          sort: 11,
           active: true,
           buttons: [],
         },
       ],
     );
 
-    expect(filtered).toEqual([
+    expect(filtered).toMatchObject([
       {
         path: '/system',
         name: 'system',
         routes: [{ path: '/configs', name: 'configs' }],
       },
     ]);
+    expect(React.isValidElement(filtered[0].icon)).toBe(true);
+  });
+
+  it('drops unknown backend icon strings instead of rendering them as menu text', async () => {
+    const { filterMenuDataByGrantedMenus } = await import('./runtime/menu');
+
+    const filtered = filterMenuDataByGrantedMenus(
+      [{ path: '/configs', name: 'configs' }],
+      [
+        {
+          id: 1,
+          parent_id: 0,
+          name: '系统管理',
+          path: '/system',
+          icon: 'unknownIcon',
+          hidden: false,
+          component: 'Layout',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
+          permission: '',
+          sort: 10,
+          active: true,
+          buttons: [],
+        },
+        {
+          id: 2,
+          parent_id: 1,
+          name: '系统配置',
+          path: '/configs',
+          icon: 'setting',
+          hidden: false,
+          component: './Configs',
+          meta: {
+            active_name: '',
+            keep_alive: false,
+            default_menu: false,
+            close_tab: false,
+            transition_type: '',
+          },
+          permission: 'config:read',
+          sort: 11,
+          active: true,
+          buttons: [],
+        },
+      ],
+    );
+
+    expect(filtered[0].icon).toBeUndefined();
   });
 
   it('excludes backend hidden menus from layout navigation', async () => {

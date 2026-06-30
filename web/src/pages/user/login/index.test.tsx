@@ -147,4 +147,43 @@ describe('Login page', () => {
     expect(mockMessageSuccess).toHaveBeenCalledWith('登录成功');
     expect(mockReplace).toHaveBeenCalledWith('/roles');
   });
+
+  it('falls back to the default path when redirect points back to login', async () => {
+    const { default: Login } = await import('./index');
+    window.history.replaceState(
+      {},
+      '',
+      `/user/login?redirect=${encodeURIComponent('/user/login?redirect=%2Fdashboard')}`,
+    );
+    const user = {
+      id: 1,
+      username: 'admin',
+      display_name: '系统管理员',
+      email: '',
+      active_role_id: 1,
+      active_role: {},
+      default_path: '/dashboard',
+      roles: [],
+      permissions: [],
+      menus: [],
+    };
+    mockLogin.mockResolvedValue({ user });
+
+    const page = await Promise.resolve(Login({}));
+    const loginForm = findElementWithProp(page, 'onFinish');
+    if (!loginForm) {
+      throw new Error('LoginForm with onFinish was not rendered');
+    }
+    const onFinish = loginForm.props.onFinish;
+    if (typeof onFinish !== 'function') {
+      throw new TypeError('LoginForm onFinish is not a function');
+    }
+
+    await onFinish({
+      username: 'admin',
+      password: 'secret-password',
+    });
+
+    expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+  });
 });

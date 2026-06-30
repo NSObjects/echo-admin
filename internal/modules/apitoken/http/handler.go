@@ -7,7 +7,6 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -18,11 +17,6 @@ import (
 
 const defaultPageSize = 20
 
-// Authorizer checks whether the current request can perform an action.
-type Authorizer interface {
-	RequireRoutePermission(context.Context, string, string, string) error
-}
-
 // OperationRecorder records API token mutations for audit.
 type OperationRecorder interface {
 	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
@@ -31,13 +25,12 @@ type OperationRecorder interface {
 // Handler adapts API token HTTP requests to the token usecase.
 type Handler struct {
 	usecase   *usecase.Usecase
-	auth      Authorizer
 	operation OperationRecorder
 }
 
 // New creates an API token HTTP handler.
-func New(uc *usecase.Usecase, auth Authorizer, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, auth: auth, operation: operation}
+func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
+	return &Handler{usecase: uc, operation: operation}
 }
 
 // Register mounts API token routes on group.
@@ -50,7 +43,7 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListTokens returns token metadata without raw secrets or hashes.
 func (h *Handler) ListTokens(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPITokenRead); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	input, err := listInput(c)
@@ -70,7 +63,7 @@ func (h *Handler) ListTokens(c *echo.Context) error {
 
 // CreateToken creates an API token and returns the raw secret once.
 func (h *Handler) CreateToken(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPITokenCreate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	var req tokenRequest
@@ -89,7 +82,7 @@ func (h *Handler) CreateToken(c *echo.Context) error {
 
 // UpdateToken updates token metadata without changing the secret.
 func (h *Handler) UpdateToken(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPITokenUpdate); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "api token")
@@ -118,7 +111,7 @@ func (h *Handler) UpdateToken(c *echo.Context) error {
 
 // DeleteToken revokes an API token.
 func (h *Handler) DeleteToken(c *echo.Context) error {
-	if err := h.authorize(c, accessdomain.PermissionAPITokenDelete); err != nil {
+	if err := h.ready(); err != nil {
 		return err
 	}
 	id, err := httpreq.PathID(c, "id", "api token")
@@ -132,13 +125,6 @@ func (h *Handler) DeleteToken(c *echo.Context) error {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
-}
-
-func (h *Handler) authorize(c *echo.Context, permission string) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	return h.auth.RequireRoutePermission(c.Request().Context(), permission, c.Request().Method, c.Path())
 }
 
 func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
@@ -162,7 +148,7 @@ func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID,
 }
 
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.auth == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.operation == nil {
 		return apperr.New(apperr.ErrInternalServer, "api token handler is not configured")
 	}
 	return nil

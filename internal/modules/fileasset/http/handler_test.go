@@ -15,7 +15,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	filedomain "github.com/NSObjects/echo-admin/internal/modules/fileasset/domain"
 	filehttp "github.com/NSObjects/echo-admin/internal/modules/fileasset/http"
@@ -26,14 +25,11 @@ import (
 )
 
 func TestUploadFileStoresBytesMetadataAndOperation(t *testing.T) {
-	e, store, recorder, auth, uploadDir := newFileEcho(t, nil)
+	e, store, recorder, uploadDir := newFileEcho(t)
 
 	rec := doMultipart(t, e, "/api/files", "hello.txt", "hello", "7")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("upload status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileUpload {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileUpload)
 	}
 	if store.createCalls != 1 {
 		t.Fatalf("createCalls = %d, want 1", store.createCalls)
@@ -57,7 +53,7 @@ func TestUploadFileStoresBytesMetadataAndOperation(t *testing.T) {
 }
 
 func TestUploadFileAssignsCategory(t *testing.T) {
-	e, store, _, _, _ := newFileEcho(t, nil)
+	e, store, _, _ := newFileEcho(t)
 	store.categories = []filedomain.FileCategory{mustCategory(t, 5, 0, "合同")}
 
 	rec := doMultipartWithFields(t, e, "/api/files", "hello.txt", "hello", "7", map[string]string{
@@ -71,30 +67,12 @@ func TestUploadFileAssignsCategory(t *testing.T) {
 	}
 }
 
-func TestUploadFileRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _, _ := newFileEcho(t, apperr.NewPermissionDenied("file", "upload"))
-
-	rec := doMultipart(t, e, "/api/files", "hello.txt", "hello", "7")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("upload status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.createCalls != 0 {
-		t.Fatalf("createCalls = %d, want 0", store.createCalls)
-	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
-	}
-}
-
 func TestImportURLStoresMetadataAndOperation(t *testing.T) {
-	e, store, recorder, auth, _ := newFileEcho(t, nil)
+	e, store, recorder, _ := newFileEcho(t)
 
 	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"https://cdn.example.com/manual.pdf?version=1"}`, "7")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("import url status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileUpload {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileUpload)
 	}
 	if store.createCalls != 1 {
 		t.Fatalf("createCalls = %d, want 1", store.createCalls)
@@ -117,7 +95,7 @@ func TestImportURLStoresMetadataAndOperation(t *testing.T) {
 }
 
 func TestImportURLRejectsUnsafeURLBeforeStore(t *testing.T) {
-	e, store, recorder, _, _ := newFileEcho(t, nil)
+	e, store, recorder, _ := newFileEcho(t)
 
 	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"javascript:alert(1)"}`, "7")
 	if rec.Code != http.StatusBadRequest {
@@ -132,7 +110,7 @@ func TestImportURLRejectsUnsafeURLBeforeStore(t *testing.T) {
 }
 
 func TestListFilesPassesCategoryFilter(t *testing.T) {
-	e, store, _, auth, _ := newFileEcho(t, nil)
+	e, store, _, _ := newFileEcho(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/files?category_id=5", nil)
 	req = req.WithContext(requestctx.WithUserID(req.Context(), "7"))
@@ -142,16 +120,13 @@ func TestListFilesPassesCategoryFilter(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list files status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
-	}
 	if store.listFilter.CategoryID != 5 {
 		t.Fatalf("category filter = %d, want 5", store.listFilter.CategoryID)
 	}
 }
 
-func TestServeUploadRequiresFileReadPermission(t *testing.T) {
-	e, _, _, auth, uploadDir := newFileEcho(t, nil)
+func TestServeUploadReturnsStoredFile(t *testing.T) {
+	e, _, _, uploadDir := newFileEcho(t)
 	if err := os.WriteFile(filepath.Join(uploadDir, "stored.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatalf("write uploaded file fixture: %v", err)
 	}
@@ -163,51 +138,24 @@ func TestServeUploadRequiresFileReadPermission(t *testing.T) {
 	if rec.Body.String() != "hello" {
 		t.Fatalf("served upload body = %q, want hello", rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
-	}
-	if len(auth.paths) != 1 || auth.paths[0] != "/api/uploads/*" {
-		t.Fatalf("authorized paths = %v, want [/api/uploads/*]", auth.paths)
-	}
-}
-
-func TestServeUploadRejectsUnauthorizedBeforeStaticFile(t *testing.T) {
-	e, _, _, auth, uploadDir := newFileEcho(t, apperr.NewPermissionDenied("file", "read"))
-	if err := os.WriteFile(filepath.Join(uploadDir, "stored.txt"), []byte("hello"), 0o644); err != nil {
-		t.Fatalf("write uploaded file fixture: %v", err)
-	}
-
-	rec := doJSON(t, e, http.MethodGet, "/api/uploads/stored.txt", "", "7")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
-	}
 }
 
 func TestServeUploadRejectsNestedPath(t *testing.T) {
-	e, _, _, auth, _ := newFileEcho(t, nil)
+	e, _, _, _ := newFileEcho(t)
 
 	rec := doJSON(t, e, http.MethodGet, "/api/uploads/nested/stored.txt", "", "7")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileRead {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileRead)
-	}
 }
 
 func TestRenameFileUpdatesMetadataAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth, _ := newFileEcho(t, nil)
+	e, store, recorder, _ := newFileEcho(t)
 	store.file = mustFile(t, 9, "old.txt", "https://cdn.example.com/old.txt")
 
 	rec := doJSON(t, e, http.MethodPatch, "/api/files/9/name", `{"name":"new.txt"}`, "7")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("rename file status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileUpdate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileUpdate)
 	}
 	if store.updated.Name != "new.txt" {
 		t.Fatalf("updated name = %q, want new.txt", store.updated.Name)
@@ -218,7 +166,7 @@ func TestRenameFileUpdatesMetadataAndRecordsOperation(t *testing.T) {
 }
 
 func TestDeleteFileRemovesMetadataLocalUploadAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth, uploadDir := newFileEcho(t, nil)
+	e, store, recorder, uploadDir := newFileEcho(t)
 	storedName := "stored.txt"
 	target := filepath.Join(uploadDir, storedName)
 	if err := os.WriteFile(target, []byte("hello"), 0o644); err != nil {
@@ -229,9 +177,6 @@ func TestDeleteFileRemovesMetadataLocalUploadAndRecordsOperation(t *testing.T) {
 	rec := doJSON(t, e, http.MethodDelete, "/api/files/9", "", "7")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete file status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileDelete)
 	}
 	if store.deletedID != 9 {
 		t.Fatalf("deleted id = %d, want 9", store.deletedID)
@@ -245,14 +190,11 @@ func TestDeleteFileRemovesMetadataLocalUploadAndRecordsOperation(t *testing.T) {
 }
 
 func TestCreateCategoryStoresMetadataAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth, _ := newFileEcho(t, nil)
+	e, store, recorder, _ := newFileEcho(t)
 
 	rec := doJSON(t, e, http.MethodPost, "/api/file-categories", `{"name":"合同"}`, "7")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create category status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileCategoryCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileCategoryCreate)
 	}
 	if store.createdCategory.Name != "合同" {
 		t.Fatalf("created category name = %q, want 合同", store.createdCategory.Name)
@@ -263,7 +205,7 @@ func TestCreateCategoryStoresMetadataAndRecordsOperation(t *testing.T) {
 }
 
 func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
-	e, store, recorder, auth, _ := newFileEcho(t, nil)
+	e, store, recorder, _ := newFileEcho(t)
 	store.categories = []filedomain.FileCategory{
 		mustCategory(t, 1, 0, "合同"),
 		mustCategory(t, 2, 1, "采购合同"),
@@ -273,9 +215,6 @@ func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("delete category status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionFileCategoryDelete {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionFileCategoryDelete)
-	}
 	if store.deletedCategoryID != 0 {
 		t.Fatalf("deleted category id = %d, want 0", store.deletedCategoryID)
 	}
@@ -284,20 +223,19 @@ func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
 	}
 }
 
-func newFileEcho(t *testing.T, authErr error) (*echo.Echo, *fileStore, *operationRecorder, *fileAuthorizer, string) {
+func newFileEcho(t *testing.T) (*echo.Echo, *fileStore, *operationRecorder, string) {
 	t.Helper()
 	store := &fileStore{}
 	uc := fileusecase.New(store)
-	auth := &fileAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
 	uploadDir := t.TempDir()
-	handler := filehttp.New(uc, auth, recorder, uploadDir)
+	handler := filehttp.New(uc, recorder, uploadDir)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	filehttp.Register(e.Group("/api"), handler)
-	return e, store, recorder, auth, uploadDir
+	return e, store, recorder, uploadDir
 }
 
 func doMultipart(t *testing.T, e *echo.Echo, path, filename, body, userID string) *httptest.ResponseRecorder {
@@ -445,18 +383,6 @@ func (s *fileStore) CategoryNameExists(ctx context.Context, _ string, _, _ int64
 		return false, err
 	}
 	return s.categoryNameTaken, nil
-}
-
-type fileAuthorizer struct {
-	err         error
-	permissions []string
-	paths       []string
-}
-
-func (a *fileAuthorizer) RequireRoutePermission(_ context.Context, permission, _, path string) error {
-	a.permissions = append(a.permissions, permission)
-	a.paths = append(a.paths, path)
-	return a.err
 }
 
 type operationRecorder struct {

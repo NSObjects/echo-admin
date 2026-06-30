@@ -12,7 +12,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	apitokendomain "github.com/NSObjects/echo-admin/internal/modules/apitoken/domain"
 	apitokenhttp "github.com/NSObjects/echo-admin/internal/modules/apitoken/http"
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
@@ -22,15 +21,12 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
-func TestCreateTokenRequiresPermissionAndRecordsOperation(t *testing.T) {
-	e, store, recorder, auth := newTokenEcho(nil)
+func TestCreateTokenRecordsOperation(t *testing.T) {
+	e, store, recorder := newTokenEcho()
 
 	rec := doJSON(t, e, http.MethodPost, "/api/api-tokens", `{"name":"Deploy Bot","active":true,"days":30}`, "42", "7")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create token status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(auth.permissions) != 1 || auth.permissions[0] != accessdomain.PermissionAPITokenCreate {
-		t.Fatalf("permissions = %v, want [%q]", auth.permissions, accessdomain.PermissionAPITokenCreate)
 	}
 	if store.created.AdminID != 42 || store.created.RoleID != 7 {
 		t.Fatalf("created identity = (%d,%d), want (42,7)", store.created.AdminID, store.created.RoleID)
@@ -50,22 +46,7 @@ func TestCreateTokenRequiresPermissionAndRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestListTokensRejectsUnauthorizedBeforeStore(t *testing.T) {
-	e, store, recorder, _ := newTokenEcho(apperr.NewPermissionDenied("api_token", "read"))
-
-	rec := doJSON(t, e, http.MethodGet, "/api/api-tokens", "", "42", "7")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("list token status = %d, want %d: %s", rec.Code, http.StatusForbidden, rec.Body.String())
-	}
-	if store.listCalls != 0 {
-		t.Fatalf("listCalls = %d, want 0", store.listCalls)
-	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
-	}
-}
-
-func newTokenEcho(authErr error) (*echo.Echo, *tokenStore, *operationRecorder, *tokenAuthorizer) {
+func newTokenEcho() (*echo.Echo, *tokenStore, *operationRecorder) {
 	store := &tokenStore{}
 	uc := usecase.New(
 		store,
@@ -74,15 +55,14 @@ func newTokenEcho(authErr error) (*echo.Echo, *tokenStore, *operationRecorder, *
 		usecase.WithClock(fixedTime),
 		usecase.WithSecretSource(func() (string, error) { return "ea_known_secret", nil }),
 	)
-	auth := &tokenAuthorizer{err: authErr}
 	recorder := &operationRecorder{}
-	handler := apitokenhttp.New(uc, auth, recorder)
+	handler := apitokenhttp.New(uc, recorder)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	apitokenhttp.Register(e.Group("/api"), handler)
-	return e, store, recorder, auth
+	return e, store, recorder
 }
 
 func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID, roleID string) *httptest.ResponseRecorder {
@@ -141,16 +121,6 @@ func (s *tokenStore) DeleteToken(context.Context, int64) error {
 
 func (s *tokenStore) TouchLastUsed(context.Context, int64, time.Time) error {
 	return nil
-}
-
-type tokenAuthorizer struct {
-	err         error
-	permissions []string
-}
-
-func (a *tokenAuthorizer) RequireRoutePermission(_ context.Context, permission, _, _ string) error {
-	a.permissions = append(a.permissions, permission)
-	return a.err
 }
 
 type operationRecorder struct {
