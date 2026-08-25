@@ -31,10 +31,8 @@ const (
 	PermissionMenuUpdate = "menu:update"
 	PermissionMenuDelete = "menu:delete"
 
-	PermissionAPIRead   = "api:read"
-	PermissionAPICreate = "api:create"
-	PermissionAPIUpdate = "api:update"
-	PermissionAPIDelete = "api:delete"
+	PermissionAPIRead  = "api:read"
+	PermissionAPIGrant = "api:grant"
 
 	PermissionAPITokenRead   = "api_token:read"
 	PermissionAPITokenCreate = "api_token:create"
@@ -176,6 +174,16 @@ func RestoreRole(id, parentID int64, code, name string, permissions []string, me
 // IsSuperAdmin reports whether the role is the seeded root administrator role.
 func (r Role) IsSuperAdmin() bool { return r.Code == RoleCodeSuperAdmin }
 
+// HasAPI reports whether the role holds an explicit grant for one managed API.
+func (r Role) HasAPI(apiID int64) bool {
+	for _, id := range r.APIIDs {
+		if id == apiID {
+			return true
+		}
+	}
+	return false
+}
+
 // Menu represents one visible navigation entry in the back-office UI.
 type Menu struct {
 	ID         int64
@@ -315,13 +323,12 @@ type API struct {
 	Description string
 	Group       string
 	Permission  string
-	Public      bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
 // RestoreAPI rebuilds an API route from a trusted store representation.
-func RestoreAPI(id int64, method, path, description, group, permission string, public bool, createdAt, updatedAt time.Time) (API, error) {
+func RestoreAPI(id int64, method, path, description, group, permission string, createdAt, updatedAt time.Time) (API, error) {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	path = strings.TrimSpace(path)
 	description = strings.TrimSpace(description)
@@ -353,7 +360,6 @@ func RestoreAPI(id int64, method, path, description, group, permission string, p
 		Description: description,
 		Group:       group,
 		Permission:  permission,
-		Public:      public,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 	}, nil
@@ -373,9 +379,7 @@ var permissionCatalog = []PermissionDefinition{
 	{Token: PermissionMenuUpdate, Resource: "菜单", Action: "更新", Name: "更新菜单"},
 	{Token: PermissionMenuDelete, Resource: "菜单", Action: "删除", Name: "删除菜单"},
 	{Token: PermissionAPIRead, Resource: "API", Action: "查看", Name: "查看API"},
-	{Token: PermissionAPICreate, Resource: "API", Action: "创建", Name: "创建API"},
-	{Token: PermissionAPIUpdate, Resource: "API", Action: "更新", Name: "更新API"},
-	{Token: PermissionAPIDelete, Resource: "API", Action: "删除", Name: "删除API"},
+	{Token: PermissionAPIGrant, Resource: "API", Action: "授权", Name: "授权API角色"},
 	{Token: PermissionAPITokenRead, Resource: "API Token", Action: "查看", Name: "查看API Token"},
 	{Token: PermissionAPITokenCreate, Resource: "API Token", Action: "创建", Name: "创建API Token"},
 	{Token: PermissionAPITokenUpdate, Resource: "API Token", Action: "更新", Name: "更新API Token"},

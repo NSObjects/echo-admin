@@ -244,7 +244,6 @@ func TestExportVersionStoresPortableBundle(t *testing.T) {
 		Name:          "权限包",
 		Description:   "初始化权限",
 		MenuIDs:       []int64{2, 2},
-		APIIDs:        []int64{3},
 		DictionaryIDs: []int64{9},
 	})
 	if err != nil {
@@ -256,15 +255,12 @@ func TestExportVersionStoresPortableBundle(t *testing.T) {
 	if !sameInt64s(catalog.exportMenuIDs, []int64{2}) {
 		t.Fatalf("exportMenuIDs = %v, want [2]", catalog.exportMenuIDs)
 	}
-	if !sameInt64s(catalog.exportAPIIDs, []int64{3}) {
-		t.Fatalf("exportAPIIDs = %v, want [3]", catalog.exportAPIIDs)
-	}
 	bundle := decodeVersionBundle(t, version.Data)
 	if bundle.Version.Code != "v2.0.0" {
 		t.Fatalf("bundle version code = %q, want v2.0.0", bundle.Version.Code)
 	}
-	if len(bundle.Menus) != 1 || len(bundle.APIs) != 1 || len(bundle.Dictionaries) != 1 {
-		t.Fatalf("bundle counts = menus:%d apis:%d dictionaries:%d, want 1/1/1", len(bundle.Menus), len(bundle.APIs), len(bundle.Dictionaries))
+	if len(bundle.Menus) != 1 || len(bundle.Dictionaries) != 1 {
+		t.Fatalf("bundle counts = menus:%d dictionaries:%d, want 1/1", len(bundle.Menus), len(bundle.Dictionaries))
 	}
 }
 
@@ -345,12 +341,6 @@ func newVersionExportFixture(t *testing.T) (*storeSpy, *versionCatalogSpy) {
 			Component: "./Roles",
 			Active:    true,
 		}},
-		apis: []usecase.VersionAPI{{
-			Method:      "GET",
-			Path:        "/api/roles",
-			Description: "角色列表",
-			Group:       "role",
-		}},
 	}
 	return store, catalog
 }
@@ -377,12 +367,6 @@ func TestImportVersionImportsCatalogAndDictionaries(t *testing.T) {
 			Component: "./Roles",
 			Active:    true,
 		}},
-		APIs: []usecase.VersionAPI{{
-			Method:      "GET",
-			Path:        "/api/roles",
-			Description: "角色列表",
-			Group:       "role",
-		}},
 		Dictionaries: []usecase.VersionDictionary{{
 			Code: statusDictionaryCode,
 			Name: "状态",
@@ -399,9 +383,6 @@ func TestImportVersionImportsCatalogAndDictionaries(t *testing.T) {
 	}
 	if len(catalog.importMenus) != 1 {
 		t.Fatalf("importMenus = %d, want 1", len(catalog.importMenus))
-	}
-	if len(catalog.importAPIs) != 1 {
-		t.Fatalf("importAPIs = %d, want 1", len(catalog.importAPIs))
 	}
 	if len(store.createdDictionaries) != 1 || store.createdDictionaries[0].Code != statusDictionaryCode {
 		t.Fatalf("createdDictionaries = %+v, want status dictionary", store.createdDictionaries)
@@ -630,11 +611,8 @@ func mustParamNoT(id int64, name, key, value, desc string) (settingsdomain.Syste
 
 type versionCatalogSpy struct {
 	menus         []usecase.VersionMenu
-	apis          []usecase.VersionAPI
 	exportMenuIDs []int64
-	exportAPIIDs  []int64
 	importMenus   []usecase.VersionMenu
-	importAPIs    []usecase.VersionAPI
 }
 
 func (s *versionCatalogSpy) ExportVersionMenus(_ context.Context, ids []int64) ([]usecase.VersionMenu, error) {
@@ -642,18 +620,8 @@ func (s *versionCatalogSpy) ExportVersionMenus(_ context.Context, ids []int64) (
 	return s.menus, nil
 }
 
-func (s *versionCatalogSpy) ExportVersionAPIs(_ context.Context, ids []int64) ([]usecase.VersionAPI, error) {
-	s.exportAPIIDs = append([]int64(nil), ids...)
-	return s.apis, nil
-}
-
 func (s *versionCatalogSpy) ImportVersionMenus(_ context.Context, menus []usecase.VersionMenu) error {
 	s.importMenus = append([]usecase.VersionMenu(nil), menus...)
-	return nil
-}
-
-func (s *versionCatalogSpy) ImportVersionAPIs(_ context.Context, apis []usecase.VersionAPI) error {
-	s.importAPIs = append([]usecase.VersionAPI(nil), apis...)
 	return nil
 }
 

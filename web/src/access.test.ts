@@ -41,18 +41,16 @@ describe('access', () => {
     expect(result.canDictDelete).toBe(true);
   });
 
-  it('allows api management when api permissions are granted', () => {
+  it('allows api catalog inspection and role grants', () => {
     const result = access({
       currentUser: {
         ...baseUser,
-        permissions: ['api:read', 'api:create', 'api:update', 'api:delete'],
+        permissions: ['api:read', 'api:grant'],
       },
     });
 
     expect(result.canApiRead).toBe(true);
-    expect(result.canApiCreate).toBe(true);
-    expect(result.canApiUpdate).toBe(true);
-    expect(result.canApiDelete).toBe(true);
+    expect(result.canApiGrant).toBe(true);
   });
 
   it('allows api token management when token permissions are granted', () => {

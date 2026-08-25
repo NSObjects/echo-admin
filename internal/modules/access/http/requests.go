@@ -61,19 +61,6 @@ type menuButtonRequest struct {
 	Description string `json:"description" validate:"omitempty,max=120"`
 }
 
-type apiRequest struct {
-	Method      string `json:"method" validate:"required,oneof=GET POST PUT PATCH DELETE"`
-	Path        string `json:"path" validate:"required,max=180"`
-	Description string `json:"description" validate:"required,max=120"`
-	Group       string `json:"group" validate:"required,max=80"`
-	Permission  string `json:"permission" validate:"omitempty,max=80"`
-	Public      bool   `json:"public"`
-}
-
 type roleIDsRequest struct {
 	RoleIDs []int64 `json:"role_ids" validate:"omitempty,dive,gt=0"`
-}
-
-type idsRequest struct {
-	IDs []int64 `json:"ids" validate:"required,min=1,dive,gt=0"`
 }

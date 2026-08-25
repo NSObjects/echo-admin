@@ -180,49 +180,6 @@ func (s *Store) FindAPIByRoute(ctx context.Context, method, path string) (domain
 	return model.toDomain()
 }
 
-// CreateAPI inserts an API route.
-func (s *Store) CreateAPI(ctx context.Context, api domain.API) (domain.API, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.API{}, err
-	}
-	model := apiModelFromDomain(api)
-	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.API{}, mapWriteError(err, "api route already exists", "create api")
-	}
-	return model.toDomain()
-}
-
-// UpdateAPI replaces mutable API route fields.
-func (s *Store) UpdateAPI(ctx context.Context, api domain.API) (domain.API, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.API{}, err
-	}
-	model := apiModelFromDomain(api)
-	result := s.db.WithContext(ctx).Save(&model)
-	if result.Error != nil {
-		return domain.API{}, mapWriteError(result.Error, "api route already exists", "update api")
-	}
-	if result.RowsAffected == 0 {
-		return domain.API{}, apperr.NewNotFound("api")
-	}
-	return model.toDomain()
-}
-
-// DeleteAPI removes an API route row by id.
-func (s *Store) DeleteAPI(ctx context.Context, id int64) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	result := s.db.WithContext(ctx).Delete(&apiModel{}, "id = ?", id)
-	if result.Error != nil {
-		return apperr.WrapDatabase(result.Error, "delete api")
-	}
-	if result.RowsAffected == 0 {
-		return apperr.NewNotFound("api")
-	}
-	return nil
-}
-
 // ListMenus returns menus ordered for display.
 func (s *Store) ListMenus(ctx context.Context) ([]domain.Menu, error) {
 	if err := ctx.Err(); err != nil {
@@ -410,8 +367,9 @@ func (s *Store) ensurePermission(ctx context.Context, permission domain.Permissi
 
 func (s *Store) seedAPIs(ctx context.Context) ([]int64, error) {
 	now := time.Now().UTC()
-	apiIDs := make([]int64, 0, len(apiSeeds))
-	for _, api := range apiSeeds {
+	definitions := domain.ManagedAPIRouteCatalog()
+	apiIDs := make([]int64, 0, len(definitions))
+	for _, api := range definitions {
 		id, err := s.ensureAPI(ctx, api, now)
 		if err != nil {
 			return nil, err
@@ -421,14 +379,13 @@ func (s *Store) seedAPIs(ctx context.Context) ([]int64, error) {
 	return apiIDs, nil
 }
 
-func (s *Store) ensureAPI(ctx context.Context, seed apiSeed, now time.Time) (int64, error) {
+func (s *Store) ensureAPI(ctx context.Context, definition domain.ManagedAPIRouteDefinition, now time.Time) (int64, error) {
 	var existing apiModel
-	err := s.db.WithContext(ctx).Where("method = ? AND path = ?", seed.method, seed.path).First(&existing).Error
+	err := s.db.WithContext(ctx).Where("method = ? AND path = ?", definition.Method, definition.Pattern).First(&existing).Error
 	if err == nil {
-		existing.Description = seed.description
-		existing.Group = seed.group
-		existing.Permission = seed.permission
-		existing.Public = seed.public
+		existing.Description = definition.Description
+		existing.Group = definition.Group
+		existing.Permission = definition.Permission
 		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
 			return 0, apperr.WrapDatabase(saveErr, "update seed api")
 		}
@@ -438,12 +395,11 @@ func (s *Store) ensureAPI(ctx context.Context, seed apiSeed, now time.Time) (int
 		return 0, apperr.WrapDatabase(err, "find seed api")
 	}
 	model := apiModel{
-		Method:      seed.method,
-		Path:        seed.path,
-		Description: seed.description,
-		Group:       seed.group,
-		Permission:  seed.permission,
-		Public:      seed.public,
+		Method:      definition.Method,
+		Path:        definition.Pattern,
+		Description: definition.Description,
+		Group:       definition.Group,
+		Permission:  definition.Permission,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -656,11 +612,8 @@ var defaultMenuSeeds = []menuSeed{
 		{name: "delete", description: "删除菜单"},
 		{name: "roles", description: "授权菜单角色"},
 	}},
-	{name: "API管理", path: "/apis", parentPath: "/access", icon: "api", component: "./APIs", permission: domain.PermissionAPIRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 24, buttons: []menuButtonSeed{
-		{name: "create", description: "新增API"},
-		{name: "update", description: "编辑API"},
-		{name: "delete", description: "删除API"},
-		{name: "roles", description: "授权API角色"},
+	{name: "受管API路由目录", path: "/apis", parentPath: "/access", icon: "api", component: "./APIs", permission: domain.PermissionAPIRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 24, buttons: []menuButtonSeed{
+		{name: "grant", description: "授权API角色"},
 	}},
 	{name: "API Token", path: "/api-tokens", parentPath: "/access", icon: "key", component: "./APITokens", permission: domain.PermissionAPITokenRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 25, buttons: []menuButtonSeed{
 		{name: "create", description: "新增API Token"},
@@ -710,118 +663,6 @@ var defaultMenuSeeds = []menuSeed{
 	}},
 }
 
-type apiSeed struct {
-	method      string
-	path        string
-	description string
-	group       string
-	permission  string
-	public      bool
-}
-
-// apiSeeds is the initial API authorization catalog. Private routes must have
-// a matching method/path row because the boot route middleware authorizes
-// requests by the active role's assigned API ids.
-var apiSeeds = []apiSeed{
-	{method: "GET", path: "/api/health", description: "进程存活检查", group: "system", public: true},
-	{method: "GET", path: "/api/info", description: "应用信息", group: "system", public: true},
-	{method: "GET", path: "/api/ready", description: "整体 readiness", group: "system", public: true},
-	{method: "GET", path: "/api/capabilities", description: "capability 状态", group: "system", public: true},
-	{method: "GET", path: "/api/setup/state", description: "系统初始化状态", group: "setup", public: true},
-	{method: "POST", path: "/api/setup", description: "系统首次初始化", group: "setup", public: true},
-	{method: "POST", path: "/api/auth/login", description: "管理员登录", group: "auth", public: true},
-	{method: "POST", path: "/api/auth/logout", description: "服务端退出当前登录会话", group: "auth"},
-	{method: "POST", path: "/api/auth/logout-others", description: "撤销其他登录会话", group: "auth"},
-	{method: "POST", path: "/api/auth/password", description: "当前管理员修改密码", group: "auth"},
-	{method: "POST", path: "/api/auth/role", description: "切换当前角色", group: "auth"},
-	{method: "GET", path: "/api/auth/me", description: "当前管理员", group: "auth"},
-	{method: "PATCH", path: "/api/auth/me", description: "更新当前管理员资料", group: "auth"},
-	{method: "GET", path: "/api/admins", description: "管理员列表", group: "admin", permission: domain.PermissionAdminRead},
-	{method: "POST", path: "/api/admins", description: "创建管理员", group: "admin", permission: domain.PermissionAdminCreate},
-	{method: "PATCH", path: "/api/admins/:id", description: "更新管理员", group: "admin", permission: domain.PermissionAdminUpdate},
-	{method: "DELETE", path: "/api/admins/:id", description: "删除管理员", group: "admin", permission: domain.PermissionAdminDelete},
-	{method: "GET", path: "/api/roles", description: "角色列表", group: "role", permission: domain.PermissionRoleRead},
-	{method: "POST", path: "/api/roles", description: "创建角色", group: "role", permission: domain.PermissionRoleCreate},
-	{method: "PATCH", path: "/api/roles/:id", description: "更新角色", group: "role", permission: domain.PermissionRoleUpdate},
-	{method: "DELETE", path: "/api/roles/:id", description: "删除角色", group: "role", permission: domain.PermissionRoleDelete},
-	{method: "POST", path: "/api/roles/:id/copy", description: "复制角色", group: "role", permission: domain.PermissionRoleCreate},
-	{method: "GET", path: "/api/roles/:id/admins", description: "角色关联管理员", group: "role", permission: domain.PermissionRoleRead},
-	{method: "PUT", path: "/api/roles/:id/admins", description: "更新角色关联管理员", group: "role", permission: domain.PermissionRoleUpdate},
-	{method: "GET", path: "/api/permissions", description: "权限目录元数据", group: "access", permission: domain.PermissionRoleRead},
-	{method: "GET", path: "/api/apis", description: "API列表", group: "api", permission: domain.PermissionAPIRead},
-	{method: "GET", path: "/api/apis/groups", description: "API分组", group: "api", permission: domain.PermissionAPIRead},
-	{method: "POST", path: "/api/apis", description: "创建API", group: "api", permission: domain.PermissionAPICreate},
-	{method: "POST", path: "/api/apis/batch-delete", description: "批量删除API", group: "api", permission: domain.PermissionAPIDelete},
-	{method: "GET", path: "/api/apis/:id", description: "API详情", group: "api", permission: domain.PermissionAPIRead},
-	{method: "PATCH", path: "/api/apis/:id", description: "更新API", group: "api", permission: domain.PermissionAPIUpdate},
-	{method: "DELETE", path: "/api/apis/:id", description: "删除API", group: "api", permission: domain.PermissionAPIDelete},
-	{method: "GET", path: "/api/apis/:id/roles", description: "API授权角色", group: "api", permission: domain.PermissionAPIRead},
-	{method: "PUT", path: "/api/apis/:id/roles", description: "更新API授权角色", group: "api", permission: domain.PermissionAPIUpdate},
-	{method: "GET", path: "/api/api-tokens", description: "API Token列表", group: "api_token", permission: domain.PermissionAPITokenRead},
-	{method: "POST", path: "/api/api-tokens", description: "创建API Token", group: "api_token", permission: domain.PermissionAPITokenCreate},
-	{method: "PATCH", path: "/api/api-tokens/:id", description: "更新API Token", group: "api_token", permission: domain.PermissionAPITokenUpdate},
-	{method: "DELETE", path: "/api/api-tokens/:id", description: "删除API Token", group: "api_token", permission: domain.PermissionAPITokenDelete},
-	{method: "GET", path: "/api/menus", description: "菜单列表", group: "menu", permission: domain.PermissionMenuRead},
-	{method: "POST", path: "/api/menus", description: "创建菜单", group: "menu", permission: domain.PermissionMenuCreate},
-	{method: "GET", path: "/api/menus/:id", description: "菜单详情", group: "menu", permission: domain.PermissionMenuRead},
-	{method: "PATCH", path: "/api/menus/:id", description: "更新菜单", group: "menu", permission: domain.PermissionMenuUpdate},
-	{method: "DELETE", path: "/api/menus/:id", description: "删除菜单", group: "menu", permission: domain.PermissionMenuDelete},
-	{method: "GET", path: "/api/menus/:id/roles", description: "菜单授权角色", group: "menu", permission: domain.PermissionMenuRead},
-	{method: "PUT", path: "/api/menus/:id/roles", description: "更新菜单授权角色", group: "menu", permission: domain.PermissionMenuUpdate},
-	{method: "GET", path: "/api/system/configs", description: "系统配置列表", group: "config", permission: domain.PermissionConfigRead},
-	{method: "PUT", path: "/api/system/configs/:key", description: "创建或更新系统配置", group: "config", permission: domain.PermissionConfigUpdate},
-	{method: "DELETE", path: "/api/system/configs/:key", description: "删除系统配置", group: "config", permission: domain.PermissionConfigDelete},
-	{method: "GET", path: "/api/system/params", description: "系统参数列表", group: "param", permission: domain.PermissionParamRead},
-	{method: "POST", path: "/api/system/params", description: "创建系统参数", group: "param", permission: domain.PermissionParamCreate},
-	{method: "POST", path: "/api/system/params/batch-delete", description: "批量删除系统参数", group: "param", permission: domain.PermissionParamDelete},
-	{method: "GET", path: "/api/system/params/key/:key", description: "按键获取系统参数", group: "param", permission: domain.PermissionParamRead},
-	{method: "GET", path: "/api/system/params/:id", description: "系统参数详情", group: "param", permission: domain.PermissionParamRead},
-	{method: "PATCH", path: "/api/system/params/:id", description: "更新系统参数", group: "param", permission: domain.PermissionParamUpdate},
-	{method: "DELETE", path: "/api/system/params/:id", description: "删除系统参数", group: "param", permission: domain.PermissionParamDelete},
-	{method: "GET", path: "/api/system/versions", description: "版本记录列表", group: "version", permission: domain.PermissionVersionRead},
-	{method: "POST", path: "/api/system/versions", description: "创建版本记录", group: "version", permission: domain.PermissionVersionCreate},
-	{method: "POST", path: "/api/system/versions/export", description: "导出版本包", group: "version", permission: domain.PermissionVersionCreate},
-	{method: "POST", path: "/api/system/versions/import", description: "导入版本包", group: "version", permission: domain.PermissionVersionCreate},
-	{method: "POST", path: "/api/system/versions/batch-delete", description: "批量删除版本记录", group: "version", permission: domain.PermissionVersionDelete},
-	{method: "GET", path: "/api/system/versions/:id", description: "版本记录详情", group: "version", permission: domain.PermissionVersionRead},
-	{method: "GET", path: "/api/system/versions/:id/download", description: "下载版本记录JSON", group: "version", permission: domain.PermissionVersionRead},
-	{method: "PATCH", path: "/api/system/versions/:id", description: "更新版本记录", group: "version", permission: domain.PermissionVersionUpdate},
-	{method: "DELETE", path: "/api/system/versions/:id", description: "删除版本记录", group: "version", permission: domain.PermissionVersionDelete},
-	{method: "GET", path: "/api/dictionaries", description: "字典列表", group: "dictionary", permission: domain.PermissionDictRead},
-	{method: "POST", path: "/api/dictionaries", description: "创建字典", group: "dictionary", permission: domain.PermissionDictCreate},
-	{method: "GET", path: "/api/dictionaries/export", description: "导出字典", group: "dictionary", permission: domain.PermissionDictRead},
-	{method: "POST", path: "/api/dictionaries/import", description: "导入字典", group: "dictionary", permission: domain.PermissionDictCreate},
-	{method: "PATCH", path: "/api/dictionaries/:code", description: "更新字典", group: "dictionary", permission: domain.PermissionDictUpdate},
-	{method: "DELETE", path: "/api/dictionaries/:code", description: "删除字典", group: "dictionary", permission: domain.PermissionDictDelete},
-	{method: "POST", path: "/api/dictionaries/:code/items", description: "新增字典项", group: "dictionary", permission: domain.PermissionDictCreate},
-	{method: "PATCH", path: "/api/dictionaries/:code/items/:item_id", description: "更新字典项", group: "dictionary", permission: domain.PermissionDictUpdate},
-	{method: "DELETE", path: "/api/dictionaries/:code/items/:item_id", description: "删除字典项", group: "dictionary", permission: domain.PermissionDictDelete},
-	{method: "GET", path: "/api/file-categories", description: "文件分类列表", group: "file", permission: domain.PermissionFileRead},
-	{method: "POST", path: "/api/file-categories", description: "创建文件分类", group: "file", permission: domain.PermissionFileCategoryCreate},
-	{method: "PATCH", path: "/api/file-categories/:id", description: "更新文件分类", group: "file", permission: domain.PermissionFileCategoryUpdate},
-	{method: "DELETE", path: "/api/file-categories/:id", description: "删除文件分类", group: "file", permission: domain.PermissionFileCategoryDelete},
-	{method: "GET", path: "/api/files", description: "文件列表", group: "file", permission: domain.PermissionFileRead},
-	{method: "POST", path: "/api/files", description: "上传文件", group: "file", permission: domain.PermissionFileUpload},
-	{method: "POST", path: "/api/files/import-url", description: "导入文件URL", group: "file", permission: domain.PermissionFileUpload},
-	{method: "PATCH", path: "/api/files/:id/name", description: "重命名文件", group: "file", permission: domain.PermissionFileUpdate},
-	{method: "DELETE", path: "/api/files/:id", description: "删除文件", group: "file", permission: domain.PermissionFileDelete},
-	{method: "GET", path: "/api/uploads/*", description: "上传文件静态访问", group: "file"},
-	{method: "GET", path: "/api/logs/operations", description: "操作日志", group: "log", permission: domain.PermissionLogRead},
-	{method: "GET", path: "/api/logs/operations/:id", description: "操作日志详情", group: "log", permission: domain.PermissionLogRead},
-	{method: "DELETE", path: "/api/logs/operations/:id", description: "删除操作日志", group: "log", permission: domain.PermissionLogDelete},
-	{method: "POST", path: "/api/logs/operations/batch-delete", description: "批量删除操作日志", group: "log", permission: domain.PermissionLogDelete},
-	{method: "GET", path: "/api/logs/logins", description: "登录日志", group: "log", permission: domain.PermissionLogRead},
-	{method: "GET", path: "/api/logs/logins/:id", description: "登录日志详情", group: "log", permission: domain.PermissionLogRead},
-	{method: "DELETE", path: "/api/logs/logins/:id", description: "删除登录日志", group: "log", permission: domain.PermissionLogDelete},
-	{method: "POST", path: "/api/logs/logins/batch-delete", description: "批量删除登录日志", group: "log", permission: domain.PermissionLogDelete},
-	{method: "GET", path: "/api/logs/errors", description: "系统错误日志", group: "log", permission: domain.PermissionLogRead},
-	{method: "GET", path: "/api/logs/errors/:id", description: "系统错误日志详情", group: "log", permission: domain.PermissionLogRead},
-	{method: "POST", path: "/api/logs/errors/:id/resolve", description: "处理系统错误日志", group: "log", permission: domain.PermissionLogResolve},
-	{method: "DELETE", path: "/api/logs/errors/:id/resolve", description: "取消处理系统错误日志", group: "log", permission: domain.PermissionLogResolve},
-	{method: "DELETE", path: "/api/logs/errors/:id", description: "删除系统错误日志", group: "log", permission: domain.PermissionLogDelete},
-	{method: "POST", path: "/api/logs/errors/batch-delete", description: "批量删除系统错误日志", group: "log", permission: domain.PermissionLogDelete},
-}
-
 type permissionModel struct {
 	ID        int64     `gorm:"primaryKey"`
 	Token     string    `gorm:"type:varchar(80);not null;uniqueIndex"`
@@ -843,7 +684,6 @@ type apiModel struct {
 	Description string    `gorm:"type:varchar(120);not null"`
 	Group       string    `gorm:"column:api_group;type:varchar(80);not null;index"`
 	Permission  string    `gorm:"type:varchar(80);not null;index"`
-	Public      bool      `gorm:"not null"`
 	CreatedAt   time.Time `gorm:"not null"`
 	UpdatedAt   time.Time `gorm:"not null"`
 }
@@ -852,22 +692,8 @@ func (apiModel) TableName() string {
 	return "access_apis"
 }
 
-func apiModelFromDomain(api domain.API) apiModel {
-	return apiModel{
-		ID:          api.ID,
-		Method:      api.Method,
-		Path:        api.Path,
-		Description: api.Description,
-		Group:       api.Group,
-		Permission:  api.Permission,
-		Public:      api.Public,
-		CreatedAt:   api.CreatedAt,
-		UpdatedAt:   api.UpdatedAt,
-	}
-}
-
 func (m apiModel) toDomain() (domain.API, error) {
-	return domain.RestoreAPI(m.ID, m.Method, m.Path, m.Description, m.Group, m.Permission, m.Public, m.CreatedAt, m.UpdatedAt)
+	return domain.RestoreAPI(m.ID, m.Method, m.Path, m.Description, m.Group, m.Permission, m.CreatedAt, m.UpdatedAt)
 }
 
 type roleModel struct {

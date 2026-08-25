@@ -304,34 +304,20 @@ func (u *Usecase) RevokeLoginSessions(ctx context.Context, adminID int64) error 
 	return u.sessions.RevokeLoginSessions(ctx, adminID, loginSessionRevokedSecurityEvent, u.now())
 }
 
-// RequirePermission verifies that the current admin has permission through the active role.
-func (u *Usecase) RequirePermission(ctx context.Context, permission string) error {
-	if err := u.ready(); err != nil {
-		return err
-	}
-	admin, activeRoleID, err := u.currentAdminAndRole(ctx)
-	if err != nil {
-		return err
-	}
-	snapshot, err := u.casbinSnapshot(ctx, admin, activeRoleID)
-	if err != nil {
-		return err
-	}
-	return requirePermission(snapshot, permission)
-}
-
 // AuthorizeRoute verifies that the current active role may call the managed
 // API route. The path must be Echo's registered route pattern rather than the
 // raw URL, so IDs and other path parameters are authorized by one catalog row.
+// The check reads only the active role's API grants; Casbin snapshot
+// construction stays on the CurrentUser path and must not run per request here.
 func (u *Usecase) AuthorizeRoute(ctx context.Context, method, path string) error {
 	if err := u.ready(); err != nil {
 		return err
 	}
-	admin, activeRoleID, err := u.currentAdminAndRole(ctx)
+	_, activeRoleID, err := u.currentAdminAndRole(ctx)
 	if err != nil {
 		return err
 	}
-	snapshot, err := u.casbinSnapshot(ctx, admin, activeRoleID)
+	role, err := u.activeRouteRole(ctx, activeRoleID)
 	if err != nil {
 		return err
 	}
@@ -339,7 +325,25 @@ func (u *Usecase) AuthorizeRoute(ctx context.Context, method, path string) error
 	if err != nil {
 		return err
 	}
-	return requireAssignedRouteAPI(snapshot.activeRole, api)
+	return requireAssignedRouteAPI(role, api)
+}
+
+// activeRouteRole loads the active role for route authorization. A missing or
+// inactive role is an authorization failure (fail-closed), aligned with the
+// missing-catalog-row handling in findRouteAPI rather than leaking a raw
+// not-found error.
+func (u *Usecase) activeRouteRole(ctx context.Context, activeRoleID int64) (accessdomain.Role, error) {
+	role, err := u.roles.FindRoleByID(ctx, activeRoleID)
+	if err != nil {
+		if appErr, ok := apperr.Parse(err); ok && appErr.Code() == apperr.ErrNotFound {
+			return accessdomain.Role{}, permissionDeniedRole(activeRoleID)
+		}
+		return accessdomain.Role{}, err
+	}
+	if !role.Active {
+		return accessdomain.Role{}, permissionDeniedRole(activeRoleID)
+	}
+	return role, nil
 }
 
 func (u *Usecase) ready() error {
@@ -427,7 +431,7 @@ func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin
 		}
 	}
 	if !activeFound {
-		return rbacSnapshot{}, apperr.NewPermissionDenied("role", strconv.FormatInt(activeRoleID, 10))
+		return rbacSnapshot{}, permissionDeniedRole(activeRoleID)
 	}
 	permissions, err := implicitPermissions(enforcer, user)
 	if err != nil {
@@ -477,11 +481,14 @@ func (u *Usecase) findRouteAPI(ctx context.Context, method, path string) (access
 	return api, nil
 }
 
-func requireAssignedRouteAPI(role Role, api accessdomain.API) error {
-	if api.Public || role.Code == accessdomain.RoleCodeSuperAdmin {
-		return nil
-	}
-	if containsInt64(role.APIIDs, api.ID) {
+// permissionDeniedRole reports a missing or inactive active role as an
+// authorization failure instead of leaking role lookup state.
+func permissionDeniedRole(roleID int64) error {
+	return apperr.NewPermissionDenied("role", strconv.FormatInt(roleID, 10))
+}
+
+func requireAssignedRouteAPI(role accessdomain.Role, api accessdomain.API) error {
+	if role.HasAPI(api.ID) {
 		return nil
 	}
 	return apperr.NewPermissionDenied("api", api.Path)
@@ -765,26 +772,6 @@ func enforcePermission(enforcer *casbin.Enforcer, user, permission string) (bool
 		return false, fmt.Errorf("enforce casbin permission: %w", err)
 	}
 	return allowed, nil
-}
-
-func requirePermission(snapshot rbacSnapshot, permission string) error {
-	allowed, err := enforcePermission(snapshot.enforcer, snapshot.user, permission)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return apperr.NewPermissionDenied("admin", permission)
-	}
-	return nil
-}
-
-func containsInt64(values []int64, want int64) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func splitPermission(permission string) (string, string, error) {

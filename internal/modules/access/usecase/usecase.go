@@ -504,104 +504,6 @@ func (u *Usecase) APIGroups(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// CreateAPI validates and stores a managed API route.
-func (u *Usecase) CreateAPI(ctx context.Context, input APIInput) (API, error) {
-	if err := u.ready(); err != nil {
-		return API{}, err
-	}
-	api, err := domain.RestoreAPI(0, input.Method, input.Path, input.Description, input.Group, input.Permission, input.Public, time.Time{}, time.Time{})
-	if err != nil {
-		return API{}, mapDomainError(err)
-	}
-	if input.Public {
-		if mutationErr := u.ensureAPIMutationAllowed(ctx, 0, input.Public); mutationErr != nil {
-			return API{}, mutationErr
-		}
-	}
-	created, err := u.store.CreateAPI(ctx, api)
-	if err != nil {
-		return API{}, err
-	}
-	return fromAPI(created), nil
-}
-
-// UpdateAPI replaces mutable API route metadata.
-func (u *Usecase) UpdateAPI(ctx context.Context, input UpdateAPIInput) (API, error) {
-	if err := u.ready(); err != nil {
-		return API{}, err
-	}
-	existing, err := u.store.FindAPIByID(ctx, input.ID)
-	if err != nil {
-		return API{}, err
-	}
-	if mutationErr := u.ensureAPIMutationAllowed(ctx, existing.ID, input.Public); mutationErr != nil {
-		return API{}, mutationErr
-	}
-	api, err := domain.RestoreAPI(existing.ID, input.Method, input.Path, input.Description, input.Group, input.Permission, input.Public, existing.CreatedAt, time.Time{})
-	if err != nil {
-		return API{}, mapDomainError(err)
-	}
-	updated, err := u.store.UpdateAPI(ctx, api)
-	if err != nil {
-		return API{}, err
-	}
-	return fromAPI(updated), nil
-}
-
-func (u *Usecase) ensureAPIMutationAllowed(ctx context.Context, apiID int64, public bool) error {
-	scope, err := u.roleScope(ctx)
-	if err != nil {
-		return err
-	}
-	if scope.super {
-		return nil
-	}
-	if apiID > 0 {
-		if err := scope.ensureAPIGrantReadable(apiID); err != nil {
-			return err
-		}
-	}
-	if public {
-		return apperr.NewPermissionDenied("api", "public")
-	}
-	return nil
-}
-
-// DeleteAPI removes an API route only when no role grant still references it.
-func (u *Usecase) DeleteAPI(ctx context.Context, id int64) error {
-	return u.DeleteAPIs(ctx, []int64{id})
-}
-
-// DeleteAPIs removes API routes only when no role grant still references them.
-func (u *Usecase) DeleteAPIs(ctx context.Context, ids []int64) error {
-	if err := u.ready(); err != nil {
-		return err
-	}
-	ids, err := normalizeRequestedAPIIDs(ids)
-	if err != nil {
-		return err
-	}
-	roles, err := u.store.ListAllRoles(ctx)
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		existing, err := u.store.FindAPIByID(ctx, id)
-		if err != nil {
-			return err
-		}
-		if apiAssignedToRole(roles, existing.ID) {
-			return apperr.NewConflict("api is assigned to roles")
-		}
-	}
-	for _, id := range ids {
-		if err := u.store.DeleteAPI(ctx, id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // APIRoleIDs returns visible role ids currently granted one API route.
 func (u *Usecase) APIRoleIDs(ctx context.Context, apiID int64) ([]int64, error) {
 	if err := u.ready(); err != nil {
@@ -824,7 +726,6 @@ func fromAPI(api domain.API) API {
 		Description: api.Description,
 		Group:       api.Group,
 		Permission:  api.Permission,
-		Public:      api.Public,
 		CreatedAt:   api.CreatedAt,
 		UpdatedAt:   api.UpdatedAt,
 	}
@@ -1125,15 +1026,6 @@ func menuButtonAssignedToRole(roles []domain.Role, buttons []domain.MenuButton) 
 	return false
 }
 
-func apiAssignedToRole(roles []domain.Role, apiID int64) bool {
-	for _, role := range roles {
-		if containsID(role.APIIDs, apiID) {
-			return true
-		}
-	}
-	return false
-}
-
 func roleIDsWithMenu(roles []domain.Role, menuID int64) []int64 {
 	out := make([]int64, 0, len(roles))
 	for _, role := range roles {
@@ -1207,25 +1099,6 @@ func normalizeRequestedRoleIDs(roleIDs []int64) ([]int64, error) {
 		}
 		seen[roleID] = struct{}{}
 		out = append(out, roleID)
-	}
-	return out, nil
-}
-
-func normalizeRequestedAPIIDs(apiIDs []int64) ([]int64, error) {
-	if len(apiIDs) == 0 {
-		return nil, apperr.NewBadRequest("api ids are required")
-	}
-	seen := make(map[int64]struct{}, len(apiIDs))
-	out := make([]int64, 0, len(apiIDs))
-	for _, apiID := range apiIDs {
-		if apiID <= 0 {
-			return nil, apperr.NewBadRequest("invalid api id")
-		}
-		if _, ok := seen[apiID]; ok {
-			continue
-		}
-		seen[apiID] = struct{}{}
-		out = append(out, apiID)
 	}
 	return out, nil
 }

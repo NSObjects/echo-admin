@@ -119,18 +119,6 @@ func TestLoginRejectsLockedAttemptBeforeCredentialLookup(t *testing.T) {
 	}
 }
 
-func TestRequirePermissionUsesCasbinRBAC(t *testing.T) {
-	uc, _ := newUsecase(t)
-	ctx := requestctx.WithUserID(context.Background(), "1")
-
-	if err := uc.RequirePermission(ctx, accessdomain.PermissionAdminRead); err != nil {
-		t.Fatalf("RequirePermission(allowed) error = %v", err)
-	}
-	if err := uc.RequirePermission(ctx, accessdomain.PermissionRoleRead); err == nil {
-		t.Fatal("RequirePermission(denied) error = nil, want permission denied")
-	}
-}
-
 func TestAuthorizeRouteUsesAssignedAPIs(t *testing.T) {
 	uc, _ := newUsecase(t)
 	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
@@ -146,12 +134,54 @@ func TestAuthorizeRouteUsesAssignedAPIs(t *testing.T) {
 	}
 }
 
-func TestAuthorizeRouteKeepsSuperAdminUnblocked(t *testing.T) {
+func TestAuthorizeRouteRequiresRootRoleGrant(t *testing.T) {
 	uc, _ := newUsecase(t)
 	ctx := requestctx.WithUserID(context.Background(), "1")
 
-	if err := uc.AuthorizeRoute(ctx, "DELETE", "/api/admins/:id"); err != nil {
-		t.Fatalf("AuthorizeRoute(super admin api not listed on role) error = %v", err)
+	if err := uc.AuthorizeRoute(ctx, "DELETE", "/api/admins/:id"); err == nil {
+		t.Fatal("AuthorizeRoute(root role api not granted) error = nil, want permission denied")
+	}
+}
+
+func TestAuthorizeRouteNormalizesMethodAndPath(t *testing.T) {
+	uc, _ := newUsecase(t)
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
+
+	if err := uc.AuthorizeRoute(ctx, " get ", " /api/roles "); err != nil {
+		t.Fatalf("AuthorizeRoute(normalized input) error = %v, want nil", err)
+	}
+}
+
+func TestAuthorizeRouteFailsClosedWhenActiveRoleUnavailable(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(store *authStore)
+	}{
+		{
+			name:   "deleted role",
+			mutate: func(store *authStore) { delete(store.roles, 2) },
+		},
+		{
+			name: "inactive role",
+			mutate: func(store *authStore) {
+				role := store.roles[2]
+				role.Active = false
+				store.roles[2] = role
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc, _, store := newUsecaseWithStore(t)
+			tt.mutate(store)
+			ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
+
+			err := uc.AuthorizeRoute(ctx, "GET", "/api/roles")
+			appErr, ok := apperr.Parse(err)
+			if !ok || appErr.Code() != apperr.ErrPermissionDenied {
+				t.Fatalf("AuthorizeRoute(%s) error = %v, want permission denied", tt.name, err)
+			}
+		})
 	}
 }
 
@@ -193,11 +223,11 @@ func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
 	}
 
 	switchedCtx := requestctx.WithRoleID(ctx, "2")
-	if err := uc.RequirePermission(switchedCtx, accessdomain.PermissionRoleRead); err != nil {
-		t.Fatalf("RequirePermission(switched allowed) error = %v", err)
+	if err := uc.AuthorizeRoute(switchedCtx, "GET", "/api/roles"); err != nil {
+		t.Fatalf("AuthorizeRoute(switched allowed) error = %v", err)
 	}
-	if err := uc.RequirePermission(switchedCtx, accessdomain.PermissionAdminRead); err == nil {
-		t.Fatal("RequirePermission(old role permission) error = nil, want permission denied")
+	if err := uc.AuthorizeRoute(switchedCtx, "GET", "/api/admins"); err == nil {
+		t.Fatal("AuthorizeRoute(old role api) error = nil, want permission denied")
 	}
 }
 
@@ -371,19 +401,19 @@ func authMenus(t *testing.T, now time.Time) []accessdomain.Menu {
 
 func authAPIs(t *testing.T, now time.Time) []accessdomain.API {
 	t.Helper()
-	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员列表", "admin", accessdomain.PermissionAdminRead, false, now, now)
+	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员列表", "admin", accessdomain.PermissionAdminRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(admin) error = %v", err)
 	}
-	roleAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/roles", "角色列表", "role", accessdomain.PermissionRoleRead, false, now, now)
+	roleAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/roles", "角色列表", "role", accessdomain.PermissionRoleRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(role) error = %v", err)
 	}
-	deleteAdminAPI, err := accessdomain.RestoreAPI(3, "DELETE", "/api/admins/:id", "删除管理员", "admin", accessdomain.PermissionAdminRead, false, now, now)
+	deleteAdminAPI, err := accessdomain.RestoreAPI(3, "DELETE", "/api/admins/:id", "删除管理员", "admin", accessdomain.PermissionAdminRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(delete admin) error = %v", err)
 	}
-	roleDetailAPI, err := accessdomain.RestoreAPI(4, "GET", "/api/roles/:id", "角色详情", "role", accessdomain.PermissionRoleRead, false, now, now)
+	roleDetailAPI, err := accessdomain.RestoreAPI(4, "GET", "/api/roles/:id", "角色详情", "role", accessdomain.PermissionRoleRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(role detail) error = %v", err)
 	}
@@ -420,10 +450,12 @@ func (s *authStore) Update(_ context.Context, admin identitydomain.Admin) (ident
 	return admin, nil
 }
 
+// FindRoleByID mirrors the mysql adapter: a missing role maps to an apperr
+// not-found error so authorization paths can treat it as fail-closed.
 func (s *authStore) FindRoleByID(_ context.Context, id int64) (accessdomain.Role, error) {
 	role, ok := s.roles[id]
 	if !ok {
-		return accessdomain.Role{}, accessdomain.ErrInvalidRoleID
+		return accessdomain.Role{}, apperr.NewNotFound("role")
 	}
 	return role, nil
 }

@@ -427,7 +427,7 @@ func (u *Usecase) VersionJSON(ctx context.Context, id int64) ([]byte, SystemVers
 	return data, version, nil
 }
 
-// ExportVersion creates a version bundle from selected menus, APIs, and dictionaries.
+// ExportVersion creates a version bundle from selected menus and dictionaries.
 func (u *Usecase) ExportVersion(ctx context.Context, input ExportVersionInput) (SystemVersion, error) {
 	if err := u.ready(); err != nil {
 		return SystemVersion{}, err
@@ -445,7 +445,6 @@ func (u *Usecase) ExportVersion(ctx context.Context, input ExportVersionInput) (
 			ExportTime:  exportedAt.Format(time.RFC3339),
 		},
 		Menus:        resources.menus,
-		APIs:         resources.apis,
 		Dictionaries: resources.dictionaries,
 	}
 	data, err := json.MarshalIndent(bundle, "", "  ")
@@ -463,7 +462,6 @@ func (u *Usecase) ExportVersion(ctx context.Context, input ExportVersionInput) (
 
 type versionExportResources struct {
 	menus        []VersionMenu
-	apis         []VersionAPI
 	dictionaries []VersionDictionary
 }
 
@@ -472,11 +470,7 @@ func (u *Usecase) exportVersionResources(ctx context.Context, input ExportVersio
 	if err != nil {
 		return versionExportResources{}, err
 	}
-	apiIDs, err := normalizeOptionalPositiveIDs(input.APIIDs, "invalid api id")
-	if err != nil {
-		return versionExportResources{}, err
-	}
-	catalogErr := u.ensureVersionCatalog(menuIDs, apiIDs)
+	catalogErr := u.ensureVersionCatalog(menuIDs)
 	if catalogErr != nil {
 		return versionExportResources{}, catalogErr
 	}
@@ -487,18 +481,11 @@ func (u *Usecase) exportVersionResources(ctx context.Context, input ExportVersio
 			return versionExportResources{}, err
 		}
 	}
-	apis := []VersionAPI{}
-	if len(apiIDs) > 0 {
-		apis, err = u.catalog.ExportVersionAPIs(ctx, apiIDs)
-		if err != nil {
-			return versionExportResources{}, err
-		}
-	}
 	dictionaries, err := u.exportVersionDictionaries(ctx, input.DictionaryIDs)
 	if err != nil {
 		return versionExportResources{}, err
 	}
-	return versionExportResources{menus: menus, apis: apis, dictionaries: dictionaries}, nil
+	return versionExportResources{menus: menus, dictionaries: dictionaries}, nil
 }
 
 // ImportVersion imports a version bundle and records the import result.
@@ -564,15 +551,10 @@ func (u *Usecase) prepareVersionImport(bundle VersionBundle) (versionImportPlan,
 }
 
 func (u *Usecase) importVersionCatalog(ctx context.Context, bundle VersionBundle) error {
-	if len(bundle.Menus) > 0 {
-		if err := u.catalog.ImportVersionMenus(ctx, bundle.Menus); err != nil {
-			return err
-		}
-	}
-	if len(bundle.APIs) == 0 {
+	if len(bundle.Menus) == 0 {
 		return nil
 	}
-	return u.catalog.ImportVersionAPIs(ctx, bundle.APIs)
+	return u.catalog.ImportVersionMenus(ctx, bundle.Menus)
 }
 
 // CreateVersion validates and stores one release record.
@@ -648,8 +630,8 @@ func (u *Usecase) ready() error {
 	return nil
 }
 
-func (u *Usecase) ensureVersionCatalog(menuIDs, apiIDs []int64) error {
-	if len(menuIDs) == 0 && len(apiIDs) == 0 {
+func (u *Usecase) ensureVersionCatalog(menuIDs []int64) error {
+	if len(menuIDs) == 0 {
 		return nil
 	}
 	if u.catalog == nil {
@@ -659,7 +641,7 @@ func (u *Usecase) ensureVersionCatalog(menuIDs, apiIDs []int64) error {
 }
 
 func (u *Usecase) ensureVersionCatalogFromBundle(bundle VersionBundle) error {
-	if len(bundle.Menus) == 0 && len(bundle.APIs) == 0 {
+	if len(bundle.Menus) == 0 {
 		return nil
 	}
 	if u.catalog == nil {

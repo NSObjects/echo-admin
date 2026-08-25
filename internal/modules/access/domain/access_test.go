@@ -13,6 +13,19 @@ func TestRestoreRoleRejectsInvalidPermissionToken(t *testing.T) {
 	}
 }
 
+func TestRoleHasAPIReportsExplicitGrant(t *testing.T) {
+	role, err := RestoreRole(2, 1, "operator", "运营", []string{PermissionRoleRead}, []int64{2}, []int64{1, 3}, nil, nil, DefaultRolePath, true, time.Now(), time.Now())
+	if err != nil {
+		t.Fatalf("RestoreRole() error = %v", err)
+	}
+	if !role.HasAPI(1) || !role.HasAPI(3) {
+		t.Fatalf("HasAPI(granted) = false for api ids %v, want true", role.APIIDs)
+	}
+	if role.HasAPI(2) {
+		t.Fatalf("HasAPI(ungranted) = true for api ids %v, want false", role.APIIDs)
+	}
+}
+
 func TestRestoreMenuRejectsInvalidPermissionToken(t *testing.T) {
 	_, err := RestoreMenu(1, 0, "Admins", "/admins", "user", false, "./Admins", MenuMeta{}, "admin", 10, true, nil, time.Now(), time.Now())
 	if !errors.Is(err, ErrInvalidPermission) {
@@ -79,9 +92,7 @@ var requiredFoundationPermissions = []string{
 	PermissionMenuUpdate,
 	PermissionMenuDelete,
 	PermissionAPIRead,
-	PermissionAPICreate,
-	PermissionAPIUpdate,
-	PermissionAPIDelete,
+	PermissionAPIGrant,
 	PermissionAPITokenRead,
 	PermissionAPITokenCreate,
 	PermissionAPITokenUpdate,

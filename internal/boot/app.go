@@ -78,16 +78,23 @@ func (a *App) mountModules() error {
 	if a == nil {
 		return errors.New("mount modules: nil app")
 	}
-	if err := a.installAPIAuthorization(); err != nil {
-		return fmt.Errorf("install api authorization: %w", err)
-	}
-	return mountModules(Context{
+	if err := mountModules(Context{
 		Config:    a.config,
 		Server:    a.server,
 		Router:    a.server.API(),
 		Container: a.injector,
 		Resources: a.resources,
-	}, a.modules)
+	}, a.modules); err != nil {
+		return err
+	}
+	authorizer, err := resolveRouteAuthorizer(a.injector)
+	if err != nil {
+		return fmt.Errorf("resolve route authorizer: %w", err)
+	}
+	if _, err := finalizeRouteExposure(a.server.Echo(), authorizer); err != nil {
+		return fmt.Errorf("finalize route exposure: %w", err)
+	}
+	return nil
 }
 
 // Server returns the HTTP runtime so tests and boot wiring can register routes

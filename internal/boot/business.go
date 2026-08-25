@@ -3,7 +3,6 @@ package boot
 import (
 	"context"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/samber/do/v2"
@@ -679,27 +678,6 @@ func (c settingsVersionCatalog) ExportVersionMenus(ctx context.Context, ids []in
 	return versionMenuTree(menus, selected, 0), nil
 }
 
-// ExportVersionAPIs implements settingsusecase.VersionCatalog for access APIs.
-func (c settingsVersionCatalog) ExportVersionAPIs(ctx context.Context, ids []int64) ([]settingsusecase.VersionAPI, error) {
-	apis, err := c.accessStore.ListAPIs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[int64]accessdomain.API, len(apis))
-	for _, api := range apis {
-		byID[api.ID] = api
-	}
-	out := make([]settingsusecase.VersionAPI, 0, len(ids))
-	for _, id := range ids {
-		api, ok := byID[id]
-		if !ok {
-			return nil, apperr.NewNotFound("api")
-		}
-		out = append(out, versionAPIFromDomain(api))
-	}
-	return out, nil
-}
-
 // ImportVersionMenus implements settingsusecase.VersionCatalog for access menus.
 func (c settingsVersionCatalog) ImportVersionMenus(ctx context.Context, menus []settingsusecase.VersionMenu) error {
 	existing, err := c.accessStore.ListMenus(ctx)
@@ -757,47 +735,6 @@ func (c settingsVersionCatalog) importVersionMenu(ctx context.Context, menu sett
 		if err := c.importVersionMenu(ctx, child, saved.ID, existing); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// ImportVersionAPIs implements settingsusecase.VersionCatalog for access APIs.
-func (c settingsVersionCatalog) ImportVersionAPIs(ctx context.Context, apis []settingsusecase.VersionAPI) error {
-	existing, err := c.accessStore.ListAPIs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, api := range apis {
-		input := accessusecase.APIInput{
-			Method:      api.Method,
-			Path:        api.Path,
-			Description: api.Description,
-			Group:       api.Group,
-			Permission:  api.Permission,
-			Public:      api.Public,
-		}
-		current, ok := findAPIByIdentity(existing, input.Method, input.Path)
-		if ok {
-			updated, err := c.access.UpdateAPI(ctx, accessusecase.UpdateAPIInput{
-				ID:          current.ID,
-				Method:      input.Method,
-				Path:        input.Path,
-				Description: input.Description,
-				Group:       input.Group,
-				Permission:  input.Permission,
-				Public:      input.Public,
-			})
-			if err != nil {
-				return err
-			}
-			existing = replaceImportedAPI(existing, updated)
-			continue
-		}
-		created, err := c.access.CreateAPI(ctx, input)
-		if err != nil {
-			return err
-		}
-		existing = replaceImportedAPI(existing, created)
 	}
 	return nil
 }
@@ -876,17 +813,6 @@ func versionMenuButtons(buttons []settingsusecase.VersionButton) []accessusecase
 	return out
 }
 
-func versionAPIFromDomain(api accessdomain.API) settingsusecase.VersionAPI {
-	return settingsusecase.VersionAPI{
-		Method:      api.Method,
-		Path:        api.Path,
-		Description: api.Description,
-		Group:       api.Group,
-		Permission:  api.Permission,
-		Public:      api.Public,
-	}
-}
-
 func findMenuByPath(menus []accessdomain.Menu, path string) (accessdomain.Menu, bool) {
 	for _, menu := range menus {
 		if menu.Path == path {
@@ -917,36 +843,6 @@ func replaceImportedMenu(menus []accessdomain.Menu, saved accessusecase.Menu) []
 		}
 	}
 	return append(menus, converted)
-}
-
-func findAPIByIdentity(apis []accessdomain.API, method, path string) (accessdomain.API, bool) {
-	method = strings.ToUpper(strings.TrimSpace(method))
-	path = strings.TrimSpace(path)
-	for _, api := range apis {
-		if api.Method == method && api.Path == path {
-			return api, true
-		}
-	}
-	return accessdomain.API{}, false
-}
-
-func replaceImportedAPI(apis []accessdomain.API, saved accessusecase.API) []accessdomain.API {
-	converted := accessdomain.API{
-		ID:          saved.ID,
-		Method:      saved.Method,
-		Path:        saved.Path,
-		Description: saved.Description,
-		Group:       saved.Group,
-		Permission:  saved.Permission,
-		Public:      saved.Public,
-	}
-	for index, api := range apis {
-		if api.ID == saved.ID || api.Method == saved.Method && api.Path == saved.Path {
-			apis[index] = converted
-			return apis
-		}
-	}
-	return append(apis, converted)
 }
 
 func (p apiTokenRolePolicy) RoleIsSuper(ctx context.Context, roleID int64) (bool, error) {

@@ -361,7 +361,7 @@ func TestSetAPIRolesRejectsAPIOutsideActiveGrantScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
-	manager, err := accessdomain.RestoreRole(2, 1, "manager", "经理", []string{accessdomain.PermissionAPIUpdate}, []int64{1}, []int64{1}, []int64{1}, []int64{3}, "/admins", true, now, now)
+	manager, err := accessdomain.RestoreRole(2, 1, "manager", "经理", []string{accessdomain.PermissionAPIGrant}, []int64{1}, []int64{1}, []int64{1}, []int64{3}, "/admins", true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(manager) error = %v", err)
 	}
@@ -369,7 +369,7 @@ func TestSetAPIRolesRejectsAPIOutsideActiveGrantScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RestoreRole(operator) error = %v", err)
 	}
-	api, err := accessdomain.RestoreAPI(2, "GET", "/api/secret", "Secret", "system", accessdomain.PermissionAPIRead, false, now, now)
+	api, err := accessdomain.RestoreAPI(2, "GET", "/api/secret", "Secret", "system", accessdomain.PermissionAPIRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(api) error = %v", err)
 	}
@@ -386,78 +386,17 @@ func TestSetAPIRolesRejectsAPIOutsideActiveGrantScope(t *testing.T) {
 	}
 }
 
-func TestCreateAPIRejectsPublicRouteForScopedRole(t *testing.T) {
-	uc, ctx, store := scopedManagerUsecaseWithStore(t)
-
-	_, err := uc.CreateAPI(ctx, usecase.APIInput{
-		Method:      "GET",
-		Path:        "/api/public-secret",
-		Description: "Public secret",
-		Group:       "system",
-		Permission:  accessdomain.PermissionAPIRead,
-		Public:      true,
-	})
-	if err == nil {
-		t.Fatal("CreateAPI(public scoped role) error = nil, want permission denied")
-	}
-	if store.createdAPI.Path != "" {
-		t.Fatalf("createdAPI.Path = %q, want empty", store.createdAPI.Path)
-	}
-}
-
-func TestUpdateAPIRejectsAPIOutsideActiveGrantScope(t *testing.T) {
-	uc, ctx, store := scopedManagerUsecaseWithStore(t)
-	store.apis = []accessdomain.API{restoreAPITest(t, 2, "GET", "/api/secret", accessdomain.PermissionAPIRead, false)}
-
-	_, err := uc.UpdateAPI(ctx, usecase.UpdateAPIInput{
-		ID:          2,
-		Method:      "GET",
-		Path:        "/api/secret",
-		Description: "Secret",
-		Group:       "system",
-		Permission:  accessdomain.PermissionAPIRead,
-		Public:      false,
-	})
-	if err == nil {
-		t.Fatal("UpdateAPI(outside grant) error = nil, want permission denied")
-	}
-	if store.createdAPI.Path != "" {
-		t.Fatalf("updated API path = %q, want empty", store.createdAPI.Path)
-	}
-}
-
-func TestUpdateAPIRejectsPublicRouteForScopedRole(t *testing.T) {
-	uc, ctx, store := scopedManagerUsecaseWithStore(t)
-	store.apis = []accessdomain.API{restoreAPITest(t, 1, "GET", "/api/managed", accessdomain.PermissionAPIRead, false)}
-
-	_, err := uc.UpdateAPI(ctx, usecase.UpdateAPIInput{
-		ID:          1,
-		Method:      "GET",
-		Path:        "/api/managed",
-		Description: "Managed",
-		Group:       "system",
-		Permission:  accessdomain.PermissionAPIRead,
-		Public:      true,
-	})
-	if err == nil {
-		t.Fatal("UpdateAPI(public scoped role) error = nil, want permission denied")
-	}
-	if store.createdAPI.Path != "" {
-		t.Fatalf("updated API path = %q, want empty", store.createdAPI.Path)
-	}
-}
-
 func TestAPIGroupsReturnsSortedUniqueGroups(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员", "admin", accessdomain.PermissionAdminRead, false, now, now)
+	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员", "admin", accessdomain.PermissionAdminRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(admin) error = %v", err)
 	}
-	logAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/logs", "日志", "log", accessdomain.PermissionLogRead, false, now, now)
+	logAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/logs", "日志", "log", accessdomain.PermissionLogRead, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(log) error = %v", err)
 	}
-	anotherAdminAPI, err := accessdomain.RestoreAPI(3, "POST", "/api/admins", "创建管理员", "admin", accessdomain.PermissionAdminCreate, false, now, now)
+	anotherAdminAPI, err := accessdomain.RestoreAPI(3, "POST", "/api/admins", "创建管理员", "admin", accessdomain.PermissionAdminCreate, now, now)
 	if err != nil {
 		t.Fatalf("RestoreAPI(another admin) error = %v", err)
 	}
@@ -473,89 +412,14 @@ func TestAPIGroupsReturnsSortedUniqueGroups(t *testing.T) {
 	}
 }
 
-func TestDeleteAPIRejectsAssignedAPI(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0).UTC()
-	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{2}, []int64{1}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(role) error = %v", err)
-	}
-	api, err := accessdomain.RestoreAPI(2, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(api) error = %v", err)
-	}
-	store := &storeSpy{roles: []accessdomain.Role{role}, apis: []accessdomain.API{api}}
-	uc := usecase.New(store, adminRoleReaderSpy{})
-
-	err = uc.DeleteAPI(context.Background(), 2)
-	if err == nil {
-		t.Fatal("DeleteAPI(assigned api) error = nil, want conflict")
-	}
-	if store.deletedAPIID != 0 {
-		t.Fatalf("deletedAPIID = %d, want 0", store.deletedAPIID)
-	}
-}
-
-func TestDeleteAPIsRejectsAssignedAPIWithoutPartialDelete(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0).UTC()
-	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{3}, []int64{1}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(role) error = %v", err)
-	}
-	firstAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/free", "未授权API", "example", accessdomain.PermissionLogRead, false, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(first) error = %v", err)
-	}
-	secondAPI, err := accessdomain.RestoreAPI(3, "GET", "/api/assigned", "已授权API", "example", accessdomain.PermissionLogRead, false, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(second) error = %v", err)
-	}
-	store := &storeSpy{roles: []accessdomain.Role{role}, apis: []accessdomain.API{firstAPI, secondAPI}}
-	uc := usecase.New(store, adminRoleReaderSpy{})
-
-	err = uc.DeleteAPIs(context.Background(), []int64{2, 3})
-	if err == nil {
-		t.Fatal("DeleteAPIs(assigned api) error = nil, want conflict")
-	}
-	if len(store.deletedAPIIDs) != 0 {
-		t.Fatalf("deletedAPIIDs = %v, want none", store.deletedAPIIDs)
-	}
-}
-
-func TestDeleteAPIDeletesUnassignedAPI(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0).UTC()
-	api, err := accessdomain.RestoreAPI(2, "GET", "/api/scratch", "临时API", "example", "", false, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(api) error = %v", err)
-	}
-	store := &storeSpy{apis: []accessdomain.API{api}}
-	uc := usecase.New(store, adminRoleReaderSpy{})
-
-	if err := uc.DeleteAPI(context.Background(), 2); err != nil {
-		t.Fatalf("DeleteAPI() error = %v", err)
-	}
-	if store.deletedAPIID != 2 {
-		t.Fatalf("deletedAPIID = %d, want 2", store.deletedAPIID)
-	}
-}
-
 func superAdminContext() context.Context {
 	ctx := requestctx.WithUserID(context.Background(), "42")
 	return requestctx.WithRoleID(ctx, "1")
 }
 
-func restoreAPITest(t *testing.T, id int64, method, path, permission string, public bool) accessdomain.API {
-	t.Helper()
-	api, err := accessdomain.RestoreAPI(id, method, path, "API", "system", permission, public, time.Now(), time.Now())
-	if err != nil {
-		t.Fatalf("RestoreAPI() error = %v", err)
-	}
-	return api
-}
-
 type storeSpy struct {
 	menuCreatedAt time.Time
 	updatedMenu   accessdomain.Menu
-	createdAPI    accessdomain.API
 	createdRole   accessdomain.Role
 	updatedRoles  []accessdomain.Role
 	roles         []accessdomain.Role
@@ -563,8 +427,6 @@ type storeSpy struct {
 	apis          []accessdomain.API
 	deletedRoleID int64
 	deletedMenuID int64
-	deletedAPIID  int64
-	deletedAPIIDs []int64
 }
 
 func (s *storeSpy) FindRoleByID(_ context.Context, id int64) (accessdomain.Role, error) {
@@ -612,7 +474,7 @@ func (s *storeSpy) FindAPIByID(_ context.Context, id int64) (accessdomain.API, e
 			return api, nil
 		}
 	}
-	return accessdomain.RestoreAPI(id, "GET", "/api/existing", "Existing", "example", accessdomain.PermissionLogRead, false, time.Now(), time.Now())
+	return accessdomain.RestoreAPI(id, "GET", "/api/existing", "Existing", "example", accessdomain.PermissionLogRead, time.Now(), time.Now())
 }
 
 func (s *storeSpy) FindAPIByRoute(_ context.Context, method, path string) (accessdomain.API, error) {
@@ -626,22 +488,6 @@ func (s *storeSpy) FindAPIByRoute(_ context.Context, method, path string) (acces
 
 func (s *storeSpy) ListAPIs(context.Context) ([]accessdomain.API, error) {
 	return s.apis, nil
-}
-
-func (s *storeSpy) CreateAPI(_ context.Context, api accessdomain.API) (accessdomain.API, error) {
-	s.createdAPI = api
-	return accessdomain.RestoreAPI(10, api.Method, api.Path, api.Description, api.Group, api.Permission, api.Public, time.Now(), time.Now())
-}
-
-func (s *storeSpy) UpdateAPI(_ context.Context, api accessdomain.API) (accessdomain.API, error) {
-	s.createdAPI = api
-	return api, nil
-}
-
-func (s *storeSpy) DeleteAPI(_ context.Context, id int64) error {
-	s.deletedAPIID = id
-	s.deletedAPIIDs = append(s.deletedAPIIDs, id)
-	return nil
 }
 
 func (s *storeSpy) FindMenuByID(_ context.Context, id int64) (accessdomain.Menu, error) {

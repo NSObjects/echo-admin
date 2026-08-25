@@ -24,9 +24,6 @@ type Store interface {
 	FindAPIByID(context.Context, int64) (domain.API, error)
 	FindAPIByRoute(context.Context, string, string) (domain.API, error)
 	ListAPIs(context.Context) ([]domain.API, error)
-	CreateAPI(context.Context, domain.API) (domain.API, error)
-	UpdateAPI(context.Context, domain.API) (domain.API, error)
-	DeleteAPI(context.Context, int64) error
 	FindMenuByID(context.Context, int64) (domain.Menu, error)
 	ListMenus(context.Context) ([]domain.Menu, error)
 	CreateMenu(context.Context, domain.Menu) (domain.Menu, error)
@@ -124,27 +121,6 @@ type MenuButtonInput struct {
 	ID          int64
 	Name        string
 	Description string
-}
-
-// APIInput carries mutable API metadata.
-type APIInput struct {
-	Method      string
-	Path        string
-	Description string
-	Group       string
-	Permission  string
-	Public      bool
-}
-
-// UpdateAPIInput carries mutable API updates.
-type UpdateAPIInput struct {
-	ID          int64
-	Method      string
-	Path        string
-	Description string
-	Group       string
-	Permission  string
-	Public      bool
 }
 
 // MenuRolesInput carries the full role assignment for one menu.
@@ -267,7 +243,6 @@ type API struct {
 	Description string    `json:"description"`
 	Group       string    `json:"group"`
 	Permission  string    `json:"permission"`
-	Public      bool      `json:"public"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

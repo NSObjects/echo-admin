@@ -1,164 +1,53 @@
 package mysql
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/domain"
 )
 
-func TestAPISeedsHaveRequiredFieldsAndUniqueRoutes(t *testing.T) {
-	seen := map[string]struct{}{}
-	for _, seed := range apiSeeds {
-		if seed.method == "" {
-			t.Fatal("api seed method is empty")
-		}
-		if seed.path == "" {
-			t.Fatal("api seed path is empty")
-		}
-		if seed.description == "" {
-			t.Fatalf("api seed %s %s description is empty", seed.method, seed.path)
-		}
-		if seed.group == "" {
-			t.Fatalf("api seed %s %s group is empty", seed.method, seed.path)
-		}
-		key := seed.method + " " + seed.path
-		if _, ok := seen[key]; ok {
-			t.Fatalf("api seed %s is duplicated", key)
-		}
-		seen[key] = struct{}{}
+func TestUpgradeRolePermissionsMapsRetiredAPIPermissions(t *testing.T) {
+	tests := []struct {
+		name    string
+		current []string
+		root    bool
+		want    []string
+	}{
+		{
+			name:    "ordinary role keeps current grants and maps api update",
+			current: []string{domain.PermissionAdminRead, "api:create", "api:update", "api:delete"},
+			want:    []string{domain.PermissionAdminRead, domain.PermissionAPIRead, domain.PermissionAPIGrant},
+		},
+		{
+			name:    "ordinary role maps retired api management to read",
+			current: []string{"api:create"},
+			want:    []string{domain.PermissionAPIRead},
+		},
+		{
+			name:    "root receives exact current catalog",
+			current: []string{"api:create"},
+			root:    true,
+			want:    permissionCatalogTokens(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := upgradeRolePermissions(tt.current, tt.root)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("upgradeRolePermissions() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestAPISeedPermissionsExistInCatalog(t *testing.T) {
-	permissions := map[string]struct{}{}
-	for _, permission := range domain.PermissionCatalog() {
-		permissions[permission.Token] = struct{}{}
+func TestRetainCatalogIDs(t *testing.T) {
+	got := retainCatalogIDs([]int64{9, 2, 2, 7}, []int64{2, 4, 9})
+	want := []int64{9, 2}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("retainCatalogIDs() = %v, want %v", got, want)
 	}
-
-	for _, seed := range apiSeeds {
-		key := seed.method + " " + seed.path
-		if seed.public && seed.permission != "" {
-			t.Fatalf("public api seed %s has permission %q", key, seed.permission)
-		}
-		if seed.permission == "" {
-			continue
-		}
-		if _, ok := permissions[seed.permission]; !ok {
-			t.Fatalf("api seed %s permission = %q, want a catalog permission", key, seed.permission)
-		}
-	}
-}
-
-func TestAPISeedsCoverRegisteredRoutes(t *testing.T) {
-	seen := map[string]struct{}{}
-	for _, seed := range apiSeeds {
-		seen[seed.method+" "+seed.path] = struct{}{}
-	}
-	for _, key := range registeredAPISeedRoutes {
-		if _, ok := seen[key]; !ok {
-			t.Fatalf("api seed missing required route %s", key)
-		}
-	}
-}
-
-var registeredAPISeedRoutes = []string{
-	"GET /api/health",
-	"GET /api/info",
-	"GET /api/ready",
-	"GET /api/capabilities",
-	"GET /api/setup/state",
-	"POST /api/setup",
-	"POST /api/auth/login",
-	"POST /api/auth/logout",
-	"POST /api/auth/logout-others",
-	"POST /api/auth/password",
-	"POST /api/auth/role",
-	"GET /api/auth/me",
-	"PATCH /api/auth/me",
-	"GET /api/admins",
-	"POST /api/admins",
-	"PATCH /api/admins/:id",
-	"DELETE /api/admins/:id",
-	"GET /api/roles",
-	"POST /api/roles",
-	"PATCH /api/roles/:id",
-	"DELETE /api/roles/:id",
-	"POST /api/roles/:id/copy",
-	"GET /api/roles/:id/admins",
-	"PUT /api/roles/:id/admins",
-	"GET /api/permissions",
-	"GET /api/apis",
-	"GET /api/apis/groups",
-	"POST /api/apis",
-	"POST /api/apis/batch-delete",
-	"GET /api/apis/:id",
-	"PATCH /api/apis/:id",
-	"DELETE /api/apis/:id",
-	"GET /api/apis/:id/roles",
-	"PUT /api/apis/:id/roles",
-	"GET /api/api-tokens",
-	"POST /api/api-tokens",
-	"PATCH /api/api-tokens/:id",
-	"DELETE /api/api-tokens/:id",
-	"GET /api/menus",
-	"POST /api/menus",
-	"GET /api/menus/:id",
-	"PATCH /api/menus/:id",
-	"DELETE /api/menus/:id",
-	"GET /api/menus/:id/roles",
-	"PUT /api/menus/:id/roles",
-	"GET /api/system/configs",
-	"PUT /api/system/configs/:key",
-	"DELETE /api/system/configs/:key",
-	"GET /api/system/params",
-	"POST /api/system/params",
-	"POST /api/system/params/batch-delete",
-	"GET /api/system/params/key/:key",
-	"GET /api/system/params/:id",
-	"PATCH /api/system/params/:id",
-	"DELETE /api/system/params/:id",
-	"GET /api/system/versions",
-	"POST /api/system/versions",
-	"POST /api/system/versions/export",
-	"POST /api/system/versions/import",
-	"POST /api/system/versions/batch-delete",
-	"GET /api/system/versions/:id",
-	"GET /api/system/versions/:id/download",
-	"PATCH /api/system/versions/:id",
-	"DELETE /api/system/versions/:id",
-	"GET /api/dictionaries",
-	"POST /api/dictionaries",
-	"GET /api/dictionaries/export",
-	"POST /api/dictionaries/import",
-	"PATCH /api/dictionaries/:code",
-	"DELETE /api/dictionaries/:code",
-	"POST /api/dictionaries/:code/items",
-	"PATCH /api/dictionaries/:code/items/:item_id",
-	"DELETE /api/dictionaries/:code/items/:item_id",
-	"GET /api/file-categories",
-	"POST /api/file-categories",
-	"PATCH /api/file-categories/:id",
-	"DELETE /api/file-categories/:id",
-	"GET /api/files",
-	"POST /api/files",
-	"POST /api/files/import-url",
-	"PATCH /api/files/:id/name",
-	"DELETE /api/files/:id",
-	"GET /api/uploads/*",
-	"GET /api/logs/operations",
-	"GET /api/logs/operations/:id",
-	"DELETE /api/logs/operations/:id",
-	"POST /api/logs/operations/batch-delete",
-	"GET /api/logs/logins",
-	"GET /api/logs/logins/:id",
-	"DELETE /api/logs/logins/:id",
-	"POST /api/logs/logins/batch-delete",
-	"GET /api/logs/errors",
-	"GET /api/logs/errors/:id",
-	"POST /api/logs/errors/:id/resolve",
-	"DELETE /api/logs/errors/:id/resolve",
-	"DELETE /api/logs/errors/:id",
-	"POST /api/logs/errors/batch-delete",
 }
 
 func TestMenuSeedsHaveComponentsAndUniqueButtons(t *testing.T) {

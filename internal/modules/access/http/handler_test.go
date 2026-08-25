@@ -176,31 +176,13 @@ func TestSetMenuRolesRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestCreateAPIRecordsOperation(t *testing.T) {
-	e, store, recorder := newAccessEcho()
-
-	rec := doJSON(t, e, http.MethodPost, "/api/apis", `{"method":"GET","path":"/api/example","description":"示例API","group":"example","permission":"log:read","public":false}`, "42")
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create api status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if got := store.createdAPI.Path; got != "/api/example" {
-		t.Fatalf("created api path = %q, want /api/example", got)
-	}
-	if len(recorder.records) != 1 {
-		t.Fatalf("operation records = %d, want 1", len(recorder.records))
-	}
-	if got := recorder.records[0].Resource; got != "api" {
-		t.Fatalf("operation resource = %q, want api", got)
-	}
-}
-
 func TestListAPIGroups(t *testing.T) {
 	e, store, _ := newAccessEcho()
-	firstAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/a", "A", "admin", accessdomain.PermissionAdminRead, false, fixedTime(), fixedTime())
+	firstAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/a", "A", "admin", accessdomain.PermissionAdminRead, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI(first) error = %v", err)
 	}
-	secondAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/b", "B", "log", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
+	secondAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/b", "B", "log", accessdomain.PermissionLogRead, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI(second) error = %v", err)
 	}
@@ -212,9 +194,27 @@ func TestListAPIGroups(t *testing.T) {
 	}
 }
 
+func TestRegisterDoesNotExposeAPICatalogMutationRoutes(t *testing.T) {
+	e, _, _ := newAccessEcho()
+	registered := make(map[string]struct{})
+	for _, route := range e.Router().Routes() {
+		registered[route.Method+" "+route.Path] = struct{}{}
+	}
+	for _, forbidden := range []string{
+		"POST /api/apis",
+		"POST /api/apis/batch-delete",
+		"PATCH /api/apis/:id",
+		"DELETE /api/apis/:id",
+	} {
+		if _, ok := registered[forbidden]; ok {
+			t.Fatalf("registered route %s, want deployment-owned catalog to be read-only", forbidden)
+		}
+	}
+}
+
 func TestReadAPI(t *testing.T) {
 	e, store, _ := newAccessEcho()
-	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
+	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI() error = %v", err)
 	}
@@ -228,7 +228,7 @@ func TestReadAPI(t *testing.T) {
 
 func TestReadAPIRoles(t *testing.T) {
 	e, store, _ := newAccessEcho()
-	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
+	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreAPI() error = %v", err)
 	}
@@ -238,56 +238,6 @@ func TestReadAPIRoles(t *testing.T) {
 	rec := doJSON(t, e, http.MethodGet, "/api/apis/3/roles", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get api roles status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-}
-
-func TestBatchDeleteAPIsRecordsOperation(t *testing.T) {
-	e, store, recorder := newAccessEcho()
-	firstAPI, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
-	if err != nil {
-		t.Fatalf("RestoreAPI(first) error = %v", err)
-	}
-	secondAPI, err := accessdomain.RestoreAPI(4, "POST", "/api/example", "创建示例", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
-	if err != nil {
-		t.Fatalf("RestoreAPI(second) error = %v", err)
-	}
-	store.apis = []accessdomain.API{firstAPI, secondAPI}
-
-	rec := doJSON(t, e, http.MethodPost, "/api/apis/batch-delete", `{"ids":[3,4]}`, "42")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("batch delete api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if !sameInt64s(store.deletedAPIIDs, []int64{3, 4}) {
-		t.Fatalf("deletedAPIIDs = %v, want [3 4]", store.deletedAPIIDs)
-	}
-	if len(recorder.records) != 1 {
-		t.Fatalf("operation records = %d, want 1", len(recorder.records))
-	}
-	if got := recorder.records[0].ResourceID; got != "batch" {
-		t.Fatalf("operation resource id = %q, want batch", got)
-	}
-}
-
-func TestDeleteAPIRecordsOperation(t *testing.T) {
-	e, store, recorder := newAccessEcho()
-	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
-	if err != nil {
-		t.Fatalf("RestoreAPI() error = %v", err)
-	}
-	store.apis = []accessdomain.API{api}
-
-	rec := doJSON(t, e, http.MethodDelete, "/api/apis/3", "", "42")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("delete api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if !sameInt64s(store.deletedAPIIDs, []int64{3}) {
-		t.Fatalf("deletedAPIIDs = %v, want [3]", store.deletedAPIIDs)
-	}
-	if len(recorder.records) != 1 {
-		t.Fatalf("operation records = %d, want 1", len(recorder.records))
-	}
-	if got := recorder.records[0].Action; got != "delete" {
-		t.Fatalf("operation action = %q, want delete", got)
 	}
 }
 
@@ -321,7 +271,6 @@ type accessStore struct {
 	createRoleCalls int
 	listMenuCalls   int
 	createdRole     accessdomain.Role
-	createdAPI      accessdomain.API
 	createdMenu     accessdomain.Menu
 	updatedRoles    []accessdomain.Role
 	roles           []accessdomain.Role
@@ -329,7 +278,6 @@ type accessStore struct {
 	apis            []accessdomain.API
 	deletedRoleID   int64
 	deletedMenuID   int64
-	deletedAPIIDs   []int64
 }
 
 func (s *accessStore) FindRoleByID(_ context.Context, id int64) (accessdomain.Role, error) {
@@ -397,7 +345,7 @@ func (s *accessStore) FindAPIByID(ctx context.Context, id int64) (accessdomain.A
 			return api, nil
 		}
 	}
-	return accessdomain.RestoreAPI(id, "GET", "/api/existing", "Existing", "example", accessdomain.PermissionLogRead, false, fixedTime(), fixedTime())
+	return accessdomain.RestoreAPI(id, "GET", "/api/existing", "Existing", "example", accessdomain.PermissionLogRead, fixedTime(), fixedTime())
 }
 
 func (s *accessStore) FindAPIByRoute(ctx context.Context, method, path string) (accessdomain.API, error) {
@@ -417,26 +365,6 @@ func (s *accessStore) ListAPIs(ctx context.Context) ([]accessdomain.API, error) 
 		return nil, err
 	}
 	return s.apis, nil
-}
-
-func (s *accessStore) CreateAPI(ctx context.Context, api accessdomain.API) (accessdomain.API, error) {
-	if err := ctx.Err(); err != nil {
-		return accessdomain.API{}, err
-	}
-	s.createdAPI = api
-	return accessdomain.RestoreAPI(11, api.Method, api.Path, api.Description, api.Group, api.Permission, api.Public, fixedTime(), fixedTime())
-}
-
-func (s *accessStore) UpdateAPI(ctx context.Context, api accessdomain.API) (accessdomain.API, error) {
-	if err := ctx.Err(); err != nil {
-		return accessdomain.API{}, err
-	}
-	return api, nil
-}
-
-func (s *accessStore) DeleteAPI(_ context.Context, id int64) error {
-	s.deletedAPIIDs = append(s.deletedAPIIDs, id)
-	return nil
 }
 
 func (s *accessStore) ListMenus(ctx context.Context) ([]accessdomain.Menu, error) {
@@ -513,16 +441,4 @@ func twoRoles(t *testing.T) []accessdomain.Role {
 
 func fixedTime() time.Time {
 	return time.Unix(1_800_000_000, 0).UTC()
-}
-
-func sameInt64s(got, want []int64) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for index := range got {
-		if got[index] != want[index] {
-			return false
-		}
-	}
-	return true
 }

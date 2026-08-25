@@ -5,7 +5,7 @@ export default {
   'menu.admins': 'Administrators',
   'menu.roles': 'Roles',
   'menu.menus': 'Menus',
-  'menu.apis': 'APIs',
+  'menu.apis': 'Managed API Routes',
   'menu.apiTokens': 'API Tokens',
   'menu.system': 'System Management',
   'menu.configs': 'System Configs',

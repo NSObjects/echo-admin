@@ -43,11 +43,7 @@ func Register(group *echo.Group, handler *Handler) {
 	group.POST("/roles/:id/copy", handler.CopyRole)
 	group.GET("/apis", handler.ListAPIs)
 	group.GET("/apis/groups", handler.ListAPIGroups)
-	group.POST("/apis", handler.CreateAPI)
-	group.POST("/apis/batch-delete", handler.BatchDeleteAPIs)
 	group.GET("/apis/:id", handler.ReadAPI)
-	group.PATCH("/apis/:id", handler.UpdateAPI)
-	group.DELETE("/apis/:id", handler.DeleteAPI)
 	group.GET("/apis/:id/roles", handler.ReadAPIRoles)
 	group.PUT("/apis/:id/roles", handler.SetAPIRoles)
 	group.GET("/menus", handler.ListMenus)
@@ -218,92 +214,6 @@ func (h *Handler) ReadAPI(c *echo.Context) error {
 		return err
 	}
 	return httpresp.OK(c, api)
-}
-
-// CreateAPI creates an API route.
-func (h *Handler) CreateAPI(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	var req apiRequest
-	if err := httpreq.BindAndValidate(c, &req); err != nil {
-		return err
-	}
-	api, err := h.usecase.CreateAPI(c.Request().Context(), apiInputFromRequest(req))
-	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "create", "api", strconv.FormatInt(api.ID, 10), "created api"); err != nil {
-		return err
-	}
-	return httpresp.Created(c, api)
-}
-
-// UpdateAPI updates an API route.
-func (h *Handler) UpdateAPI(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	id, err := httpreq.PathID(c, "id", "api")
-	if err != nil {
-		return err
-	}
-	var req apiRequest
-	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
-		return bindErr
-	}
-	api, err := h.usecase.UpdateAPI(c.Request().Context(), usecase.UpdateAPIInput{
-		ID:          id,
-		Method:      req.Method,
-		Path:        req.Path,
-		Description: req.Description,
-		Group:       req.Group,
-		Permission:  req.Permission,
-		Public:      req.Public,
-	})
-	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "update", "api", strconv.FormatInt(api.ID, 10), "updated api"); err != nil {
-		return err
-	}
-	return httpresp.OK(c, api)
-}
-
-// BatchDeleteAPIs removes API routes by id.
-func (h *Handler) BatchDeleteAPIs(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	var req idsRequest
-	if err := httpreq.BindAndValidate(c, &req); err != nil {
-		return err
-	}
-	if err := h.usecase.DeleteAPIs(c.Request().Context(), req.IDs); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "api", "batch", "deleted apis"); err != nil {
-		return err
-	}
-	return httpresp.OK(c, deletedIDsResponse(req))
-}
-
-// DeleteAPI deletes an API route.
-func (h *Handler) DeleteAPI(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	id, err := httpreq.PathID(c, "id", "api")
-	if err != nil {
-		return err
-	}
-	if err := h.usecase.DeleteAPI(c.Request().Context(), id); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "api", strconv.FormatInt(id, 10), "deleted api"); err != nil {
-		return err
-	}
-	return httpresp.OK(c, deletedResponse{ID: id})
 }
 
 // ReadAPIRoles returns role ids assigned to an API route.
@@ -601,17 +511,6 @@ func buttonInputsFromRequest(buttons []menuButtonRequest) []usecase.MenuButtonIn
 	return out
 }
 
-func apiInputFromRequest(req apiRequest) usecase.APIInput {
-	return usecase.APIInput{
-		Method:      req.Method,
-		Path:        req.Path,
-		Description: req.Description,
-		Group:       req.Group,
-		Permission:  req.Permission,
-		Public:      req.Public,
-	}
-}
-
 func paginated(c *echo.Context, items interface{}, page, pageSize, total int) error {
 	meta, err := httpresp.NewPageMeta(page, pageSize, total)
 	if err != nil {
@@ -622,10 +521,6 @@ func paginated(c *echo.Context, items interface{}, page, pageSize, total int) er
 
 type deletedResponse struct {
 	ID int64 `json:"id"`
-}
-
-type deletedIDsResponse struct {
-	IDs []int64 `json:"ids"`
 }
 
 type apiGroupsResponse struct {

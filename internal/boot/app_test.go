@@ -39,6 +39,9 @@ func TestNewAppAssemblesServer(t *testing.T) {
 func TestNewAppInstallsModule(t *testing.T) {
 	app, err := NewApp(configs.Config{}, WithModules(NewModule(
 		"ping",
+		Provide(func(do.Injector) (routeAuthorizer, error) {
+			return &testRouteAuthorizer{}, nil
+		}),
 		Provide(func(do.Injector) (*testModuleHandler, error) {
 			return &testModuleHandler{}, nil
 		}),
@@ -64,7 +67,28 @@ func TestNewAppInstallsModule(t *testing.T) {
 	}
 }
 
-func TestNewAppInstallsAPIAuthorizationBeforeModuleRoutes(t *testing.T) {
+func TestNewAppRejectsManagedRouteWithoutRouteAuthorizer(t *testing.T) {
+	app, err := NewApp(configs.Config{}, WithModules(NewModule(
+		"unprotected",
+		Provide(func(do.Injector) (*testModuleHandler, error) {
+			return &testModuleHandler{}, nil
+		}),
+		Route(func(group *echo.Group, handler *testModuleHandler) {
+			group.GET("/module-ping", handler.Handle)
+		}),
+	)))
+	if err == nil {
+		t.Fatal("NewApp() error = nil, want missing route authorizer error")
+	}
+	if app != nil {
+		t.Fatalf("NewApp() app = %#v, want nil", app)
+	}
+	if !strings.Contains(err.Error(), "route authorizer is required") {
+		t.Fatalf("NewApp() error = %q, want route authorizer context", err)
+	}
+}
+
+func TestNewAppRunsRouteAuthorizationBeforeBusinessHandler(t *testing.T) {
 	handler := &testModuleHandler{}
 	authorizer := &testRouteAuthorizer{err: apperr.NewPermissionDenied("api", "/api/module-ping")}
 	app, err := NewApp(configs.Config{}, WithModules(NewModule(

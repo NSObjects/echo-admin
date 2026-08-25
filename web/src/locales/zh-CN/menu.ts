@@ -5,7 +5,7 @@ export default {
   'menu.admins': '管理员管理',
   'menu.roles': '角色权限',
   'menu.menus': '菜单管理',
-  'menu.apis': 'API管理',
+  'menu.apis': '受管API路由目录',
   'menu.apiTokens': 'API Token',
   'menu.system': '系统管理',
   'menu.configs': '系统配置',

@@ -3,7 +3,10 @@ package settingshttp
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -504,7 +507,6 @@ func (h *Handler) ExportVersion(c *echo.Context) error {
 		Name:          req.Name,
 		Description:   req.Description,
 		MenuIDs:       req.MenuIDs,
-		APIIDs:        req.APIIDs,
 		DictionaryIDs: req.DictionaryIDs,
 	})
 	if err != nil {
@@ -521,8 +523,8 @@ func (h *Handler) ImportVersion(c *echo.Context) error {
 	if err := h.ready(); err != nil {
 		return err
 	}
-	var bundle usecase.VersionBundle
-	if err := httpreq.BindAndValidate(c, &bundle); err != nil {
+	bundle, err := decodeVersionBundle(c)
+	if err != nil {
 		return err
 	}
 	version, err := h.usecase.ImportVersion(c.Request().Context(), bundle)
@@ -533,6 +535,25 @@ func (h *Handler) ImportVersion(c *echo.Context) error {
 		return err
 	}
 	return httpresp.Created(c, version)
+}
+
+func decodeVersionBundle(c *echo.Context) (usecase.VersionBundle, error) {
+	var bundle usecase.VersionBundle
+	decoder := json.NewDecoder(c.Request().Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&bundle); err != nil {
+		return usecase.VersionBundle{}, apperr.WrapBadRequest(err, "invalid version bundle")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
+		return usecase.VersionBundle{}, apperr.WrapBadRequest(err, "invalid version bundle")
+	}
+	if err := c.Validate(&bundle); err != nil {
+		return usecase.VersionBundle{}, err
+	}
+	return bundle, nil
 }
 
 // UpdateVersion updates a release record.

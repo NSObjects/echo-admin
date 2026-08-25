@@ -145,7 +145,6 @@ export type APIResource = {
   description: string;
   group: string;
   permission: string;
-  public: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -175,10 +174,6 @@ export type RoleIDsResult = {
 
 export type AdminIDsResult = {
   admin_ids: number[];
-};
-
-export type APIGroupsResult = {
-  groups: string[];
 };
 
 export type SystemConfig = {
@@ -212,7 +207,6 @@ export type SystemVersion = {
 export type VersionBundle = {
   version: VersionInfo;
   menus?: VersionMenu[];
-  apis?: VersionAPI[];
   dictionaries?: VersionDictionary[];
 };
 
@@ -248,15 +242,6 @@ export type VersionMenuMeta = {
 export type VersionButton = {
   name: string;
   description?: string;
-};
-
-export type VersionAPI = {
-  method: string;
-  path: string;
-  description: string;
-  group: string;
-  permission?: string;
-  public?: boolean;
 };
 
 export type VersionDictionary = {
@@ -444,15 +429,6 @@ export type MenuButtonInput = {
   description?: string;
 };
 
-export type APIInput = {
-  method: string;
-  path: string;
-  description: string;
-  group: string;
-  permission?: string;
-  public: boolean;
-};
-
 export type APITokenInput = {
   admin_id?: number;
   role_id?: number;
@@ -488,7 +464,6 @@ export type ExportVersionInput = {
   name: string;
   description?: string;
   menu_ids?: number[];
-  api_ids?: number[];
   dictionary_ids?: number[];
 };
 
@@ -665,34 +640,9 @@ export async function listAPIs(
   return request<Envelope<APIResource[]>>('/api/apis', { params });
 }
 
-export async function listAPIGroups(): Promise<string[]> {
-  const response =
-    await request<Envelope<APIGroupsResult>>('/api/apis/groups');
-  return response.data.groups;
-}
-
 export async function readAPI(id: number): Promise<APIResource> {
   const response = await request<Envelope<APIResource>>(`/api/apis/${id}`);
   return response.data;
-}
-
-export async function createAPI(body: APIInput): Promise<void> {
-  await request('/api/apis', { method: 'POST', data: body });
-}
-
-export async function updateAPI(id: number, body: APIInput): Promise<void> {
-  await request(`/api/apis/${id}`, { method: 'PATCH', data: body });
-}
-
-export async function deleteAPI(id: number): Promise<void> {
-  await request(`/api/apis/${id}`, { method: 'DELETE' });
-}
-
-export async function batchDeleteAPIs(ids: number[]): Promise<void> {
-  await request('/api/apis/batch-delete', {
-    method: 'POST',
-    data: { ids },
-  });
 }
 
 export async function listAPIRoles(id: number): Promise<number[]> {

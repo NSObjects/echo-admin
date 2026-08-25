@@ -31,7 +31,6 @@ import dayjs, { type Dayjs } from 'dayjs';
 import React, { useEffect, useState } from 'react';
 
 import {
-  type APIResource,
   batchDeleteVersions,
   createVersion,
   deleteVersion,
@@ -41,7 +40,6 @@ import {
   type ExportVersionInput,
   readVersion,
   importVersion,
-  listAPIs,
   listDictionaries,
   listMenus,
   listVersions,
@@ -64,7 +62,6 @@ type ExportFormValues = {
   name: string;
   description?: string;
   menu_ids?: number[];
-  api_ids?: number[];
   dictionary_ids?: number[];
 };
 
@@ -74,13 +71,11 @@ type ImportFormValues = {
 
 type ExportResources = {
   menus: Menu[];
-  apis: APIResource[];
   dictionaries: Dictionary[];
 };
 
 const emptyResources: ExportResources = {
   menus: [],
-  apis: [],
   dictionaries: [],
 };
 
@@ -101,7 +96,6 @@ const exportValuesToInput = (
   name: values.name,
   description: values.description,
   menu_ids: values.menu_ids ?? [],
-  api_ids: values.api_ids ?? [],
   dictionary_ids: values.dictionary_ids ?? [],
 });
 
@@ -116,20 +110,9 @@ const isVersionBundle = (value: unknown): value is VersionBundle => {
     typeof value.version.code === 'string' &&
     typeof value.version.name === 'string' &&
     (value.menus === undefined || Array.isArray(value.menus)) &&
-    (value.apis === undefined || Array.isArray(value.apis)) &&
+    value.apis === undefined &&
     (value.dictionaries === undefined || Array.isArray(value.dictionaries))
   );
-};
-
-const loadAllAPIs = async (): Promise<APIResource[]> => {
-  const out: APIResource[] = [];
-  for (let page = 1; ; page += 1) {
-    const response = await listAPIs({ page, page_size: 100 });
-    out.push(...response.data);
-    if (!response.page?.has_next) {
-      return out;
-    }
-  }
 };
 
 const saveBlob = (blob: Blob, filename: string) => {
@@ -174,12 +157,11 @@ const Versions: React.FC = () => {
   const loadResources = async () => {
     setResourceLoading(true);
     try {
-      const [menus, apis, dictionaries] = await Promise.all([
+      const [menus, dictionaries] = await Promise.all([
         access.canMenuRead ? listMenus() : Promise.resolve([]),
-        access.canApiRead ? loadAllAPIs() : Promise.resolve([]),
         access.canDictRead ? listDictionaries() : Promise.resolve([]),
       ]);
-      setResources({ menus, apis, dictionaries });
+      setResources({ menus, dictionaries });
     } finally {
       setResourceLoading(false);
     }
@@ -337,10 +319,6 @@ const Versions: React.FC = () => {
   const menuOptions = resources.menus.map((menu) => ({
     label: `${menu.name} (${menu.path})`,
     value: menu.id,
-  }));
-  const apiOptions = resources.apis.map((api) => ({
-    label: `${api.method} ${api.path}`,
-    value: api.id,
   }));
   const dictionaryOptions = resources.dictionaries.map((dictionary) => ({
     label: `${dictionary.name} (${dictionary.code})`,
@@ -540,15 +518,6 @@ const Versions: React.FC = () => {
               loading={resourceLoading}
               maxTagCount="responsive"
               options={menuOptions}
-            />
-          </Form.Item>
-          <Form.Item label="API" name="api_ids">
-            <Select
-              mode="multiple"
-              allowClear
-              loading={resourceLoading}
-              maxTagCount="responsive"
-              options={apiOptions}
             />
           </Form.Item>
           <Form.Item label="字典" name="dictionary_ids">

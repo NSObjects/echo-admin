@@ -45,6 +45,5 @@ type exportVersionRequest struct {
 	Name          string  `json:"name" validate:"required,max=120"`
 	Description   string  `json:"description" validate:"max=4000"`
 	MenuIDs       []int64 `json:"menu_ids" validate:"omitempty,dive,gt=0"`
-	APIIDs        []int64 `json:"api_ids" validate:"omitempty,dive,gt=0"`
 	DictionaryIDs []int64 `json:"dictionary_ids" validate:"omitempty,dive,gt=0"`
 }

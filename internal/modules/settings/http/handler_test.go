@@ -191,6 +191,22 @@ func TestImportVersionRecordsOperation(t *testing.T) {
 	assertOperationAction(t, recorder, "import")
 }
 
+func TestImportVersionRejectsManagedAPIRouteCatalog(t *testing.T) {
+	e, store, recorder := newSettingsEcho()
+
+	body := `{"version":{"code":"v2.0.0","name":"release"},"apis":[{"method":"GET","path":"/api/admins","description":"admins","group":"admin"}]}`
+	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/import", body, "42")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("import version status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if store.createdVersion.ID != 0 {
+		t.Fatalf("created version id = %d, want 0", store.createdVersion.ID)
+	}
+	if got := len(recorder.records); got != 0 {
+		t.Fatalf("operation records = %d, want 0", got)
+	}
+}
+
 func TestDownloadVersion(t *testing.T) {
 	e, _, _ := newSettingsEcho()
 

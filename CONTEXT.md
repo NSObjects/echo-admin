@@ -44,6 +44,22 @@ _Avoid_: Custom setup role, normal role
 The role-based authorization model that controls what an **Administrator** may see and do in Echo Admin's administration surface.
 _Avoid_: General business permission system, generic data authorization
 
+**System API Route**:
+A registered operational route for process and capability status that is outside **Administration Authorization**.
+_Avoid_: Managed API Route, Bootstrap API Route
+
+**Bootstrap API Route**:
+A registered administration entry route for probing or establishing **Installation State** or creating a **Login Session** before managed route authorization can apply.
+_Avoid_: Public route, System API Route
+
+**Managed API Route**:
+A registered administration business route represented by HTTP method and Echo route pattern in the **Managed API Route Catalog**.
+_Avoid_: Raw URL, System API Route, Bootstrap API Route
+
+**Managed API Route Catalog**:
+The authorization catalog for administration business API routes.
+_Avoid_: System route list, bootstrap route list, every HTTP endpoint
+
 ## Relationships
 
 - An **Administrator** may have zero or more active **Login Sessions**.
@@ -64,12 +80,30 @@ _Avoid_: General business permission system, generic data authorization
 - A normal logout revokes only one **Login Session**.
 - Signing out from other devices revokes the other **Login Sessions** for the same **Administrator** while keeping the current **Login Session** active.
 - An unavailable **Login Session** is an authentication failure; a valid **Login Session** without route permission is an authorization failure.
+- During **Route Authorization**, a missing or inactive active role is an authorization failure, not a not-found response.
 - **System First Initialization** happens before the first **Administrator** can use the administration console.
 - **System First Initialization** creates the first **Administrator** with the **Root Role**.
 - **Installation State** is the source of truth for whether **System First Initialization** is still allowed.
 - **System First Initialization** may be retried until **Installation State** records completion.
 - **Administration Authorization** governs administration features, not arbitrary business-domain data ownership.
-- A **Managed API Route** is an API catalog entry identified by HTTP method and the Echo registered route pattern.
+- Every registered `/api` route is exactly one **System API Route**, **Bootstrap API Route**, or **Managed API Route**.
+- Health, info, readiness, and capability routes are **System API Routes**.
+- Setup state, setup submission, and login routes are **Bootstrap API Routes**.
+- The **Managed API Route Catalog** contains **Managed API Routes** only.
+- The identity and metadata of every **Managed API Route** are deployment-owned and cannot be created, changed, or deleted by an **Administrator** at runtime.
+- An **Administrator** may inspect the **Managed API Route Catalog** and manage role grants for its routes.
+- New, changed, and retired **Managed API Routes** enter runtime catalog state through explicit access-owned authorization upgrade work.
+- Boot identifies **System API Routes** and **Bootstrap API Routes** by exact HTTP method and registered Echo route pattern; every other registered `/api` route is a **Managed API Route**.
+- Route exemptions never use path-only, prefix, or wildcard matching.
+- `OPTIONS` preflight and unmatched requests are not registered API routes and are outside this classification.
+- Route classification does not determine pre-initialization reachability; **Installation State** rules decide that separately.
+- Route exposure policy belongs to the composition root, so boot owns which system and bootstrap routes are outside the **Managed API Route Catalog**.
+- At test time, registered **Managed API Routes** and the access-owned catalog definition must match exactly; missing, stale, duplicate, or wrongly classified routes are contract failures.
+- A runtime with any registered **Managed API Route** must not complete assembly without **Route Authorization**; a runtime containing only **System API Routes** and **Bootstrap API Routes** does not require it.
+- Runtime **Route Authorization** must reject non-exempt routes that have no matching **Managed API Route** entry.
+- Process startup must not require a populated database route catalog because **System First Initialization** creates the administration baseline after startup.
+- The **Managed API Route Catalog** data belongs to Administration Authorization, so access owns the catalog content.
+- Boot owns route exposure policy and catalog coverage checks, but boot must not become the author of authorization catalog data.
 - **Route Authorization** happens in boot middleware before business HTTP handlers run.
 - **Route Authorization** uses the current active role and **Managed API Route** grants, not handler-declared permission tokens.
 - Permission tokens remain **Administration Authorization** metadata for Casbin permission views, menus, buttons, and grant catalogs.

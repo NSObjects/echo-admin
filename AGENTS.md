@@ -263,7 +263,7 @@ go mod tidy
 
 ### Issue tracker
 
-Issue 和 PRD 记录在 GitHub Issues 中，外部 PR 也作为 triage 入口。详见 `docs/agents/issue-tracker.md`。
+Issue 和 PRD 记录在 GitHub Issues 中；仅 Issue 进入 triage，外部 PR 不作为需求入口。详见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 
@@ -271,4 +271,4 @@ Triage 使用默认标签：`needs-triage`、`needs-info`、`ready-for-agent`、
 
 ### Domain docs
 
-本仓库使用 multi-context domain-doc 布局，根入口是 `CONTEXT-MAP.md`。详见 `docs/agents/domain.md`。
+本仓库使用 single-context domain-doc 布局：根目录使用 `CONTEXT.md`，架构决策位于 `docs/adr/`。详见 `docs/agents/domain.md`。

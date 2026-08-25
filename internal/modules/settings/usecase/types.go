@@ -39,9 +39,7 @@ type Store interface {
 // VersionCatalog imports and exports access-owned resources for version bundles.
 type VersionCatalog interface {
 	ExportVersionMenus(context.Context, []int64) ([]VersionMenu, error)
-	ExportVersionAPIs(context.Context, []int64) ([]VersionAPI, error)
 	ImportVersionMenus(context.Context, []VersionMenu) error
-	ImportVersionAPIs(context.Context, []VersionAPI) error
 }
 
 // Usecase coordinates system setting and dictionary rules.
@@ -148,7 +146,6 @@ type ExportVersionInput struct {
 	Name          string
 	Description   string
 	MenuIDs       []int64
-	APIIDs        []int64
 	DictionaryIDs []int64
 }
 
@@ -156,7 +153,6 @@ type ExportVersionInput struct {
 type VersionBundle struct {
 	Version      VersionInfo         `json:"version"`
 	Menus        []VersionMenu       `json:"menus"`
-	APIs         []VersionAPI        `json:"apis"`
 	Dictionaries []VersionDictionary `json:"dictionaries"`
 }
 
@@ -202,16 +198,6 @@ type VersionMenuMeta struct {
 type VersionButton struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-}
-
-// VersionAPI is an API route stored in a version bundle.
-type VersionAPI struct {
-	Method      string `json:"method"`
-	Path        string `json:"path"`
-	Description string `json:"description"`
-	Group       string `json:"group"`
-	Permission  string `json:"permission"`
-	Public      bool   `json:"public"`
 }
 
 // VersionDictionary is a dictionary stored in a version bundle.
