@@ -128,7 +128,11 @@ func provideServer(i do.Injector) {
 		if err != nil {
 			return nil, err
 		}
-		options := []server.Option{server.WithStatusReporter(resourceBundle)}
+		options := []server.Option{
+			server.WithStatusReporter(resourceBundle),
+			server.WithPreInitRoutes(preInitRouteExemptions()...),
+			server.WithUnauthenticatedRoutes(unauthenticatedRouteExemptions()...),
+		}
 		options, err = appendOptionalAPIKeyVerifier(i, options)
 		if err != nil {
 			return nil, err

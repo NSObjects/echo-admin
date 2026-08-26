@@ -44,25 +44,17 @@ type LoginSessionAuthenticator interface {
 // LoginSessionConfig controls browser login-session authentication.
 type LoginSessionConfig struct {
 	CookieName    string
-	SkipPaths     []string
+	Exemptions    []RouteExemption
 	Authenticator LoginSessionAuthenticator
 	Enabled       bool
 }
 
 // DefaultLoginSessionConfig returns disabled login-session authentication
-// defaults.
+// defaults. Route exemptions are composition-root policy and must be injected
+// by the caller; this layer defaults to none.
 func DefaultLoginSessionConfig() *LoginSessionConfig {
 	return &LoginSessionConfig{
 		CookieName: LoginSessionCookieName,
-		SkipPaths: []string{
-			"/api/health",
-			"/api/info",
-			"/api/ready",
-			"/api/capabilities",
-			"/api/auth/login",
-			"/api/setup/state",
-			"/api/setup",
-		},
 	}
 }
 
@@ -83,7 +75,7 @@ func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
-			if requestctx.GetUserID(c.Request().Context()) != "" || pathSkipped(c, config.SkipPaths) {
+			if requestctx.GetUserID(c.Request().Context()) != "" || routeExempt(c, config.Exemptions) {
 				return next(c)
 			}
 			cookie, err := c.Cookie(cookieName)
@@ -118,11 +110,12 @@ func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
 }
 
 // CSRFConfig returns the Echo CSRF middleware configuration used for browser
-// login-session requests.
-func CSRFConfig(skipPaths []string, secureCookies bool) middleware.CSRFConfig {
+// login-session requests. It shares the login-session exemptions because a
+// route without a login session has no CSRF obligation.
+func CSRFConfig(exemptions []RouteExemption, secureCookies bool) middleware.CSRFConfig {
 	return middleware.CSRFConfig{
 		Skipper: func(c *echo.Context) bool {
-			return requestctx.GetLoginSessionID(c.Request().Context()) == "" || pathSkipped(c, skipPaths)
+			return requestctx.GetLoginSessionID(c.Request().Context()) == "" || routeExempt(c, exemptions)
 		},
 		TokenLookup:    "header:" + echo.HeaderXCSRFToken,
 		CookieName:     CSRFCookieName,
@@ -201,19 +194,6 @@ func clearCookie(c *echo.Context, name string, httpOnly, secure bool) {
 		HttpOnly: httpOnly,
 		SameSite: http.SameSiteLaxMode,
 	})
-}
-
-func pathSkipped(c *echo.Context, skipPaths []string) bool {
-	path := requestPath(c)
-	for _, skipPath := range skipPaths {
-		if path == skipPath ||
-			(len(skipPath) > 0 && skipPath[len(skipPath)-1] == '*' &&
-				len(path) >= len(skipPath)-1 &&
-				strings.HasPrefix(path, skipPath[:len(skipPath)-1])) {
-			return true
-		}
-	}
-	return false
 }
 
 // FormatLoginSessionID converts positive numeric IDs to request metadata.

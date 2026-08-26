@@ -136,6 +136,9 @@ func TestBusinessRouteManifestMatchesManagedAPIRouteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finalizeRouteExposure() error = %v", err)
 	}
+	if err := checkExemptAPIRoutes(srv.Echo()); err != nil {
+		t.Fatalf("checkExemptAPIRoutes() error = %v", err)
+	}
 	if err := manifest.CheckManagedCatalog(accessdomain.ManagedAPIRouteCatalog()); err != nil {
 		t.Fatalf("CheckManagedCatalog() error = %v", err)
 	}

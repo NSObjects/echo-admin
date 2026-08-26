@@ -17,25 +17,14 @@ type InstallationStateReader interface {
 
 // InstallationGateConfig controls the uninitialized-system route gate.
 type InstallationGateConfig struct {
-	Reader    InstallationStateReader
-	SkipPaths []string
-	Enabled   bool
-}
-
-// DefaultInstallationGateConfig returns the public setup and system routes that
-// remain reachable before first initialization completes.
-func DefaultInstallationGateConfig() *InstallationGateConfig {
-	return &InstallationGateConfig{
-		SkipPaths: []string{
-			"/api/health",
-			"/api/info",
-			"/api/setup/state",
-			"/api/setup",
-		},
-	}
+	Reader     InstallationStateReader
+	Exemptions []RouteExemption
+	Enabled    bool
 }
 
 // InstallationGate blocks normal administration routes until setup completes.
+// Exemptions are injected by the composition root and matched by exact method
+// and registered pattern, so this layer carries no route policy of its own.
 func InstallationGate(config *InstallationGateConfig) (echo.MiddlewareFunc, error) {
 	if config == nil || !config.Enabled {
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -45,13 +34,9 @@ func InstallationGate(config *InstallationGateConfig) (echo.MiddlewareFunc, erro
 	if config.Reader == nil {
 		return nil, errors.New("installation state reader is required when installation gate is enabled")
 	}
-	skipPaths := config.SkipPaths
-	if len(skipPaths) == 0 {
-		skipPaths = DefaultInstallationGateConfig().SkipPaths
-	}
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
-			if c.Request().Method == http.MethodOptions || pathSkipped(c, skipPaths) {
+			if c.Request().Method == http.MethodOptions || routeExempt(c, config.Exemptions) {
 				return next(c)
 			}
 			initialized, err := config.Reader.Initialized(c.Request().Context())

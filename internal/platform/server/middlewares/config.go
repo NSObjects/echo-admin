@@ -17,6 +17,14 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
+// RouteExemption is one exact HTTP method plus registered route pattern that
+// skips a middleware. Route policy forbids path-only, prefix, or wildcard
+// exemptions, so matching is always exact.
+type RouteExemption struct {
+	Method string
+	Path   string
+}
+
 // MiddlewareConfig controls server-owned HTTP middleware.
 type MiddlewareConfig struct {
 	EnableRecovery bool
@@ -63,7 +71,7 @@ func DefaultMiddlewareConfig() *MiddlewareConfig {
 		EnableAPIKey:           false,
 		APIKey:                 DefaultAPIKeyConfig(),
 		EnableInstallationGate: false,
-		InstallationGate:       DefaultInstallationGateConfig(),
+		InstallationGate:       &InstallationGateConfig{},
 		EnableLoginSession:     false,
 		LoginSession:           DefaultLoginSessionConfig(),
 		EnableCSRF:             false,
@@ -268,6 +276,22 @@ func requestPath(c *echo.Context) string {
 		return ""
 	}
 	return c.Request().URL.Path
+}
+
+// routeExempt reports whether the request matches one exemption by exact
+// method and registered route pattern.
+func routeExempt(c *echo.Context, exemptions []RouteExemption) bool {
+	if c == nil || c.Request() == nil {
+		return false
+	}
+	method := c.Request().Method
+	path := requestPath(c)
+	for _, exemption := range exemptions {
+		if exemption.Method == method && exemption.Path == path {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizedCORSConfig(config middleware.CORSConfig) (middleware.CORSConfig, error) {

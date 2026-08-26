@@ -149,17 +149,18 @@ func newTestEcho(t *testing.T) *echo.Echo {
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	e.Use(middlewares.RequestContext())
+	loginExemptions := []middlewares.RouteExemption{{Method: http.MethodPost, Path: "/api/auth/login"}}
 	sessionMiddleware, err := middlewares.LoginSession(&middlewares.LoginSessionConfig{
 		Enabled:       true,
 		CookieName:    middlewares.LoginSessionCookieName,
-		SkipPaths:     []string{"/api/auth/login"},
+		Exemptions:    loginExemptions,
 		Authenticator: sessionAuthenticator{auth: uc},
 	})
 	if err != nil {
 		t.Fatalf("LoginSession() error = %v", err)
 	}
 	e.Use(sessionMiddleware)
-	e.Use(echomiddleware.CSRFWithConfig(middlewares.CSRFConfig([]string{"/api/auth/login"}, false)))
+	e.Use(echomiddleware.CSRFWithConfig(middlewares.CSRFConfig(loginExemptions, false)))
 	authhttp.Register(e.Group("/api"), handler)
 	return e
 }

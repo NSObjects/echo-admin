@@ -24,14 +24,14 @@ Middlewares 包提供 API 模板的通用中间件能力，包括请求元数据
 ```go
 type LoginSessionConfig struct {
     CookieName    string
-    SkipPaths     []string
+    Exemptions    []RouteExemption
     Authenticator LoginSessionAuthenticator
     Enabled       bool
 }
 ```
 
 **特性**:
-- 支持公开路径跳过
+- 豁免由 composition root 注入，按精确 method + 注册路由 pattern 匹配；本层不携带路由策略，不支持 path-only 或通配豁免
 - 从 `login_session` HttpOnly cookie 读取 opaque token
 - 通过 boot 注入的 authenticator 校验会话，不 import 业务存储
 - 验证成功后写入 `requestctx.UserID`、`requestctx.RoleID` 和 `requestctx.LoginSessionID`
@@ -89,8 +89,12 @@ config := &MiddlewareConfig{
     },
     EnableLoginSession: true,
     LoginSession: &LoginSessionConfig{
-        CookieName:    LoginSessionCookieName,
-        SkipPaths:     []string{"/api/health", "/api/info", "/api/ready"},
+        CookieName: LoginSessionCookieName,
+        Exemptions: []RouteExemption{
+            {Method: http.MethodGet, Path: "/api/health"},
+            {Method: http.MethodGet, Path: "/api/info"},
+            {Method: http.MethodGet, Path: "/api/ready"},
+        },
         Authenticator: loginSessionAuthenticator,
         Enabled:       true,
     },

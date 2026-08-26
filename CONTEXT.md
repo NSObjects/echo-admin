@@ -98,6 +98,7 @@ _Avoid_: System route list, bootstrap route list, every HTTP endpoint
 - `OPTIONS` preflight and unmatched requests are not registered API routes and are outside this classification.
 - Route classification does not determine pre-initialization reachability; **Installation State** rules decide that separately.
 - Route exposure policy belongs to the composition root, so boot owns which system and bootstrap routes are outside the **Managed API Route Catalog**.
+- **System API Route** and **Bootstrap API Route** identities are declared once in the composition root; middleware exemptions are derived from that single declaration.
 - At test time, registered **Managed API Routes** and the access-owned catalog definition must match exactly; missing, stale, duplicate, or wrongly classified routes are contract failures.
 - A runtime with any registered **Managed API Route** must not complete assembly without **Route Authorization**; a runtime containing only **System API Routes** and **Bootstrap API Routes** does not require it.
 - Runtime **Route Authorization** must reject non-exempt routes that have no matching **Managed API Route** entry.

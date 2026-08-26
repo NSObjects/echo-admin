@@ -20,15 +20,17 @@ const apiPrefix = "/api"
 
 // Server owns the Echo HTTP server lifecycle and system routes.
 type Server struct {
-	echo           *echo.Echo
-	api            *echo.Group
-	config         *Config
-	appConfig      configs.Config
-	statusReporter StatusReporter
-	apiKeyVerifier middlewares.APIKeyVerifier
-	errorRecorder  middlewares.SystemErrorRecorder
-	sessionAuth    middlewares.LoginSessionAuthenticator
-	installation   middlewares.InstallationStateReader
+	echo                  *echo.Echo
+	api                   *echo.Group
+	config                *Config
+	appConfig             configs.Config
+	statusReporter        StatusReporter
+	apiKeyVerifier        middlewares.APIKeyVerifier
+	errorRecorder         middlewares.SystemErrorRecorder
+	sessionAuth           middlewares.LoginSessionAuthenticator
+	installation          middlewares.InstallationStateReader
+	preInitRoutes         []middlewares.RouteExemption
+	unauthenticatedRoutes []middlewares.RouteExemption
 }
 
 type healthResponse struct {
@@ -127,6 +129,24 @@ func WithInstallationStateReader(reader InstallationStateReader) Option {
 	}
 }
 
+// WithPreInitRoutes installs routes that stay reachable before first
+// initialization completes. The composition root derives them from its route
+// exposure declaration.
+func WithPreInitRoutes(routes ...middlewares.RouteExemption) Option {
+	return func(s *Server) {
+		s.preInitRoutes = routes
+	}
+}
+
+// WithUnauthenticatedRoutes installs routes reachable without a login
+// session; CSRF exemptions derive from the same list. The composition root
+// derives them from its route exposure declaration.
+func WithUnauthenticatedRoutes(routes ...middlewares.RouteExemption) Option {
+	return func(s *Server) {
+		s.unauthenticatedRoutes = routes
+	}
+}
+
 // Echo returns the underlying Echo instance for HTTP adapter tests and
 // framework-level integration.
 func (s *Server) Echo() *echo.Echo {
@@ -184,6 +204,7 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 	sessionConfig := middlewares.DefaultLoginSessionConfig()
 	sessionConfig.Enabled = s.sessionAuth != nil
 	sessionConfig.Authenticator = s.sessionAuth
+	sessionConfig.Exemptions = s.unauthenticatedRoutes
 
 	return &middlewares.MiddlewareConfig{
 		EnableRecovery:       !httpConfig.RecoveryDisabled,
@@ -202,14 +223,14 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 		},
 		EnableInstallationGate: s.installation != nil,
 		InstallationGate: &middlewares.InstallationGateConfig{
-			Reader:    s.installation,
-			SkipPaths: middlewares.DefaultInstallationGateConfig().SkipPaths,
-			Enabled:   s.installation != nil,
+			Reader:     s.installation,
+			Exemptions: s.preInitRoutes,
+			Enabled:    s.installation != nil,
 		},
 		EnableLoginSession: sessionConfig.Enabled,
 		LoginSession:       sessionConfig,
 		EnableCSRF:         sessionConfig.Enabled,
-		CSRF:               middlewares.CSRFConfig(sessionConfig.SkipPaths, httpConfig.SecureCookies),
+		CSRF:               middlewares.CSRFConfig(sessionConfig.Exemptions, httpConfig.SecureCookies),
 	}
 }
 
@@ -225,12 +246,17 @@ func corsMiddlewareConfig(cfg configs.CORSConfig) middleware.CORSConfig {
 }
 
 func (s *Server) registerSystemRoutes() {
-	s.api.GET("/health", func(c *echo.Context) error {
+	// Health and readiness also serve HEAD because liveness and readiness
+	// probes commonly issue HEAD requests and Echo does not fall back HEAD to
+	// GET routes. Response bodies are dropped by net/http for HEAD anyway.
+	health := func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, healthResponse{
 			Status: "ok",
 			Time:   time.Now().Format(time.RFC3339),
 		})
-	})
+	}
+	s.api.GET("/health", health)
+	s.api.HEAD("/health", health)
 
 	s.api.GET("/info", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, infoResponse{
@@ -240,7 +266,7 @@ func (s *Server) registerSystemRoutes() {
 		})
 	})
 
-	s.api.GET("/ready", func(c *echo.Context) error {
+	ready := func(c *echo.Context) error {
 		response := readinessResponse{
 			Status: "ready",
 			Time:   time.Now().Format(time.RFC3339),
@@ -253,7 +279,9 @@ func (s *Server) registerSystemRoutes() {
 			return c.JSON(http.StatusServiceUnavailable, response)
 		}
 		return c.JSON(http.StatusOK, response)
-	})
+	}
+	s.api.GET("/ready", ready)
+	s.api.HEAD("/ready", ready)
 
 	s.api.GET("/capabilities", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, capabilitiesResponse{

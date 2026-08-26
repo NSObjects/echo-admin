@@ -11,6 +11,7 @@ import (
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 var (
@@ -36,6 +37,34 @@ const (
 	apiRouteBootstrap
 	apiRouteManaged
 )
+
+// exemptAPIRoute is the single route identity declaration: classification,
+// pre-initialization reachability, and login-session exemptions all derive
+// from this table. Declaration coverage against the real router is verified
+// by the full-assembly contract test via checkExemptAPIRoutes, because trimmed
+// assemblies may legitimately omit bootstrap modules. Reachability is declared
+// per route because it is not a function of class: readiness and capabilities
+// stay closed before initialization, and so does login.
+type exemptAPIRoute struct {
+	method           string
+	pattern          string
+	class            apiRouteClass
+	preInitReachable bool
+}
+
+var exemptAPIRoutes = [...]exemptAPIRoute{
+	{method: http.MethodGet, pattern: "/api/health", class: apiRouteSystem, preInitReachable: true},
+	// HEAD probes are registered alongside their GET routes; Echo does not
+	// fall back HEAD to GET, so each probe form needs its own declaration.
+	{method: http.MethodHead, pattern: "/api/health", class: apiRouteSystem, preInitReachable: true},
+	{method: http.MethodGet, pattern: "/api/info", class: apiRouteSystem, preInitReachable: true},
+	{method: http.MethodGet, pattern: "/api/ready", class: apiRouteSystem},
+	{method: http.MethodHead, pattern: "/api/ready", class: apiRouteSystem},
+	{method: http.MethodGet, pattern: "/api/capabilities", class: apiRouteSystem},
+	{method: http.MethodGet, pattern: "/api/setup/state", class: apiRouteBootstrap, preInitReachable: true},
+	{method: http.MethodPost, pattern: "/api/setup", class: apiRouteBootstrap, preInitReachable: true},
+	{method: http.MethodPost, pattern: "/api/auth/login", class: apiRouteBootstrap},
+}
 
 type routeManifest struct {
 	managed map[apiRouteKey]struct{}
@@ -88,19 +117,52 @@ func classifyAPIRoute(route apiRouteKey) apiRouteClass {
 	if route.method == "" || route.pattern == "" || route.method == http.MethodOptions || !isAPIPath(route.pattern) {
 		return apiRouteOutside
 	}
-	switch route {
-	case apiRouteKey{method: http.MethodGet, pattern: "/api/health"},
-		apiRouteKey{method: http.MethodGet, pattern: "/api/info"},
-		apiRouteKey{method: http.MethodGet, pattern: "/api/ready"},
-		apiRouteKey{method: http.MethodGet, pattern: "/api/capabilities"}:
-		return apiRouteSystem
-	case apiRouteKey{method: http.MethodGet, pattern: "/api/setup/state"},
-		apiRouteKey{method: http.MethodPost, pattern: "/api/setup"},
-		apiRouteKey{method: http.MethodPost, pattern: "/api/auth/login"}:
-		return apiRouteBootstrap
-	default:
-		return apiRouteManaged
+	for _, exempt := range exemptAPIRoutes {
+		if route.method == exempt.method && route.pattern == exempt.pattern {
+			return exempt.class
+		}
 	}
+	return apiRouteManaged
+}
+
+// preInitRouteExemptions derives the installation-gate exemptions: routes
+// that stay reachable before System First Initialization completes.
+func preInitRouteExemptions() []middlewares.RouteExemption {
+	exemptions := make([]middlewares.RouteExemption, 0, len(exemptAPIRoutes))
+	for _, route := range exemptAPIRoutes {
+		if route.preInitReachable {
+			exemptions = append(exemptions, middlewares.RouteExemption{Method: route.method, Path: route.pattern})
+		}
+	}
+	return exemptions
+}
+
+// unauthenticatedRouteExemptions derives the login-session exemptions: every
+// System API Route and Bootstrap API Route has no login session to check.
+func unauthenticatedRouteExemptions() []middlewares.RouteExemption {
+	exemptions := make([]middlewares.RouteExemption, 0, len(exemptAPIRoutes))
+	for _, route := range exemptAPIRoutes {
+		exemptions = append(exemptions, middlewares.RouteExemption{Method: route.method, Path: route.pattern})
+	}
+	return exemptions
+}
+
+// checkExemptAPIRoutes verifies the exemption declaration against the real
+// router. It backs the full-assembly contract test only: trimmed assemblies
+// may legitimately omit bootstrap modules, so finalization itself does not
+// enforce registration.
+func checkExemptAPIRoutes(e *echo.Echo) error {
+	registered := make(map[apiRouteKey]struct{})
+	for _, route := range e.Router().Routes() {
+		registered[apiRouteKey{method: route.Method, pattern: route.Path}] = struct{}{}
+	}
+	for _, exempt := range exemptAPIRoutes {
+		key := apiRouteKey{method: exempt.method, pattern: exempt.pattern}
+		if _, ok := registered[key]; !ok {
+			return fmt.Errorf("%w: exempt route not registered: %s", errRouteExposureMismatch, key)
+		}
+	}
+	return nil
 }
 
 func isAPIPath(pattern string) bool {

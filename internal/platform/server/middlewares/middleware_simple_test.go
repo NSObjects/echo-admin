@@ -46,7 +46,7 @@ func TestDefaultLoginSessionConfig(t *testing.T) {
 
 	assert.NotNil(t, config)
 	assert.False(t, config.Enabled)
-	assert.NotNil(t, config.SkipPaths)
+	assert.Empty(t, config.Exemptions)
 	assert.Equal(t, LoginSessionCookieName, config.CookieName)
 }
 
@@ -74,29 +74,47 @@ func TestInstallationGateBlocksPrivateRoutesWhenUninitialized(t *testing.T) {
 	assertErrorPayload(t, rec, apperr.ErrSystemUninitialized, "system is not initialized")
 }
 
-func TestInstallationGateSkipsSetupAndSystemRoutes(t *testing.T) {
-	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
-	reader := &installationStateReader{initialized: false}
-	gate, err := InstallationGate(&InstallationGateConfig{
-		Reader:  reader,
-		Enabled: true,
-	})
-	if err != nil {
-		t.Fatalf("InstallationGate() error = %v", err)
+func TestInstallationGateSkipsExemptRoutes(t *testing.T) {
+	tests := []struct {
+		name      string
+		exemption RouteExemption
+	}{
+		{
+			name:      "setup state route",
+			exemption: RouteExemption{Method: http.MethodGet, Path: "/api/setup/state"},
+		},
+		{
+			name:      "head health probe",
+			exemption: RouteExemption{Method: http.MethodHead, Path: "/api/health"},
+		},
 	}
-	e.Use(gate)
-	e.GET("/api/setup/state", func(c *echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			e.HTTPErrorHandler = ErrorHandler
+			reader := &installationStateReader{initialized: false}
+			gate, err := InstallationGate(&InstallationGateConfig{
+				Reader:     reader,
+				Exemptions: []RouteExemption{tt.exemption},
+				Enabled:    true,
+			})
+			if err != nil {
+				t.Fatalf("InstallationGate() error = %v", err)
+			}
+			e.Use(gate)
+			e.Add(tt.exemption.Method, tt.exemption.Path, func(c *echo.Context) error {
+				return c.NoContent(http.StatusNoContent)
+			})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/setup/state", nil)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
+			req := httptest.NewRequest(tt.exemption.Method, tt.exemption.Path, nil)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-	if reader.calls != 0 {
-		t.Fatalf("installation state calls = %d, want 0 for skipped setup route", reader.calls)
+			assert.Equal(t, http.StatusNoContent, rec.Code)
+			if reader.calls != 0 {
+				t.Fatalf("installation state calls = %d, want 0 for exempt route", reader.calls)
+			}
+		})
 	}
 }
 
@@ -123,6 +141,39 @@ func TestInstallationGateAllowsPrivateRoutesAfterInitialization(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 	if reader.calls != 1 {
 		t.Fatalf("installation state calls = %d, want 1", reader.calls)
+	}
+}
+
+func TestInstallationGateExemptionMatchesMethodExactly(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	reader := &installationStateReader{initialized: false}
+	gate, err := InstallationGate(&InstallationGateConfig{
+		Reader:     reader,
+		Exemptions: []RouteExemption{{Method: http.MethodPost, Path: "/api/setup"}},
+		Enabled:    true,
+	})
+	if err != nil {
+		t.Fatalf("InstallationGate() error = %v", err)
+	}
+	e.Use(gate)
+	handler := func(c *echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	}
+	e.POST("/api/setup", handler)
+	e.GET("/api/setup", handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/setup", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/setup", nil)
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	if reader.calls != 1 {
+		t.Fatalf("installation state calls = %d, want 1 for non-exempt method", reader.calls)
 	}
 }
 
@@ -807,7 +858,7 @@ func TestLoginSessionConfig(t *testing.T) {
 			name: "enabled login session",
 			config: &LoginSessionConfig{
 				CookieName:    LoginSessionCookieName,
-				SkipPaths:     []string{"/api/health"},
+				Exemptions:    []RouteExemption{{Method: http.MethodGet, Path: "/api/health"}},
 				Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
 				Enabled:       true,
 			},
@@ -816,7 +867,6 @@ func TestLoginSessionConfig(t *testing.T) {
 			name: "disabled login session",
 			config: &LoginSessionConfig{
 				CookieName: LoginSessionCookieName,
-				SkipPaths:  []string{},
 				Enabled:    false,
 			},
 		},
