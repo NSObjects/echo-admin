@@ -72,7 +72,8 @@ func (s *Store) upgradeManagedAPIRouteCatalogData(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.upgradeRoleAuthorization(ctx, permissionTokens, apiIDs, menuIDs, buttonIDs)
+	catalog := authorizationCatalog{permissionTokens: permissionTokens, apiIDs: apiIDs, menuIDs: menuIDs, buttonIDs: buttonIDs}
+	return s.upgradeRoleAuthorization(ctx, catalog)
 }
 
 func (s *Store) deleteRetiredAuthorizationRows(ctx context.Context, permissionTokens []string, apiIDs []int64) error {
@@ -121,40 +122,38 @@ type roleUpgradePlan struct {
 }
 
 // planRoleUpgrade normalizes one role's authorization onto the current
-// catalog. The root role receives the complete catalog; ordinary roles keep
-// their current grants intersected with the catalog, with retired
-// API-management tokens mapped to their read and grant replacements. A role
-// left without any valid permission is an error so the upgrade fails closed
-// instead of silently emptying a role.
+// catalog. The root role receives the complete catalog regardless of its
+// current grants, and the static permission catalog is never empty so no
+// empty-grant check applies to it; ordinary roles keep their current grants
+// intersected with the catalog, with retired API-management tokens mapped to
+// their read and grant replacements. A role left without any valid permission
+// is an error so the upgrade fails closed instead of silently emptying a role.
 func planRoleUpgrade(role roleAuthorization, catalog authorizationCatalog) (roleUpgradePlan, error) {
-	root := role.code == domain.RoleCodeSuperAdmin
-	permissions := upgradeRolePermissions(role.permissions, root)
-	if len(permissions) == 0 {
-		return roleUpgradePlan{}, fmt.Errorf("upgrade role authorization: role %q has no current permissions", role.code)
-	}
-	plan := roleUpgradePlan{
-		permissions: permissions,
-		apiIDs:      retainCatalogIDs(role.apiIDs, catalog.apiIDs),
-		menuIDs:     retainCatalogIDs(role.menuIDs, catalog.menuIDs),
-		buttonIDs:   retainCatalogIDs(role.buttonIDs, catalog.buttonIDs),
-	}
-	if root {
-		plan = roleUpgradePlan{
+	if role.code == domain.RoleCodeSuperAdmin {
+		return roleUpgradePlan{
 			permissions: append([]string(nil), catalog.permissionTokens...),
 			apiIDs:      append([]int64(nil), catalog.apiIDs...),
 			menuIDs:     append([]int64(nil), catalog.menuIDs...),
 			buttonIDs:   append([]int64(nil), catalog.buttonIDs...),
-		}
+		}, nil
 	}
-	return plan, nil
+	permissions := upgradeRolePermissions(role.permissions)
+	if len(permissions) == 0 {
+		return roleUpgradePlan{}, fmt.Errorf("upgrade role authorization: role %q has no current permissions", role.code)
+	}
+	return roleUpgradePlan{
+		permissions: permissions,
+		apiIDs:      retainCatalogIDs(role.apiIDs, catalog.apiIDs),
+		menuIDs:     retainCatalogIDs(role.menuIDs, catalog.menuIDs),
+		buttonIDs:   retainCatalogIDs(role.buttonIDs, catalog.buttonIDs),
+	}, nil
 }
 
-func (s *Store) upgradeRoleAuthorization(ctx context.Context, permissionTokens []string, apiIDs, menuIDs, buttonIDs []int64) error {
+func (s *Store) upgradeRoleAuthorization(ctx context.Context, catalog authorizationCatalog) error {
 	var roles []roleModel
 	if err := s.db.WithContext(ctx).Order("id").Find(&roles).Error; err != nil {
 		return apperr.WrapDatabase(err, "list roles for authorization upgrade")
 	}
-	catalog := authorizationCatalog{permissionTokens: permissionTokens, apiIDs: apiIDs, menuIDs: menuIDs, buttonIDs: buttonIDs}
 	for _, role := range roles {
 		plan, err := planRoleUpgrade(roleAuthorization{
 			code:        role.Code,
@@ -166,7 +165,7 @@ func (s *Store) upgradeRoleAuthorization(ctx context.Context, permissionTokens [
 		if err != nil {
 			return err
 		}
-		if err := s.updateRoleAuthorization(ctx, role, plan.permissions, plan.apiIDs, plan.menuIDs, plan.buttonIDs); err != nil {
+		if err := s.updateRoleAuthorization(ctx, role, plan); err != nil {
 			return err
 		}
 	}
@@ -182,10 +181,7 @@ func permissionCatalogTokens() []string {
 	return tokens
 }
 
-func upgradeRolePermissions(current []string, root bool) []string {
-	if root {
-		return permissionCatalogTokens()
-	}
+func upgradeRolePermissions(current []string) []string {
 	allowed := make(map[string]struct{})
 	for _, token := range permissionCatalogTokens() {
 		allowed[token] = struct{}{}
@@ -249,12 +245,12 @@ func retainCatalogIDs(current, catalog []int64) []int64 {
 	return out
 }
 
-func (s *Store) updateRoleAuthorization(ctx context.Context, role roleModel, permissions []string, apiIDs, menuIDs, buttonIDs []int64) error {
+func (s *Store) updateRoleAuthorization(ctx context.Context, role roleModel, plan roleUpgradePlan) error {
 	updates := map[string]any{
-		"permissions": mysqljson.Strings(permissions),
-		"api_ids":     mysqljson.Int64s(apiIDs),
-		"menu_ids":    mysqljson.Int64s(menuIDs),
-		"button_ids":  mysqljson.Int64s(buttonIDs),
+		"permissions": mysqljson.Strings(plan.permissions),
+		"api_ids":     mysqljson.Int64s(plan.apiIDs),
+		"menu_ids":    mysqljson.Int64s(plan.menuIDs),
+		"button_ids":  mysqljson.Int64s(plan.buttonIDs),
 		"updated_at":  time.Now().UTC(),
 	}
 	if err := s.db.WithContext(ctx).Model(&roleModel{}).Where("id = ?", role.ID).Updates(updates).Error; err != nil {
