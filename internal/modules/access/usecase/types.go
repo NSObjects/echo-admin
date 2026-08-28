@@ -123,6 +123,30 @@ type MenuButtonInput struct {
 	Description string
 }
 
+// MenuNode is one exported menu with its descendants, used by version bundles.
+type MenuNode struct {
+	Menu     domain.Menu
+	Children []MenuNode
+}
+
+// MenuTreeInput is one imported menu with nested children. Parent links are
+// derived from the tree itself: roots attach to the top level and children
+// attach to their freshly saved parent, so stale parent references inside a
+// bundle never survive an import.
+type MenuTreeInput struct {
+	Name       string
+	Path       string
+	Icon       string
+	Hidden     bool
+	Component  string
+	Meta       MenuMetaInput
+	Permission string
+	Sort       int
+	Active     bool
+	Buttons    []MenuButtonInput
+	Children   []MenuTreeInput
+}
+
 // MenuRolesInput carries the full role assignment for one menu.
 type MenuRolesInput struct {
 	MenuID  int64

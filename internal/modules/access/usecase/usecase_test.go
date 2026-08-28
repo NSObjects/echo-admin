@@ -574,3 +574,158 @@ func containsIDForTest(ids []int64, want int64) bool {
 	}
 	return false
 }
+
+type menuTreeStore struct {
+	storeSpy
+	nextMenuID int64
+}
+
+func (s *menuTreeStore) CreateMenu(_ context.Context, menu accessdomain.Menu) (accessdomain.Menu, error) {
+	s.nextMenuID++
+	menu.ID = s.nextMenuID
+	s.menus = append(s.menus, menu)
+	return menu, nil
+}
+
+func (s *menuTreeStore) UpdateMenu(_ context.Context, menu accessdomain.Menu) (accessdomain.Menu, error) {
+	for index, existing := range s.menus {
+		if existing.ID == menu.ID {
+			s.menus[index] = menu
+			return menu, nil
+		}
+	}
+	s.menus = append(s.menus, menu)
+	return menu, nil
+}
+
+func treeMenu(t *testing.T, id, parentID int64, path string) accessdomain.Menu {
+	t.Helper()
+	now := time.Unix(1_700_000_000, 0).UTC()
+	menu, err := accessdomain.RestoreMenu(id, parentID, "菜单"+path, path, "menu", false, "./M"+path, accessdomain.MenuMeta{}, accessdomain.PermissionLogRead, 10, true, nil, now, now)
+	if err != nil {
+		t.Fatalf("RestoreMenu(%s) error = %v", path, err)
+	}
+	return menu
+}
+
+func findTreeMenu(t *testing.T, menus []accessdomain.Menu, path string) accessdomain.Menu {
+	t.Helper()
+	for _, menu := range menus {
+		if menu.Path == path {
+			return menu
+		}
+	}
+	t.Fatalf("menu %s not found in %#v", path, menus)
+	return accessdomain.Menu{}
+}
+
+func menuNodeTreePath(nodes []usecase.MenuNode) string {
+	out := ""
+	for index, node := range nodes {
+		if index > 0 {
+			out += ","
+		}
+		out += node.Menu.Path
+		if len(node.Children) > 0 {
+			out += ">" + menuNodeTreePath(node.Children)
+		}
+	}
+	return out
+}
+
+func TestExportMenuTreeRequiresAllSelectedMenus(t *testing.T) {
+	store := &menuTreeStore{nextMenuID: 100}
+	store.menus = []accessdomain.Menu{treeMenu(t, 1, 0, "/a")}
+	uc := usecase.New(store, adminRoleReaderSpy{})
+
+	_, err := uc.ExportMenuTree(context.Background(), []int64{1, 9})
+	appErr, ok := apperr.Parse(err)
+	if !ok || appErr.Code() != apperr.ErrNotFound {
+		t.Fatalf("ExportMenuTree(missing id) error = %v, want not found", err)
+	}
+}
+
+func TestExportMenuTreeSkipsUnselectedAncestors(t *testing.T) {
+	store := &menuTreeStore{nextMenuID: 100}
+	store.menus = []accessdomain.Menu{
+		treeMenu(t, 1, 0, "/a"),
+		treeMenu(t, 2, 1, "/a/b"),
+		treeMenu(t, 3, 2, "/a/b/c"),
+	}
+	uc := usecase.New(store, adminRoleReaderSpy{})
+
+	tests := []struct {
+		name     string
+		ids      []int64
+		wantTree string
+	}{
+		{name: "descendant without ancestors", ids: []int64{3}, wantTree: "/a/b/c"},
+		{name: "selected ancestor skips unselected middle", ids: []int64{1, 3}, wantTree: "/a>/a/b/c"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nodes, err := uc.ExportMenuTree(context.Background(), tt.ids)
+			if err != nil {
+				t.Fatalf("ExportMenuTree() error = %v", err)
+			}
+			if got := menuNodeTreePath(nodes); got != tt.wantTree {
+				t.Fatalf("exported tree = %s, want %s", got, tt.wantTree)
+			}
+		})
+	}
+}
+
+func TestImportMenuTreeUpsertsByPathAndRebindsChildren(t *testing.T) {
+	store := &menuTreeStore{nextMenuID: 100}
+	store.menus = []accessdomain.Menu{treeMenu(t, 1, 0, "/old")}
+	uc := usecase.New(store, adminRoleReaderSpy{})
+
+	tree := usecase.MenuTreeInput{
+		Name: "新父", Path: "/new", Icon: "menu", Component: "./New",
+		Permission: accessdomain.PermissionLogRead, Sort: 10, Active: true,
+		Children: []usecase.MenuTreeInput{
+			{
+				Name: "旧子", Path: "/old", Icon: "menu", Component: "./Old",
+				Permission: accessdomain.PermissionLogRead, Sort: 20, Active: true,
+			},
+		},
+	}
+	if err := uc.ImportMenuTree(context.Background(), []usecase.MenuTreeInput{tree}); err != nil {
+		t.Fatalf("ImportMenuTree() error = %v", err)
+	}
+
+	if got := len(store.menus); got != 2 {
+		t.Fatalf("menu count after import = %d, want 2", got)
+	}
+	newMenu := findTreeMenu(t, store.menus, "/new")
+	oldMenu := findTreeMenu(t, store.menus, "/old")
+	if oldMenu.ParentID != newMenu.ID {
+		t.Fatalf("imported /old parent id = %d, want freshly saved parent %d", oldMenu.ParentID, newMenu.ID)
+	}
+	if newMenu.ParentID != 0 {
+		t.Fatalf("imported root /new parent id = %d, want top level", newMenu.ParentID)
+	}
+
+	if err := uc.ImportMenuTree(context.Background(), []usecase.MenuTreeInput{tree}); err != nil {
+		t.Fatalf("ImportMenuTree(second pass) error = %v", err)
+	}
+	if got := len(store.menus); got != 2 {
+		t.Fatalf("menu count after reimport = %d, want 2 (path upsert, no duplicates)", got)
+	}
+}
+
+func TestImportMenuTreeRejectsInvalidPermission(t *testing.T) {
+	store := &menuTreeStore{nextMenuID: 100}
+	uc := usecase.New(store, adminRoleReaderSpy{})
+
+	err := uc.ImportMenuTree(context.Background(), []usecase.MenuTreeInput{
+		{Name: "坏权限", Path: "/bad", Component: "./Bad", Permission: "bogus", Sort: 10, Active: true},
+	})
+	appErr, ok := apperr.Parse(err)
+	if !ok || appErr.Code() != apperr.ErrBadRequest {
+		t.Fatalf("ImportMenuTree(invalid permission) error = %v, want bad request", err)
+	}
+	if got := len(store.menus); got != 0 {
+		t.Fatalf("menu count after rejected import = %d, want 0", got)
+	}
+}

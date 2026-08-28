@@ -93,27 +93,80 @@ func (s *Store) catalogIDs(ctx context.Context, model any) ([]int64, error) {
 	return ids, nil
 }
 
+// authorizationCatalog carries the persisted catalog identity sets that role
+// grants are normalized onto during an upgrade.
+type authorizationCatalog struct {
+	permissionTokens []string
+	apiIDs           []int64
+	menuIDs          []int64
+	buttonIDs        []int64
+}
+
+// roleAuthorization carries one role's current grant collections as planning
+// input.
+type roleAuthorization struct {
+	code        string
+	permissions []string
+	apiIDs      []int64
+	menuIDs     []int64
+	buttonIDs   []int64
+}
+
+// roleUpgradePlan is the authorization state one role must hold after upgrade.
+type roleUpgradePlan struct {
+	permissions []string
+	apiIDs      []int64
+	menuIDs     []int64
+	buttonIDs   []int64
+}
+
+// planRoleUpgrade normalizes one role's authorization onto the current
+// catalog. The root role receives the complete catalog; ordinary roles keep
+// their current grants intersected with the catalog, with retired
+// API-management tokens mapped to their read and grant replacements. A role
+// left without any valid permission is an error so the upgrade fails closed
+// instead of silently emptying a role.
+func planRoleUpgrade(role roleAuthorization, catalog authorizationCatalog) (roleUpgradePlan, error) {
+	root := role.code == domain.RoleCodeSuperAdmin
+	permissions := upgradeRolePermissions(role.permissions, root)
+	if len(permissions) == 0 {
+		return roleUpgradePlan{}, fmt.Errorf("upgrade role authorization: role %q has no current permissions", role.code)
+	}
+	plan := roleUpgradePlan{
+		permissions: permissions,
+		apiIDs:      retainCatalogIDs(role.apiIDs, catalog.apiIDs),
+		menuIDs:     retainCatalogIDs(role.menuIDs, catalog.menuIDs),
+		buttonIDs:   retainCatalogIDs(role.buttonIDs, catalog.buttonIDs),
+	}
+	if root {
+		plan = roleUpgradePlan{
+			permissions: append([]string(nil), catalog.permissionTokens...),
+			apiIDs:      append([]int64(nil), catalog.apiIDs...),
+			menuIDs:     append([]int64(nil), catalog.menuIDs...),
+			buttonIDs:   append([]int64(nil), catalog.buttonIDs...),
+		}
+	}
+	return plan, nil
+}
+
 func (s *Store) upgradeRoleAuthorization(ctx context.Context, permissionTokens []string, apiIDs, menuIDs, buttonIDs []int64) error {
 	var roles []roleModel
 	if err := s.db.WithContext(ctx).Order("id").Find(&roles).Error; err != nil {
 		return apperr.WrapDatabase(err, "list roles for authorization upgrade")
 	}
+	catalog := authorizationCatalog{permissionTokens: permissionTokens, apiIDs: apiIDs, menuIDs: menuIDs, buttonIDs: buttonIDs}
 	for _, role := range roles {
-		root := role.Code == domain.RoleCodeSuperAdmin
-		permissions := upgradeRolePermissions([]string(role.Permissions), root)
-		if len(permissions) == 0 {
-			return fmt.Errorf("upgrade role authorization: role %q has no current permissions", role.Code)
+		plan, err := planRoleUpgrade(roleAuthorization{
+			code:        role.Code,
+			permissions: []string(role.Permissions),
+			apiIDs:      []int64(role.APIIDs),
+			menuIDs:     []int64(role.MenuIDs),
+			buttonIDs:   []int64(role.ButtonIDs),
+		}, catalog)
+		if err != nil {
+			return err
 		}
-		roleAPIIDs := retainCatalogIDs([]int64(role.APIIDs), apiIDs)
-		roleMenuIDs := retainCatalogIDs([]int64(role.MenuIDs), menuIDs)
-		roleButtonIDs := retainCatalogIDs([]int64(role.ButtonIDs), buttonIDs)
-		if root {
-			permissions = append([]string(nil), permissionTokens...)
-			roleAPIIDs = append([]int64(nil), apiIDs...)
-			roleMenuIDs = append([]int64(nil), menuIDs...)
-			roleButtonIDs = append([]int64(nil), buttonIDs...)
-		}
-		if err := s.updateRoleAuthorization(ctx, role, permissions, roleAPIIDs, roleMenuIDs, roleButtonIDs); err != nil {
+		if err := s.updateRoleAuthorization(ctx, role, plan.permissions, plan.apiIDs, plan.menuIDs, plan.buttonIDs); err != nil {
 			return err
 		}
 	}

@@ -2,52 +2,114 @@ package mysql
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/domain"
 )
 
-func TestUpgradeRolePermissionsMapsRetiredAPIPermissions(t *testing.T) {
-	tests := []struct {
-		name    string
-		current []string
-		root    bool
-		want    []string
-	}{
-		{
-			name:    "ordinary role keeps current grants and maps api update",
-			current: []string{domain.PermissionAdminRead, "api:create", "api:update", "api:delete"},
-			want:    []string{domain.PermissionAdminRead, domain.PermissionAPIRead, domain.PermissionAPIGrant},
-		},
-		{
-			name:    "ordinary role maps retired api management to read",
-			current: []string{"api:create"},
-			want:    []string{domain.PermissionAPIRead},
-		},
-		{
-			name:    "root receives exact current catalog",
-			current: []string{"api:create"},
-			root:    true,
-			want:    permissionCatalogTokens(),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := upgradeRolePermissions(tt.current, tt.root)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("upgradeRolePermissions() = %v, want %v", got, tt.want)
-			}
-		})
+func planUpgradeCatalog() authorizationCatalog {
+	return authorizationCatalog{
+		permissionTokens: permissionCatalogTokens(),
+		apiIDs:           []int64{1, 2, 3},
+		menuIDs:          []int64{10, 20},
+		buttonIDs:        []int64{100, 200},
 	}
 }
 
-func TestRetainCatalogIDs(t *testing.T) {
-	got := retainCatalogIDs([]int64{9, 2, 2, 7}, []int64{2, 4, 9})
-	want := []int64{9, 2}
+func assertRoleUpgradePlan(t *testing.T, got, want roleUpgradePlan) {
+	t.Helper()
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("retainCatalogIDs() = %v, want %v", got, want)
+		t.Fatalf("plan =\n got  %+v\n want %+v", got, want)
 	}
+}
+
+func TestPlanRoleUpgradeRootReceivesCompleteCatalog(t *testing.T) {
+	catalog := planUpgradeCatalog()
+	want := roleUpgradePlan{
+		permissions: catalog.permissionTokens,
+		apiIDs:      []int64{1, 2, 3},
+		menuIDs:     []int64{10, 20},
+		buttonIDs:   []int64{100, 200},
+	}
+
+	withGrants := roleAuthorization{
+		code:        domain.RoleCodeSuperAdmin,
+		permissions: []string{domain.PermissionAdminRead},
+		apiIDs:      []int64{1},
+		menuIDs:     []int64{10},
+		buttonIDs:   []int64{100},
+	}
+	got, err := planRoleUpgrade(withGrants, catalog)
+	if err != nil {
+		t.Fatalf("planRoleUpgrade(root with grants) error = %v", err)
+	}
+	assertRoleUpgradePlan(t, got, want)
+
+	empty := roleAuthorization{code: domain.RoleCodeSuperAdmin}
+	got, err = planRoleUpgrade(empty, catalog)
+	if err != nil {
+		t.Fatalf("planRoleUpgrade(root with empty grants) error = %v", err)
+	}
+	assertRoleUpgradePlan(t, got, want)
+}
+
+func TestPlanRoleUpgradeRetainsOrdinaryGrants(t *testing.T) {
+	catalog := planUpgradeCatalog()
+
+	got, err := planRoleUpgrade(roleAuthorization{
+		code:        "operator",
+		permissions: []string{domain.PermissionAdminRead, "garbage:token"},
+		apiIDs:      []int64{3, 9, 9, 1},
+		menuIDs:     []int64{10, 30},
+		buttonIDs:   []int64{200, 300},
+	}, catalog)
+	if err != nil {
+		t.Fatalf("planRoleUpgrade(ordinary) error = %v", err)
+	}
+	assertRoleUpgradePlan(t, got, roleUpgradePlan{
+		permissions: []string{domain.PermissionAdminRead},
+		apiIDs:      []int64{3, 1},
+		menuIDs:     []int64{10},
+		buttonIDs:   []int64{200},
+	})
+
+	_, err = planRoleUpgrade(roleAuthorization{code: "operator", permissions: []string{"garbage:token"}}, catalog)
+	if err == nil || !strings.Contains(err.Error(), "operator") {
+		t.Fatalf("planRoleUpgrade(no valid permissions) error = %v, want error naming role", err)
+	}
+}
+
+func TestPlanRoleUpgradeMapsRetiredTokens(t *testing.T) {
+	catalog := planUpgradeCatalog()
+
+	got, err := planRoleUpgrade(roleAuthorization{
+		code:        "operator",
+		permissions: []string{retiredPermissionAPICreate, retiredPermissionAPIDelete},
+	}, catalog)
+	if err != nil {
+		t.Fatalf("planRoleUpgrade(retired management) error = %v", err)
+	}
+	assertRoleUpgradePlan(t, got, roleUpgradePlan{
+		permissions: []string{domain.PermissionAPIRead},
+		apiIDs:      []int64{},
+		menuIDs:     []int64{},
+		buttonIDs:   []int64{},
+	})
+
+	got, err = planRoleUpgrade(roleAuthorization{
+		code:        "operator",
+		permissions: []string{retiredPermissionAPIUpdate},
+	}, catalog)
+	if err != nil {
+		t.Fatalf("planRoleUpgrade(retired update) error = %v", err)
+	}
+	assertRoleUpgradePlan(t, got, roleUpgradePlan{
+		permissions: []string{domain.PermissionAPIRead, domain.PermissionAPIGrant},
+		apiIDs:      []int64{},
+		menuIDs:     []int64{},
+		buttonIDs:   []int64{},
+	})
 }
 
 func TestMenuSeedsHaveComponentsAndUniqueButtons(t *testing.T) {

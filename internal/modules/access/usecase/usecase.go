@@ -383,6 +383,145 @@ func (u *Usecase) UpdateMenu(ctx context.Context, input UpdateMenuInput) (Menu, 
 	return fromMenu(updated), nil
 }
 
+// ExportMenuTree returns the menus selected by ids as a tree. A selected
+// descendant appears even when its ancestors were not selected, and a missing
+// id fails the whole export.
+func (u *Usecase) ExportMenuTree(ctx context.Context, ids []int64) ([]MenuNode, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	menus, err := u.store.ListMenus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]struct{}, len(menus))
+	for _, menu := range menus {
+		byID[menu.ID] = struct{}{}
+	}
+	selected := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if _, ok := byID[id]; !ok {
+			return nil, apperr.NewNotFound("menu")
+		}
+		selected[id] = struct{}{}
+	}
+	return exportMenuTree(menus, selected, 0), nil
+}
+
+func exportMenuTree(menus []domain.Menu, selected map[int64]struct{}, parentID int64) []MenuNode {
+	out := make([]MenuNode, 0)
+	for _, menu := range menus {
+		if menu.ParentID != parentID {
+			continue
+		}
+		if _, ok := selected[menu.ID]; !ok {
+			out = append(out, exportMenuTree(menus, selected, menu.ID)...)
+			continue
+		}
+		out = append(out, MenuNode{Menu: menu, Children: exportMenuTree(menus, selected, menu.ID)})
+	}
+	return out
+}
+
+// ImportMenuTree upserts menus by path, parents before children, and rebinds
+// every child to its freshly saved parent id.
+func (u *Usecase) ImportMenuTree(ctx context.Context, trees []MenuTreeInput) error {
+	if err := u.ready(); err != nil {
+		return err
+	}
+	existing, err := u.store.ListMenus(ctx)
+	if err != nil {
+		return err
+	}
+	for _, tree := range trees {
+		if err := u.importMenuTree(ctx, tree, 0, &existing); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (u *Usecase) importMenuTree(ctx context.Context, tree MenuTreeInput, parentID int64, existing *[]domain.Menu) error {
+	input := MenuInput{
+		ParentID:   parentID,
+		Name:       tree.Name,
+		Path:       tree.Path,
+		Icon:       tree.Icon,
+		Hidden:     tree.Hidden,
+		Component:  tree.Component,
+		Meta:       tree.Meta,
+		Permission: tree.Permission,
+		Sort:       tree.Sort,
+		Active:     tree.Active,
+		Buttons:    tree.Buttons,
+	}
+	var saved Menu
+	var err error
+	if current, ok := findMenuByPath(*existing, tree.Path); ok {
+		saved, err = u.UpdateMenu(ctx, UpdateMenuInput{
+			ID:         current.ID,
+			ParentID:   input.ParentID,
+			Name:       input.Name,
+			Path:       input.Path,
+			Icon:       input.Icon,
+			Hidden:     input.Hidden,
+			Component:  input.Component,
+			Meta:       input.Meta,
+			Permission: input.Permission,
+			Sort:       input.Sort,
+			Active:     input.Active,
+			Buttons:    input.Buttons,
+		})
+	} else {
+		saved, err = u.CreateMenu(ctx, input)
+	}
+	if err != nil {
+		return err
+	}
+	*existing = replaceImportedMenu(*existing, saved)
+	for _, child := range tree.Children {
+		if err := u.importMenuTree(ctx, child, saved.ID, existing); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func findMenuByPath(menus []domain.Menu, path string) (domain.Menu, bool) {
+	for _, menu := range menus {
+		if menu.Path == path {
+			return menu, true
+		}
+	}
+	return domain.Menu{}, false
+}
+
+// replaceImportedMenu keeps the import cache coherent: a saved menu replaces
+// the cached row matched by id or path, or is appended when it is new. Buttons
+// are not tracked because the cache only serves path lookups.
+func replaceImportedMenu(menus []domain.Menu, saved Menu) []domain.Menu {
+	converted := domain.Menu{
+		ID:         saved.ID,
+		ParentID:   saved.ParentID,
+		Name:       saved.Name,
+		Path:       saved.Path,
+		Icon:       saved.Icon,
+		Hidden:     saved.Hidden,
+		Component:  saved.Component,
+		Meta:       domain.MenuMeta(saved.Meta),
+		Permission: saved.Permission,
+		Sort:       saved.Sort,
+		Active:     saved.Active,
+	}
+	for index, menu := range menus {
+		if menu.ID == saved.ID || menu.Path == saved.Path {
+			menus[index] = converted
+			return menus
+		}
+	}
+	return append(menus, converted)
+}
+
 // DeleteMenu removes a menu only when no child menu or role grant still references it.
 func (u *Usecase) DeleteMenu(ctx context.Context, id int64) error {
 	if err := u.ready(); err != nil {

@@ -34,7 +34,6 @@ import (
 	setupmysql "github.com/NSObjects/echo-admin/internal/modules/setup/adapters/mysql"
 	setuphttp "github.com/NSObjects/echo-admin/internal/modules/setup/http"
 	setupusecase "github.com/NSObjects/echo-admin/internal/modules/setup/usecase"
-	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
@@ -463,17 +462,12 @@ func newSettingsUsecase(i do.Injector) (*settingsusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	accessStore, err := do.Invoke[*accessmysql.Store](i)
-	if err != nil {
-		return nil, err
-	}
 	accessUC, err := do.Invoke[*accessusecase.Usecase](i)
 	if err != nil {
 		return nil, err
 	}
 	return settingsusecase.New(store, settingsusecase.WithVersionCatalog(settingsVersionCatalog{
-		accessStore: accessStore,
-		access:      accessUC,
+		access: accessUC,
 	})), nil
 }
 
@@ -652,106 +646,51 @@ type apiTokenRolePolicy struct {
 }
 
 type settingsVersionCatalog struct {
-	accessStore *accessmysql.Store
-	access      *accessusecase.Usecase
+	access *accessusecase.Usecase
 }
 
 // ExportVersionMenus implements settingsusecase.VersionCatalog for access menus.
+// The bridge only maps types; export rules live in the access usecase.
 func (c settingsVersionCatalog) ExportVersionMenus(ctx context.Context, ids []int64) ([]settingsusecase.VersionMenu, error) {
-	menus, err := c.accessStore.ListMenus(ctx)
+	nodes, err := c.access.ExportMenuTree(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
-	selected := make(map[int64]struct{}, len(ids))
-	for _, id := range ids {
-		selected[id] = struct{}{}
-	}
-	byID := make(map[int64]accessdomain.Menu, len(menus))
-	for _, menu := range menus {
-		byID[menu.ID] = menu
-	}
-	for _, id := range ids {
-		if _, ok := byID[id]; !ok {
-			return nil, apperr.NewNotFound("menu")
-		}
-	}
-	return versionMenuTree(menus, selected, 0), nil
+	return versionMenuNodes(nodes), nil
 }
 
 // ImportVersionMenus implements settingsusecase.VersionCatalog for access menus.
+// The bridge only maps types; import rules live in the access usecase.
 func (c settingsVersionCatalog) ImportVersionMenus(ctx context.Context, menus []settingsusecase.VersionMenu) error {
-	existing, err := c.accessStore.ListMenus(ctx)
-	if err != nil {
-		return err
-	}
-	for _, menu := range menus {
-		if err := c.importVersionMenu(ctx, menu, 0, &existing); err != nil {
-			return err
-		}
-	}
-	return nil
+	return c.access.ImportMenuTree(ctx, menuTreeInputs(menus))
 }
 
-func (c settingsVersionCatalog) importVersionMenu(ctx context.Context, menu settingsusecase.VersionMenu, parentID int64, existing *[]accessdomain.Menu) error {
-	input := accessusecase.MenuInput{
-		ParentID:   parentID,
-		Name:       menu.Name,
-		Path:       menu.Path,
-		Icon:       menu.Icon,
-		Hidden:     menu.Hidden,
-		Component:  menu.Component,
-		Meta:       accessMenuMetaInput(menu.Meta),
-		Permission: menu.Permission,
-		Sort:       menu.Sort,
-		Active:     menu.Active,
-		Buttons:    versionMenuButtons(menu.Buttons),
-	}
-	current, ok := findMenuByPath(*existing, menu.Path)
-	var saved accessusecase.Menu
-	var err error
-	if ok {
-		saved, err = c.access.UpdateMenu(ctx, accessusecase.UpdateMenuInput{
-			ID:         current.ID,
-			ParentID:   parentID,
-			Name:       input.Name,
-			Path:       input.Path,
-			Icon:       input.Icon,
-			Hidden:     input.Hidden,
-			Component:  input.Component,
-			Meta:       input.Meta,
-			Permission: input.Permission,
-			Sort:       input.Sort,
-			Active:     input.Active,
-			Buttons:    input.Buttons,
-		})
-	} else {
-		saved, err = c.access.CreateMenu(ctx, input)
-	}
-	if err != nil {
-		return err
-	}
-	*existing = replaceImportedMenu(*existing, saved)
-	for _, child := range menu.Children {
-		if err := c.importVersionMenu(ctx, child, saved.ID, existing); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func versionMenuTree(menus []accessdomain.Menu, selected map[int64]struct{}, parentID int64) []settingsusecase.VersionMenu {
-	out := make([]settingsusecase.VersionMenu, 0)
-	for _, menu := range menus {
-		if menu.ParentID != parentID {
-			continue
-		}
-		if _, ok := selected[menu.ID]; !ok {
-			out = append(out, versionMenuTree(menus, selected, menu.ID)...)
-			continue
-		}
-		item := versionMenuFromDomain(menu)
-		item.Children = versionMenuTree(menus, selected, menu.ID)
+func versionMenuNodes(nodes []accessusecase.MenuNode) []settingsusecase.VersionMenu {
+	out := make([]settingsusecase.VersionMenu, 0, len(nodes))
+	for _, node := range nodes {
+		item := versionMenuFromDomain(node.Menu)
+		item.Children = versionMenuNodes(node.Children)
 		out = append(out, item)
+	}
+	return out
+}
+
+func menuTreeInputs(menus []settingsusecase.VersionMenu) []accessusecase.MenuTreeInput {
+	out := make([]accessusecase.MenuTreeInput, 0, len(menus))
+	for _, menu := range menus {
+		out = append(out, accessusecase.MenuTreeInput{
+			Name:       menu.Name,
+			Path:       menu.Path,
+			Icon:       menu.Icon,
+			Hidden:     menu.Hidden,
+			Component:  menu.Component,
+			Meta:       accessMenuMetaInput(menu.Meta),
+			Permission: menu.Permission,
+			Sort:       menu.Sort,
+			Active:     menu.Active,
+			Buttons:    versionMenuButtons(menu.Buttons),
+			Children:   menuTreeInputs(menu.Children),
+		})
 	}
 	return out
 }
@@ -811,38 +750,6 @@ func versionMenuButtons(buttons []settingsusecase.VersionButton) []accessusecase
 		})
 	}
 	return out
-}
-
-func findMenuByPath(menus []accessdomain.Menu, path string) (accessdomain.Menu, bool) {
-	for _, menu := range menus {
-		if menu.Path == path {
-			return menu, true
-		}
-	}
-	return accessdomain.Menu{}, false
-}
-
-func replaceImportedMenu(menus []accessdomain.Menu, saved accessusecase.Menu) []accessdomain.Menu {
-	converted := accessdomain.Menu{
-		ID:         saved.ID,
-		ParentID:   saved.ParentID,
-		Name:       saved.Name,
-		Path:       saved.Path,
-		Icon:       saved.Icon,
-		Hidden:     saved.Hidden,
-		Component:  saved.Component,
-		Meta:       accessdomain.MenuMeta(saved.Meta),
-		Permission: saved.Permission,
-		Sort:       saved.Sort,
-		Active:     saved.Active,
-	}
-	for index, menu := range menus {
-		if menu.ID == saved.ID || menu.Path == saved.Path {
-			menus[index] = converted
-			return menus
-		}
-	}
-	return append(menus, converted)
 }
 
 func (p apiTokenRolePolicy) RoleIsSuper(ctx context.Context, roleID int64) (bool, error) {
