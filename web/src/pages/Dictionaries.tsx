@@ -3,28 +3,24 @@ import {
   DownloadOutlined,
   EditOutlined,
   PlusOutlined,
-  ReloadOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
-import { PageContainer } from '@ant-design/pro-components';
-import { useAccess } from '@umijs/max';
 import {
-  Button,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  message,
-  Popconfirm,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Tag,
-  Upload,
-} from 'antd';
+  type ActionType,
+  ModalForm,
+  PageContainer,
+  type ProColumns,
+  ProFormDigit,
+  ProFormSelect,
+  ProFormSwitch,
+  ProFormText,
+  ProFormTextArea,
+  ProTable,
+} from '@ant-design/pro-components';
+import { useAccess } from '@umijs/max';
+import { Button, message, Popconfirm, Space, Table, Tag, Upload } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 import {
   addDictionaryItem,
@@ -32,6 +28,7 @@ import {
   type Dictionary,
   type DictionaryBundle,
   type DictionaryItem,
+  type DictionaryItemInput,
   deleteDictionary,
   deleteDictionaryItem,
   exportDictionaries,
@@ -41,20 +38,6 @@ import {
   updateDictionaryItem,
 } from '@/services/admin';
 
-type DictionaryFormValues = {
-  code: string;
-  name: string;
-};
-
-type ItemFormValues = {
-  parent_id?: number;
-  label: string;
-  value: string;
-  extend?: string;
-  sort: number;
-  active: boolean;
-};
-
 type ItemTarget = {
   code: string;
   dictionary: Dictionary;
@@ -62,54 +45,52 @@ type ItemTarget = {
   parentID?: number;
 };
 
+type ItemOption = {
+  id: number;
+  label: string;
+  path: string;
+};
+
+const flattenItems = (items: DictionaryItem[], depth = 0): ItemOption[] =>
+  items.flatMap((item) => [
+    {
+      id: item.id,
+      label: `${'  '.repeat(depth)}${item.label}`,
+      path: item.path,
+    },
+    ...flattenItems(item.children, depth + 1),
+  ]);
+
+// 编辑字典项时，父级选项要排除自身及其后代，避免形成环。
+const parentOptions = (target?: ItemTarget): ItemOption[] => {
+  if (!target) {
+    return [];
+  }
+  const editingID = target.item?.id;
+  return flattenItems(target.dictionary.items).filter((item) => {
+    if (!editingID) {
+      return true;
+    }
+    if (item.id === editingID) {
+      return false;
+    }
+    return !item.path
+      .split(',')
+      .filter(Boolean)
+      .map(Number)
+      .includes(editingID);
+  });
+};
+
+const countItems = (items: DictionaryItem[]): number =>
+  items.reduce((total, item) => total + 1 + countItems(item.children), 0);
+
 const Dictionaries: React.FC = () => {
   const access = useAccess();
-  const [dictionaries, setDictionaries] = useState<Dictionary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const actionRef = useRef<ActionType | undefined>(undefined);
   const [dictionaryModalOpen, setDictionaryModalOpen] = useState(false);
   const [editingDictionary, setEditingDictionary] = useState<Dictionary>();
   const [itemTarget, setItemTarget] = useState<ItemTarget>();
-  const [dictionaryForm] = Form.useForm<DictionaryFormValues>();
-  const [itemForm] = Form.useForm<ItemFormValues>();
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      setDictionaries(await listDictionaries());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const openDictionaryModal = (dictionary?: Dictionary) => {
-    setEditingDictionary(dictionary);
-    dictionaryForm.resetFields();
-    if (dictionary) {
-      dictionaryForm.setFieldsValue({
-        code: dictionary.code,
-        name: dictionary.name,
-      });
-    }
-    setDictionaryModalOpen(true);
-  };
-
-  const submitDictionary = async () => {
-    const values = await dictionaryForm.validateFields();
-    if (editingDictionary) {
-      await updateDictionary(editingDictionary.code, { name: values.name });
-      message.success('字典已更新');
-    } else {
-      await createDictionary(values);
-      message.success('字典已创建');
-    }
-    setDictionaryModalOpen(false);
-    setEditingDictionary(undefined);
-    await loadData();
-  };
 
   const openItemModal = (
     dictionary: Dictionary,
@@ -117,44 +98,6 @@ const Dictionaries: React.FC = () => {
     parentID?: number,
   ) => {
     setItemTarget({ code: dictionary.code, dictionary, item, parentID });
-    itemForm.resetFields();
-    itemForm.setFieldsValue(
-      item ?? {
-        parent_id: parentID,
-        label: '',
-        value: '',
-        extend: '',
-        sort: 100,
-        active: true,
-      },
-    );
-  };
-
-  const submitItem = async () => {
-    const target = itemTarget;
-    if (!target) return;
-    const values = await itemForm.validateFields();
-    if (target.item) {
-      await updateDictionaryItem(target.code, target.item.id, values);
-      message.success('字典项已更新');
-    } else {
-      await addDictionaryItem(target.code, values);
-      message.success('字典项已创建');
-    }
-    setItemTarget(undefined);
-    await loadData();
-  };
-
-  const removeDictionary = async (record: Dictionary) => {
-    await deleteDictionary(record.code);
-    message.success('字典已删除');
-    await loadData();
-  };
-
-  const removeDictionaryItem = async (code: string, item: DictionaryItem) => {
-    await deleteDictionaryItem(code, item.id);
-    message.success('字典项已删除');
-    await loadData();
   };
 
   const downloadDictionaries = async () => {
@@ -177,7 +120,7 @@ const Dictionaries: React.FC = () => {
     }
     await importDictionaries(bundle);
     message.success('字典已导入');
-    await loadData();
+    actionRef.current?.reload();
     return Upload.LIST_IGNORE;
   };
 
@@ -203,97 +146,126 @@ const Dictionaries: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_, item) => (
-        <Space>
-          {access.canDictCreate ? (
+      render: (_, item) => {
+        const actions: React.ReactNode[] = [];
+        if (access.canDictCreate) {
+          actions.push(
             <Button
+              key="create-child"
               type="link"
+              size="small"
               icon={<PlusOutlined />}
               onClick={() => openItemModal(dictionary, undefined, item.id)}
             >
               新增子项
-            </Button>
-          ) : null}
-          {access.canDictUpdate ? (
+            </Button>,
+          );
+        }
+        if (access.canDictUpdate) {
+          actions.push(
             <Button
+              key="edit"
               type="link"
+              size="small"
               icon={<EditOutlined />}
               onClick={() => openItemModal(dictionary, item)}
             >
               编辑
-            </Button>
-          ) : null}
-          {access.canDictDelete ? (
+            </Button>,
+          );
+        }
+        if (access.canDictDelete) {
+          actions.push(
             <Popconfirm
+              key="delete"
               title="删除字典项"
               description={`确认删除 ${item.label}？`}
               okText="删除"
               okButtonProps={{ danger: true }}
-              onConfirm={() => void removeDictionaryItem(dictionary.code, item)}
+              onConfirm={async () => {
+                await deleteDictionaryItem(dictionary.code, item.id);
+                message.success('字典项已删除');
+                actionRef.current?.reload();
+              }}
             >
-              <Button danger type="link" icon={<DeleteOutlined />}>
+              <Button type="link" danger size="small" icon={<DeleteOutlined />}>
                 删除
               </Button>
-            </Popconfirm>
-          ) : null}
-        </Space>
-      ),
+            </Popconfirm>,
+          );
+        }
+        return actions.length > 0 ? <Space size="small">{actions}</Space> : '-';
+      },
     },
   ];
 
-  const columns: ColumnsType<Dictionary> = [
+  const columns: ProColumns<Dictionary>[] = [
     { title: '编码', dataIndex: 'code' },
     { title: '名称', dataIndex: 'name' },
     {
       title: '字典项',
       dataIndex: 'items',
-      render: (items: DictionaryItem[]) => `${countItems(items)} 项`,
+      render: (_, record) => `${countItems(record.items)} 项`,
     },
     {
       title: '操作',
-      key: 'actions',
-      render: (_, record) => (
-        <Space>
-          {access.canDictCreate ? (
-            <Button type="link" onClick={() => openItemModal(record)}>
+      valueType: 'option',
+      render: (_, record) => {
+        const actions: React.ReactNode[] = [];
+        if (access.canDictCreate) {
+          actions.push(
+            <a key="create-item" onClick={() => openItemModal(record)}>
               新增字典项
-            </Button>
-          ) : null}
-          {access.canDictUpdate ? (
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => openDictionaryModal(record)}
+            </a>,
+          );
+        }
+        if (access.canDictUpdate) {
+          actions.push(
+            <a
+              key="edit"
+              onClick={() => {
+                setEditingDictionary(record);
+                setDictionaryModalOpen(true);
+              }}
             >
               编辑
-            </Button>
-          ) : null}
-          {access.canDictDelete ? (
+            </a>,
+          );
+        }
+        if (access.canDictDelete) {
+          actions.push(
             <Popconfirm
+              key="delete"
               title="删除字典"
               description={`确认删除 ${record.name}？`}
               okText="删除"
               okButtonProps={{ danger: true }}
-              onConfirm={() => void removeDictionary(record)}
+              onConfirm={async () => {
+                await deleteDictionary(record.code);
+                message.success('字典已删除');
+                actionRef.current?.reload();
+              }}
             >
-              <Button danger type="link" icon={<DeleteOutlined />}>
+              <Button type="link" danger size="small">
                 删除
               </Button>
-            </Popconfirm>
-          ) : null}
-        </Space>
-      ),
+            </Popconfirm>,
+          );
+        }
+        return actions;
+      },
     },
   ];
 
   return (
     <PageContainer title="数据字典">
-      <Table<Dictionary>
+      <ProTable<Dictionary>
+        headerTitle="字典列表"
         rowKey="code"
-        columns={columns}
-        dataSource={dictionaries}
-        loading={loading}
+        actionRef={actionRef}
+        search={false}
         pagination={false}
+        columns={columns}
         expandable={{
           expandedRowRender: (record) => (
             <Table<DictionaryItem>
@@ -305,153 +277,155 @@ const Dictionaries: React.FC = () => {
             />
           ),
         }}
-        title={() => (
-          <Space>
-            {access.canDictCreate ? (
+        request={async () => {
+          const data = await listDictionaries();
+          return { data, success: true, total: data.length };
+        }}
+        toolBarRender={() => {
+          const buttons: React.ReactNode[] = [];
+          if (access.canDictCreate) {
+            buttons.push(
               <Button
+                key="create"
                 type="primary"
                 icon={<PlusOutlined />}
-                onClick={() => openDictionaryModal()}
+                onClick={() => {
+                  setEditingDictionary(undefined);
+                  setDictionaryModalOpen(true);
+                }}
               >
                 新增字典
-              </Button>
-            ) : null}
-            {access.canDictRead ? (
-              <Button
-                icon={<DownloadOutlined />}
-                onClick={() => void downloadDictionaries()}
-              >
-                导出
-              </Button>
-            ) : null}
-            {access.canDictCreate ? (
+              </Button>,
               <Upload
+                key="import"
                 accept="application/json"
                 showUploadList={false}
                 beforeUpload={(file) => importDictionaryFile(file)}
               >
                 <Button icon={<UploadOutlined />}>导入</Button>
-              </Upload>
-            ) : null}
-            <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
-              刷新
-            </Button>
-          </Space>
-        )}
+              </Upload>,
+            );
+          }
+          if (access.canDictRead) {
+            buttons.push(
+              <Button
+                key="export"
+                icon={<DownloadOutlined />}
+                onClick={() => void downloadDictionaries()}
+              >
+                导出
+              </Button>,
+            );
+          }
+          return buttons;
+        }}
       />
-      <Modal
+      <ModalForm<{ code: string; name: string }>
+        key={editingDictionary?.code ?? 'create'}
         title={editingDictionary ? '编辑字典' : '新增字典'}
         open={dictionaryModalOpen}
-        onOk={() => void submitDictionary()}
-        onCancel={() => {
-          setDictionaryModalOpen(false);
-          setEditingDictionary(undefined);
+        onOpenChange={setDictionaryModalOpen}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={editingDictionary ?? { code: '', name: '' }}
+        onFinish={async (values) => {
+          if (editingDictionary) {
+            await updateDictionary(editingDictionary.code, {
+              name: values.name,
+            });
+            message.success('字典已更新');
+          } else {
+            await createDictionary(values);
+            message.success('字典已创建');
+          }
+          actionRef.current?.reload();
+          return true;
         }}
-        destroyOnHidden
       >
-        <Form<DictionaryFormValues> form={dictionaryForm} layout="vertical">
-          <Form.Item
-            label="编码"
-            name="code"
-            rules={[{ required: true, message: '请输入字典编码' }]}
-          >
-            <Input disabled={Boolean(editingDictionary)} maxLength={80} />
-          </Form.Item>
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入字典名称' }]}
-          >
-            <Input maxLength={120} />
-          </Form.Item>
-        </Form>
-      </Modal>
-      <Modal
+        <ProFormText
+          name="code"
+          label="编码"
+          disabled={Boolean(editingDictionary)}
+          fieldProps={{ maxLength: 80 }}
+          rules={[{ required: true, message: '请输入字典编码' }]}
+        />
+        <ProFormText
+          name="name"
+          label="名称"
+          fieldProps={{ maxLength: 120 }}
+          rules={[{ required: true, message: '请输入字典名称' }]}
+        />
+      </ModalForm>
+      <ModalForm<DictionaryItemInput>
+        key={itemTarget?.item?.id ?? `create-${itemTarget?.parentID ?? 'root'}`}
         title={itemTarget?.item ? '编辑字典项' : '新增字典项'}
         open={Boolean(itemTarget)}
-        onOk={() => void submitItem()}
-        onCancel={() => setItemTarget(undefined)}
-        destroyOnHidden
+        onOpenChange={(open) => {
+          if (!open) {
+            setItemTarget(undefined);
+          }
+        }}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={
+          itemTarget?.item ?? {
+            parent_id: itemTarget?.parentID,
+            label: '',
+            value: '',
+            extend: '',
+            sort: 100,
+            active: true,
+          }
+        }
+        onFinish={async (values) => {
+          if (!itemTarget) {
+            return true;
+          }
+          if (itemTarget.item) {
+            await updateDictionaryItem(
+              itemTarget.code,
+              itemTarget.item.id,
+              values,
+            );
+            message.success('字典项已更新');
+          } else {
+            await addDictionaryItem(itemTarget.code, values);
+            message.success('字典项已创建');
+          }
+          actionRef.current?.reload();
+          return true;
+        }}
       >
-        <Form<ItemFormValues> form={itemForm} layout="vertical">
-          <Form.Item label="父级" name="parent_id">
-            <Select
-              allowClear
-              options={parentOptions(itemTarget).map((item) => ({
-                label: item.label,
-                value: item.id,
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            label="标签"
-            name="label"
-            rules={[{ required: true, message: '请输入标签' }]}
-          >
-            <Input maxLength={120} />
-          </Form.Item>
-          <Form.Item label="扩展值" name="extend" rules={[{ max: 4000 }]}>
-            <Input.TextArea maxLength={4000} rows={3} />
-          </Form.Item>
-          <Form.Item
-            label="值"
-            name="value"
-            rules={[{ required: true, message: '请输入值' }]}
-          >
-            <Input maxLength={120} />
-          </Form.Item>
-          <Form.Item label="排序" name="sort">
-            <InputNumber style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="启用" name="active" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+        <ProFormSelect
+          name="parent_id"
+          label="父级"
+          options={parentOptions(itemTarget).map((item) => ({
+            label: item.label,
+            value: item.id,
+          }))}
+          fieldProps={{ allowClear: true, showSearch: true }}
+        />
+        <ProFormText
+          name="label"
+          label="标签"
+          fieldProps={{ maxLength: 120 }}
+          rules={[{ required: true, message: '请输入标签' }]}
+        />
+        <ProFormTextArea
+          name="extend"
+          label="扩展值"
+          fieldProps={{ maxLength: 4000, rows: 3 }}
+          rules={[{ max: 4000 }]}
+        />
+        <ProFormText
+          name="value"
+          label="值"
+          fieldProps={{ maxLength: 120 }}
+          rules={[{ required: true, message: '请输入值' }]}
+        />
+        <ProFormDigit name="sort" label="排序" min={0} />
+        <ProFormSwitch name="active" label="启用" />
+      </ModalForm>
     </PageContainer>
   );
 };
-
-type ItemOption = {
-  id: number;
-  label: string;
-  path: string;
-};
-
-const parentOptions = (target?: ItemTarget): ItemOption[] => {
-  if (!target) {
-    return [];
-  }
-  const editingID = target.item?.id;
-  return flattenItems(target.dictionary.items).filter((item) => {
-    if (!editingID) {
-      return true;
-    }
-    if (item.id === editingID) {
-      return false;
-    }
-    return !item.path
-      .split(',')
-      .filter(Boolean)
-      .map(Number)
-      .includes(editingID);
-  });
-};
-
-const flattenItems = (
-  items: DictionaryItem[],
-  depth = 0,
-): ItemOption[] =>
-  items.flatMap((item) => [
-    {
-      id: item.id,
-      label: `${'  '.repeat(depth)}${item.label}`,
-      path: item.path,
-    },
-    ...flattenItems(item.children, depth + 1),
-  ]);
-
-const countItems = (items: DictionaryItem[]): number =>
-  items.reduce((total, item) => total + 1 + countItems(item.children), 0);
 
 export default Dictionaries;

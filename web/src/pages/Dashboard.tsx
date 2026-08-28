@@ -1,12 +1,17 @@
-import { PageContainer } from '@ant-design/pro-components';
+import {
+  PageContainer,
+  ProCard,
+  ProDescriptions,
+  StatisticCard,
+} from '@ant-design/pro-components';
 import { useModel } from '@umijs/max';
-import { Card, Col, Descriptions, Row, Spin, Tag } from 'antd';
+import { Spin, Tag } from 'antd';
 import React, { useEffect, useState } from 'react';
 
 import {
   type AppInfo,
-  type CapabilityStatus,
   appInfo,
+  type CapabilityStatus,
   capabilities,
 } from '@/services/admin';
 
@@ -46,65 +51,110 @@ const Dashboard: React.FC = () => {
 
   return (
     <PageContainer title="工作台">
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={10}>
-          <Card title="当前管理员">
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="用户名">{user?.username}</Descriptions.Item>
-              <Descriptions.Item label="显示名">{user?.display_name}</Descriptions.Item>
-              <Descriptions.Item label="邮箱">{user?.email || '-'}</Descriptions.Item>
-              <Descriptions.Item label="角色">
-                {user?.roles.map((role) => (
-                  <Tag key={role.id} color="blue">
-                    {role.name}
-                  </Tag>
-                ))}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-        </Col>
-        <Col xs={24} lg={14}>
-          <Card title="系统状态">
-            <Spin spinning={loadingStatus}>
-              <Descriptions column={1} size="small">
-                <Descriptions.Item label="应用">{info?.name ?? '-'}</Descriptions.Item>
-                <Descriptions.Item label="版本">
-                  {info?.version ?? '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="服务时间">
-                  {info ? new Date(info.time).toLocaleString() : '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Capability">
-                  {capabilityRows.map((item) => (
-                    <Tag
-                      key={item.name}
-                      color={item.available ? 'green' : 'red'}
-                    >
-                      {item.name}:{item.state}
+      <ProCard gutter={[16, 16]} wrap>
+        <StatisticCard
+          colSpan={{ xs: 12, md: 6 }}
+          statistic={{
+            title: '角色',
+            value: user?.roles.length ?? 0,
+            description: '当前管理员拥有的角色',
+          }}
+        />
+        <StatisticCard
+          colSpan={{ xs: 12, md: 6 }}
+          statistic={{
+            title: '已授权能力',
+            value: user?.permissions.length ?? 0,
+            description: 'resource:action 权限 token',
+          }}
+        />
+        <StatisticCard
+          colSpan={{ xs: 12, md: 6 }}
+          statistic={{
+            title: '后台菜单',
+            value: user?.menus.length ?? 0,
+            description: '可见的后台菜单',
+          }}
+        />
+        <StatisticCard
+          colSpan={{ xs: 12, md: 6 }}
+          statistic={{
+            title: '可用 Capability',
+            value: capabilityRows.filter((item) => item.available).length,
+            description: `共 ${capabilityRows.length} 项基础设施能力`,
+          }}
+        />
+        <ProCard colSpan={{ xs: 24, lg: 10 }} title="当前管理员">
+          <ProDescriptions
+            column={1}
+            size="small"
+            dataSource={user}
+            columns={[
+              { title: '用户名', dataIndex: 'username' },
+              { title: '显示名', dataIndex: 'display_name' },
+              {
+                title: '邮箱',
+                dataIndex: 'email',
+                render: (_, entity) => entity?.email || '-',
+              },
+              {
+                title: '角色',
+                dataIndex: 'roles',
+                render: (_, entity) =>
+                  entity?.roles.map((role) => (
+                    <Tag key={role.id} color="blue">
+                      {role.name}
                     </Tag>
-                  ))}
-                </Descriptions.Item>
-              </Descriptions>
-            </Spin>
-          </Card>
-        </Col>
-        <Col xs={24} lg={14}>
-          <Card title="已授权能力">
-            {user?.permissions.map((permission) => (
-              <Tag key={permission} color="geekblue">
-                {permission}
-              </Tag>
-            ))}
-          </Card>
-        </Col>
-        <Col span={24}>
-          <Card title="后台菜单">
-            {user?.menus.map((menu) => (
-              <Tag key={menu.id}>{menu.name}</Tag>
-            ))}
-          </Card>
-        </Col>
-      </Row>
+                  )),
+              },
+            ]}
+          />
+        </ProCard>
+        <ProCard colSpan={{ xs: 24, lg: 14 }} title="系统状态">
+          <Spin spinning={loadingStatus}>
+            <ProDescriptions
+              column={1}
+              size="small"
+              dataSource={info}
+              columns={[
+                { title: '应用', dataIndex: 'name' },
+                { title: '版本', dataIndex: 'version' },
+                {
+                  title: '服务时间',
+                  dataIndex: 'time',
+                  render: (_, entity) =>
+                    entity?.time ? new Date(entity.time).toLocaleString() : '-',
+                },
+                {
+                  title: 'Capability',
+                  dataIndex: 'capabilities',
+                  render: () =>
+                    capabilityRows.map((item) => (
+                      <Tag
+                        key={item.name}
+                        color={item.available ? 'green' : 'red'}
+                      >
+                        {item.name}:{item.state}
+                      </Tag>
+                    )),
+                },
+              ]}
+            />
+          </Spin>
+        </ProCard>
+        <ProCard colSpan={{ xs: 24, lg: 14 }} title="已授权能力">
+          {user?.permissions.map((permission) => (
+            <Tag key={permission} color="geekblue">
+              {permission}
+            </Tag>
+          ))}
+        </ProCard>
+        <ProCard colSpan={24} title="后台菜单">
+          {user?.menus.map((menu) => (
+            <Tag key={menu.id}>{menu.name}</Tag>
+          ))}
+        </ProCard>
+      </ProCard>
     </PageContainer>
   );
 };

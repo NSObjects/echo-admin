@@ -15,6 +15,7 @@ import (
 	apitokendomain "github.com/NSObjects/echo-admin/internal/modules/apitoken/domain"
 	apitokenhttp "github.com/NSObjects/echo-admin/internal/modules/apitoken/http"
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
@@ -56,7 +57,7 @@ func newTokenEcho() (*echo.Echo, *tokenStore, *operationRecorder) {
 		usecase.WithSecretSource(func() (string, error) { return "ea_known_secret", nil }),
 	)
 	recorder := &operationRecorder{}
-	handler := apitokenhttp.New(uc, recorder)
+	handler := apitokenhttp.New(uc, oprec.New(recorder))
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
@@ -150,6 +151,6 @@ func (r tokenAdminReader) AdminSnapshot(_ context.Context, adminID int64) (useca
 
 type tokenRolePolicy struct{}
 
-func (tokenRolePolicy) RoleIsSuper(context.Context, int64) (bool, error) {
-	return false, nil
+func (tokenRolePolicy) RoleView(context.Context, int64) (usecase.RoleView, error) {
+	return usecase.RoleView{}, nil
 }

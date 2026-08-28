@@ -17,6 +17,7 @@ import (
 	apitokenusecase "github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
 	auditmysql "github.com/NSObjects/echo-admin/internal/modules/audit/adapters/mysql"
 	audithttp "github.com/NSObjects/echo-admin/internal/modules/audit/http"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	authmysql "github.com/NSObjects/echo-admin/internal/modules/auth/adapters/mysql"
 	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
@@ -29,6 +30,7 @@ import (
 	identityhttp "github.com/NSObjects/echo-admin/internal/modules/identity/http"
 	identityusecase "github.com/NSObjects/echo-admin/internal/modules/identity/usecase"
 	settingsmysql "github.com/NSObjects/echo-admin/internal/modules/settings/adapters/mysql"
+	settingsdomain "github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 	settingshttp "github.com/NSObjects/echo-admin/internal/modules/settings/http"
 	settingsusecase "github.com/NSObjects/echo-admin/internal/modules/settings/usecase"
 	setupmysql "github.com/NSObjects/echo-admin/internal/modules/setup/adapters/mysql"
@@ -114,6 +116,7 @@ func authModule() Module {
 func settingsModule() Module {
 	return NewModule("settings",
 		Provide(newSettingsStore),
+		Provide(newSettingsImportRunner),
 		Provide(newSettingsUsecase),
 		Provide(newSettingsHandler),
 		Route(settingshttp.Register),
@@ -220,7 +223,7 @@ func newAccessHandler(i do.Injector) (*accesshttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return accesshttp.New(uc, audit), nil
+	return accesshttp.New(uc, oprec.New(audit)), nil
 }
 
 func newIdentityStore(i do.Injector) (*identitymysql.Store, error) {
@@ -256,7 +259,7 @@ func newIdentityHandler(i do.Injector) (*identityhttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return identityhttp.New(uc, audit), nil
+	return identityhttp.New(uc, oprec.New(audit)), nil
 }
 
 func newAuditStore(i do.Injector) (*auditmysql.Store, error) {
@@ -336,7 +339,7 @@ func newAPITokenHandler(i do.Injector) (*apitokenhttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return apitokenhttp.New(uc, audit), nil
+	return apitokenhttp.New(uc, oprec.New(audit)), nil
 }
 
 func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
@@ -466,9 +469,41 @@ func newSettingsUsecase(i do.Injector) (*settingsusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settingsusecase.New(store, settingsusecase.WithVersionCatalog(settingsVersionCatalog{
-		access: accessUC,
-	})), nil
+	importRunner, err := do.Invoke[settingsusecase.ImportRunner](i)
+	if err != nil {
+		return nil, err
+	}
+	return settingsusecase.New(store,
+		settingsusecase.WithVersionCatalog(settingsVersionCatalog{
+			access: accessUC,
+		}),
+		settingsusecase.WithImportRunner(importRunner),
+	), nil
+}
+
+func newSettingsImportRunner(i do.Injector) (settingsusecase.ImportRunner, error) {
+	_, db, err := startupMySQL(i)
+	if err != nil {
+		return nil, err
+	}
+	settingsStore, err := do.Invoke[*settingsmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	accessStore, err := do.Invoke[*accessmysql.Store](i)
+	if err != nil {
+		return nil, err
+	}
+	accessUC, err := do.Invoke[*accessusecase.Usecase](i)
+	if err != nil {
+		return nil, err
+	}
+	return settingsImportRunner{
+		db:       db,
+		settings: settingsStore,
+		access:   accessStore,
+		accessUC: accessUC,
+	}, nil
 }
 
 func newSettingsHandler(i do.Injector) (*settingshttp.Handler, error) {
@@ -480,7 +515,7 @@ func newSettingsHandler(i do.Injector) (*settingshttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settingshttp.New(uc, audit), nil
+	return settingshttp.New(uc, oprec.New(audit)), nil
 }
 
 func newFileStore(i do.Injector) (*filemysql.Store, error) {
@@ -512,7 +547,7 @@ func newFileHandler(i do.Injector) (*filehttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return filehttp.New(uc, audit, cfg.Admin.UploadDir), nil
+	return filehttp.New(uc, oprec.New(audit), cfg.Admin.UploadDir), nil
 }
 
 func startupMySQL(i do.Injector) (context.Context, *gorm.DB, error) {
@@ -659,10 +694,49 @@ func (c settingsVersionCatalog) ExportVersionMenus(ctx context.Context, ids []in
 	return versionMenuNodes(nodes), nil
 }
 
-// ImportVersionMenus implements settingsusecase.VersionCatalog for access menus.
-// The bridge only maps types; import rules live in the access usecase.
-func (c settingsVersionCatalog) ImportVersionMenus(ctx context.Context, menus []settingsusecase.VersionMenu) error {
-	return c.access.ImportMenuTree(ctx, menuTreeInputs(menus))
+// settingsImportRunner runs settings imports in one database transaction. Menu
+// writes go through a transaction-scoped copy of the access usecase so import
+// rules stay in the owning usecase.
+type settingsImportRunner struct {
+	db       *gorm.DB
+	settings *settingsmysql.Store
+	access   *accessmysql.Store
+	accessUC *accessusecase.Usecase
+}
+
+// RunImport implements settingsusecase.ImportRunner.
+func (r settingsImportRunner) RunImport(ctx context.Context, fn func(context.Context, settingsusecase.ImportTransaction) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		transaction := settingsImportTransaction{
+			access:   r.accessUC.WithStore(r.access.WithDB(tx)),
+			settings: r.settings.WithDB(tx),
+		}
+		return fn(ctx, transaction)
+	})
+}
+
+// settingsImportTransaction implements settingsusecase.ImportTransaction. The
+// bridge only binds transaction-scoped stores; import rules live in the
+// owning usecases.
+type settingsImportTransaction struct {
+	access   *accessusecase.Usecase
+	settings *settingsmysql.Store
+}
+
+// ImportMenus implements settingsusecase.ImportTransaction for access menus.
+func (t settingsImportTransaction) ImportMenus(ctx context.Context, menus []settingsusecase.VersionMenu) error {
+	return t.access.ImportMenuTree(ctx, menuTreeInputs(menus))
+}
+
+// ReplaceDictionary implements settingsusecase.ImportTransaction for dictionaries.
+func (t settingsImportTransaction) ReplaceDictionary(ctx context.Context, dictionary settingsdomain.Dictionary) error {
+	_, err := t.settings.ReplaceDictionary(ctx, dictionary)
+	return err
+}
+
+// CreateVersion implements settingsusecase.ImportTransaction for release records.
+func (t settingsImportTransaction) CreateVersion(ctx context.Context, version settingsdomain.SystemVersion) (settingsdomain.SystemVersion, error) {
+	return t.settings.CreateVersion(ctx, version)
 }
 
 func versionMenuNodes(nodes []accessusecase.MenuNode) []settingsusecase.VersionMenu {
@@ -752,12 +826,14 @@ func versionMenuButtons(buttons []settingsusecase.VersionButton) []accessusecase
 	return out
 }
 
-func (p apiTokenRolePolicy) RoleIsSuper(ctx context.Context, roleID int64) (bool, error) {
+// RoleView implements apitokenusecase.RolePolicy for access roles. The bridge
+// only projects role state; policy decisions live in the apitoken usecase.
+func (p apiTokenRolePolicy) RoleView(ctx context.Context, roleID int64) (apitokenusecase.RoleView, error) {
 	role, err := p.store.FindRoleByID(ctx, roleID)
 	if err != nil {
-		return false, err
+		return apitokenusecase.RoleView{}, err
 	}
-	return role.IsSuperAdmin(), nil
+	return apitokenusecase.RoleView{IsSuper: role.IsSuperAdmin()}, nil
 }
 
 func (r accessAdminRoleReader) AdminRoleState(ctx context.Context, adminID int64) (accessusecase.AdminRoleState, error) {

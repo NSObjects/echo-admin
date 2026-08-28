@@ -192,11 +192,11 @@ func (u *Usecase) issueTarget(ctx context.Context, input TokenInput) (issueTarge
 	if target.adminID <= 0 || target.roleID <= 0 {
 		return issueTarget{}, apperr.NewBadRequest("invalid api token identity")
 	}
-	super, err := u.roles.RoleIsSuper(ctx, currentRoleID)
+	view, err := u.roles.RoleView(ctx, currentRoleID)
 	if err != nil {
 		return issueTarget{}, err
 	}
-	if !super && (target.adminID != currentAdminID || target.roleID != currentRoleID) {
+	if !view.IsSuper && (target.adminID != currentAdminID || target.roleID != currentRoleID) {
 		return issueTarget{}, apperr.NewPermissionDenied("api_token", "issue")
 	}
 	admin, err := u.admins.AdminSnapshot(ctx, target.adminID)
@@ -217,11 +217,11 @@ func (u *Usecase) scopeListFilter(ctx context.Context, filter *ListFilter) error
 	if err != nil {
 		return err
 	}
-	super, err := u.roles.RoleIsSuper(ctx, currentRoleID)
+	view, err := u.roles.RoleView(ctx, currentRoleID)
 	if err != nil {
 		return err
 	}
-	if !super {
+	if !view.IsSuper {
 		filter.AdminID = currentAdminID
 		return nil
 	}
@@ -236,11 +236,11 @@ func (u *Usecase) ensureTokenVisible(ctx context.Context, token domain.APIToken)
 	if err != nil {
 		return err
 	}
-	super, err := u.roles.RoleIsSuper(ctx, currentRoleID)
+	view, err := u.roles.RoleView(ctx, currentRoleID)
 	if err != nil {
 		return err
 	}
-	if super || token.AdminID == currentAdminID {
+	if view.IsSuper || token.AdminID == currentAdminID {
 		return nil
 	}
 	return apperr.NewPermissionDenied("api_token", strconv.FormatInt(token.ID, 10))

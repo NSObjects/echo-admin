@@ -2,7 +2,6 @@
 package settingshttp
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,30 +11,24 @@ import (
 
 	"github.com/labstack/echo/v5"
 
-	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	"github.com/NSObjects/echo-admin/internal/modules/settings/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
-	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
 const defaultPageSize = 20
 
-// OperationRecorder records setting mutations for audit.
-type OperationRecorder interface {
-	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
-}
-
 // Handler adapts setting and dictionary HTTP requests to the settings usecase.
 type Handler struct {
-	usecase   *usecase.Usecase
-	operation OperationRecorder
+	usecase *usecase.Usecase
+	audit   *oprec.Recorder
 }
 
 // New creates a settings HTTP handler.
-func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, operation: operation}
+func New(uc *usecase.Usecase, audit *oprec.Recorder) *Handler {
+	return &Handler{usecase: uc, audit: audit}
 }
 
 // Register mounts setting and dictionary routes on group.
@@ -98,10 +91,8 @@ func (h *Handler) UpsertConfig(c *echo.Context) error {
 		Value:  req.Value,
 		Public: req.Public,
 	})
+	err = h.audit.Record(c, "upsert", "config", config.Key, "updated config", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "upsert", "config", config.Key, "updated config"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, config)
@@ -113,10 +104,9 @@ func (h *Handler) DeleteConfig(c *echo.Context) error {
 		return err
 	}
 	key := c.Param("key")
-	if err := h.usecase.DeleteConfig(c.Request().Context(), key); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "config", key, "deleted config"); err != nil {
+	err := h.usecase.DeleteConfig(c.Request().Context(), key)
+	err = h.audit.Record(c, "delete", "config", key, "deleted config", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{Code: key})
@@ -176,10 +166,8 @@ func (h *Handler) CreateParam(c *echo.Context) error {
 		return err
 	}
 	param, err := h.usecase.CreateParam(c.Request().Context(), paramInput(req))
+	err = h.audit.Record(c, "create", "system_param", strconv.FormatInt(param.ID, 10), "created system param", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "create", "system_param", strconv.FormatInt(param.ID, 10), "created system param"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, param)
@@ -199,10 +187,8 @@ func (h *Handler) UpdateParam(c *echo.Context) error {
 		return bindErr
 	}
 	param, err := h.usecase.UpdateParam(c.Request().Context(), updateParamInput(id, req))
+	err = h.audit.Record(c, "update", "system_param", strconv.FormatInt(param.ID, 10), "updated system param", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "update", "system_param", strconv.FormatInt(param.ID, 10), "updated system param"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, param)
@@ -217,10 +203,9 @@ func (h *Handler) DeleteParam(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteParam(c.Request().Context(), id); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "system_param", strconv.FormatInt(id, 10), "deleted system param"); err != nil {
+	err = h.usecase.DeleteParam(c.Request().Context(), id)
+	err = h.audit.Record(c, "delete", "system_param", strconv.FormatInt(id, 10), "deleted system param", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedIDResponse{ID: id})
@@ -235,10 +220,9 @@ func (h *Handler) BatchDeleteParams(c *echo.Context) error {
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteParams(c.Request().Context(), req.IDs); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "system_param", "batch", "deleted system params"); err != nil {
+	err := h.usecase.DeleteParams(c.Request().Context(), req.IDs)
+	err = h.audit.Record(c, "delete", "system_param", "batch", "deleted system params", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedIDsResponse(req))
@@ -279,10 +263,8 @@ func (h *Handler) ImportDictionaries(c *echo.Context) error {
 		return err
 	}
 	dictionaries, err := h.usecase.ImportDictionaries(c.Request().Context(), bundle)
+	err = h.audit.Record(c, "import", "dictionary", "bundle", "imported dictionaries", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "import", "dictionary", "bundle", "imported dictionaries"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, dictionaries)
@@ -301,10 +283,8 @@ func (h *Handler) CreateDictionary(c *echo.Context) error {
 		Code: req.Code,
 		Name: req.Name,
 	})
+	err = h.audit.Record(c, "create", "dictionary", dictionary.Code, "created dictionary", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "create", "dictionary", dictionary.Code, "created dictionary"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, dictionary)
@@ -323,10 +303,8 @@ func (h *Handler) UpdateDictionary(c *echo.Context) error {
 		Code: c.Param("code"),
 		Name: req.Name,
 	})
+	err = h.audit.Record(c, "update", "dictionary", dictionary.Code, "updated dictionary", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "update", "dictionary", dictionary.Code, "updated dictionary"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, dictionary)
@@ -338,10 +316,9 @@ func (h *Handler) DeleteDictionary(c *echo.Context) error {
 		return err
 	}
 	code := c.Param("code")
-	if err := h.usecase.DeleteDictionary(c.Request().Context(), code); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "dictionary", code, "deleted dictionary"); err != nil {
+	err := h.usecase.DeleteDictionary(c.Request().Context(), code)
+	err = h.audit.Record(c, "delete", "dictionary", code, "deleted dictionary", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{Code: code})
@@ -364,10 +341,8 @@ func (h *Handler) AddDictionaryItem(c *echo.Context) error {
 		Sort:     req.Sort,
 		Active:   req.Active,
 	})
+	err = h.audit.Record(c, "create", "dictionary_item", c.Param("code"), "created dictionary item", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "create", "dictionary_item", c.Param("code"), "created dictionary item"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, dictionary)
@@ -395,10 +370,8 @@ func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
 		Sort:     req.Sort,
 		Active:   req.Active,
 	})
+	err = h.audit.Record(c, "update", "dictionary_item", strconv.FormatInt(itemID, 10), "updated dictionary item", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "update", "dictionary_item", strconv.FormatInt(itemID, 10), "updated dictionary item"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, dictionary)
@@ -414,10 +387,8 @@ func (h *Handler) DeleteDictionaryItem(c *echo.Context) error {
 		return err
 	}
 	dictionary, err := h.usecase.DeleteDictionaryItem(c.Request().Context(), c.Param("code"), itemID)
+	err = h.audit.Record(c, "delete", "dictionary_item", strconv.FormatInt(itemID, 10), "deleted dictionary item", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "dictionary_item", strconv.FormatInt(itemID, 10), "deleted dictionary item"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, dictionary)
@@ -484,10 +455,8 @@ func (h *Handler) CreateVersion(c *echo.Context) error {
 		Description: req.Description,
 		PublishedAt: req.PublishedAt,
 	})
+	err = h.audit.Record(c, "create", "system_version", version.Version, "created system version", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "create", "system_version", version.Version, "created system version"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, version)
@@ -509,10 +478,8 @@ func (h *Handler) ExportVersion(c *echo.Context) error {
 		MenuIDs:       req.MenuIDs,
 		DictionaryIDs: req.DictionaryIDs,
 	})
+	err = h.audit.Record(c, "export", "system_version", version.Version, "exported system version", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "export", "system_version", version.Version, "exported system version"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, version)
@@ -528,10 +495,8 @@ func (h *Handler) ImportVersion(c *echo.Context) error {
 		return err
 	}
 	version, err := h.usecase.ImportVersion(c.Request().Context(), bundle)
+	err = h.audit.Record(c, "import", "system_version", version.Version, "imported system version", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "import", "system_version", version.Version, "imported system version"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, version)
@@ -576,10 +541,8 @@ func (h *Handler) UpdateVersion(c *echo.Context) error {
 		Description: req.Description,
 		PublishedAt: req.PublishedAt,
 	})
+	err = h.audit.Record(c, "update", "system_version", strconv.FormatInt(version.ID, 10), "updated system version", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "update", "system_version", strconv.FormatInt(version.ID, 10), "updated system version"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, version)
@@ -594,10 +557,9 @@ func (h *Handler) DeleteVersion(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteVersion(c.Request().Context(), id); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "system_version", strconv.FormatInt(id, 10), "deleted system version"); err != nil {
+	err = h.usecase.DeleteVersion(c.Request().Context(), id)
+	err = h.audit.Record(c, "delete", "system_version", strconv.FormatInt(id, 10), "deleted system version", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedIDResponse{ID: id})
@@ -612,37 +574,16 @@ func (h *Handler) BatchDeleteVersions(c *echo.Context) error {
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteVersions(c.Request().Context(), req.IDs); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "system_version", "batch", "deleted system versions"); err != nil {
+	err := h.usecase.DeleteVersions(c.Request().Context(), req.IDs)
+	err = h.audit.Record(c, "delete", "system_version", "batch", "deleted system versions", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedIDsResponse(req))
 }
 
-func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
-	actorID, err := strconv.ParseInt(requestctx.GetUserID(c.Request().Context()), 10, 64)
-	if err != nil {
-		return apperr.NewUnauthorized()
-	}
-	_, err = h.operation.RecordOperation(c.Request().Context(), auditusecase.OperationInput{
-		ActorID:    actorID,
-		Action:     action,
-		Resource:   resource,
-		ResourceID: resourceID,
-		Method:     c.Request().Method,
-		Path:       c.Path(),
-		IP:         c.RealIP(),
-		UserAgent:  c.Request().UserAgent(),
-		Success:    true,
-		Message:    message,
-	})
-	return err
-}
-
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.audit == nil {
 		return apperr.New(apperr.ErrInternalServer, "settings handler is not configured")
 	}
 	return nil

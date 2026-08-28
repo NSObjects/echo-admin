@@ -1,31 +1,26 @@
-import { EyeOutlined, ReloadOutlined } from '@ant-design/icons';
-import { PageContainer } from '@ant-design/pro-components';
-import { useAccess } from '@umijs/max';
 import {
-  Button,
-  Descriptions,
-  Form,
-  Modal,
-  Select,
-  Space,
-  Table,
-  Tag,
-  message,
-} from 'antd';
-import type { DescriptionsProps } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import React, { useEffect, useState } from 'react';
+  type ActionType,
+  ModalForm,
+  PageContainer,
+  type ProColumns,
+  ProDescriptions,
+  ProFormSelect,
+  ProTable,
+} from '@ant-design/pro-components';
+import { useAccess } from '@umijs/max';
+import { Drawer, message, Tag } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   type APIResource,
-  type ListParams,
-  type PageMeta,
-  type Role,
   listAPIRoles,
   listAPIs,
   listRoles,
+  pageParams,
+  type Role,
   readAPI,
   setAPIRoles,
+  toTableResult,
 } from '@/services/admin';
 
 const methodColor: Record<string, string> = {
@@ -36,123 +31,81 @@ const methodColor: Record<string, string> = {
   DELETE: 'red',
 };
 
+const formatDate = (value?: string) =>
+  value ? new Date(value).toLocaleString() : '-';
+
+type RoleGrantTarget = {
+  api: APIResource;
+  role_ids: number[];
+};
+
 const APIs: React.FC = () => {
   const access = useAccess();
-  const [apis, setAPIs] = useState<APIResource[]>([]);
+  const actionRef = useRef<ActionType | undefined>(undefined);
+  const canGrant = access.canApiGrant && access.canRoleRead;
   const [roles, setRoles] = useState<Role[]>([]);
-  const [page, setPage] = useState<PageMeta>();
-  const [loading, setLoading] = useState(false);
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
-  const [roleLoading, setRoleLoading] = useState(false);
-  const [roleTarget, setRoleTarget] = useState<APIResource>();
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailItems, setDetailItems] = useState<DescriptionsProps['items']>(
-    [],
-  );
-  const [roleForm] = Form.useForm<{ role_ids: number[] }>();
-
-  const loadData = async (params: ListParams = {}) => {
-    setLoading(true);
-    try {
-      const [apiResponse, roleResponse] = await Promise.all([
-        listAPIs(params),
-        access.canApiGrant && access.canRoleRead
-          ? listRoles({ page_size: 100 })
-          : Promise.resolve({ data: [] }),
-      ]);
-      setAPIs(apiResponse.data);
-      setPage(apiResponse.page);
-      setRoles(roleResponse.data);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [detail, setDetail] = useState<APIResource>();
+  const [roleTarget, setRoleTarget] = useState<RoleGrantTarget>();
 
   useEffect(() => {
-    void loadData();
-  }, []);
-
-  const openRoleModal = async (record: APIResource) => {
-    setRoleTarget(record);
-    setRoleModalOpen(true);
-    setRoleLoading(true);
-    try {
-      const roleIDs = await listAPIRoles(record.id);
-      roleForm.setFieldsValue({ role_ids: roleIDs });
-    } finally {
-      setRoleLoading(false);
-    }
-  };
-
-  const openDetail = async (record: APIResource) => {
-    const detail = await readAPI(record.id);
-    setDetailItems([
-      { key: 'method', label: '方法', children: detail.method },
-      { key: 'path', label: '注册路由模式', children: detail.path },
-      { key: 'description', label: '描述', children: detail.description },
-      { key: 'group', label: '分组', children: detail.group },
-      { key: 'permission', label: '权限', children: detail.permission || '-' },
-      {
-        key: 'created_at',
-        label: '创建时间',
-        children: new Date(detail.created_at).toLocaleString(),
-      },
-      {
-        key: 'updated_at',
-        label: '更新时间',
-        children: new Date(detail.updated_at).toLocaleString(),
-      },
-    ]);
-    setDetailOpen(true);
-  };
-
-  const submitRoles = async () => {
-    if (!roleTarget) {
+    if (!canGrant) {
       return;
     }
-    const values = await roleForm.validateFields();
-    await setAPIRoles(roleTarget.id, values.role_ids ?? []);
-    message.success('API授权角色已更新');
-    setRoleModalOpen(false);
-  };
+    void listRoles({ page_size: 100 }).then((response) => {
+      setRoles(response.data);
+    });
+  }, [canGrant]);
 
-  const columns: ColumnsType<APIResource> = [
+  const columns: ProColumns<APIResource>[] = [
     {
       title: '方法',
       dataIndex: 'method',
       width: 96,
-      render: (method: string) => (
-        <Tag color={methodColor[method] ?? 'default'}>{method}</Tag>
+      render: (_, record) => (
+        <Tag color={methodColor[record.method] ?? 'default'}>
+          {record.method}
+        </Tag>
       ),
     },
     { title: '注册路由模式', dataIndex: 'path' },
-    { title: '描述', dataIndex: 'description' },
+    { title: '描述', dataIndex: 'description', ellipsis: true },
     { title: '分组', dataIndex: 'group', width: 120 },
     {
       title: '权限',
       dataIndex: 'permission',
-      render: (permission?: string) => permission || '-',
+      render: (_, record) => record.permission || '-',
     },
     {
       title: '操作',
-      key: 'actions',
-      width: 180,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => void openDetail(record)}
+      valueType: 'option',
+      width: 160,
+      render: (_, record) => {
+        const actions: React.ReactNode[] = [
+          <a
+            key="detail"
+            onClick={() => {
+              void readAPI(record.id).then(setDetail);
+            }}
           >
             详情
-          </Button>
-          {access.canApiGrant && access.canRoleRead ? (
-            <Button type="link" onClick={() => void openRoleModal(record)}>
+          </a>,
+        ];
+        if (canGrant) {
+          actions.push(
+            <a
+              key="grant"
+              onClick={() => {
+                void listAPIRoles(record.id).then((roleIDs) => {
+                  setRoleTarget({ api: record, role_ids: roleIDs });
+                });
+              }}
+            >
               授权角色
-            </Button>
-          ) : null}
-        </Space>
-      ),
+            </a>,
+          );
+        }
+        return actions;
+      },
     },
   ];
 
@@ -161,62 +114,93 @@ const APIs: React.FC = () => {
       title="受管 API 路由目录"
       subTitle="路由身份和元数据由部署代码维护，后台只提供查看与角色授权。"
     >
-      <Table<APIResource>
+      <ProTable<APIResource>
+        headerTitle="路由列表"
         rowKey="id"
+        actionRef={actionRef}
+        search={false}
         columns={columns}
-        dataSource={apis}
-        loading={loading}
-        pagination={{
-          current: page?.page,
-          pageSize: page?.page_size,
-          total: page?.total,
-          showSizeChanger: true,
-        }}
-        onChange={(pagination) =>
-          void loadData({
-            page: pagination.current,
-            page_size: pagination.pageSize,
-          })
+        request={async (params) =>
+          toTableResult(await listAPIs(pageParams(params)))
         }
-        title={() => (
-          <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
-            刷新
-          </Button>
-        )}
       />
-      <Modal
+      <Drawer
         title="API详情"
-        open={detailOpen}
-        footer={null}
-        onCancel={() => setDetailOpen(false)}
-        destroyOnHidden
+        width={520}
+        open={Boolean(detail)}
+        onClose={() => setDetail(undefined)}
       >
-        <Descriptions column={1} size="small" items={detailItems} />
-      </Modal>
-      <Modal
+        {detail && (
+          <ProDescriptions<APIResource>
+            column={1}
+            size="small"
+            dataSource={detail}
+            columns={[
+              {
+                title: '方法',
+                dataIndex: 'method',
+                render: (_, entity) => (
+                  <Tag color={methodColor[entity.method] ?? 'default'}>
+                    {entity.method}
+                  </Tag>
+                ),
+              },
+              { title: '注册路由模式', dataIndex: 'path' },
+              { title: '描述', dataIndex: 'description' },
+              { title: '分组', dataIndex: 'group' },
+              {
+                title: '权限',
+                dataIndex: 'permission',
+                render: (_, entity) => entity.permission || '-',
+              },
+              {
+                title: '创建时间',
+                dataIndex: 'created_at',
+                render: (_, entity) => formatDate(entity.created_at),
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'updated_at',
+                render: (_, entity) => formatDate(entity.updated_at),
+              },
+            ]}
+          />
+        )}
+      </Drawer>
+      <ModalForm<{ role_ids: number[] }>
+        key={roleTarget?.api.id ?? 'idle'}
         title={
           roleTarget
-            ? `授权角色 - ${roleTarget.method} ${roleTarget.path}`
+            ? `授权角色 - ${roleTarget.api.method} ${roleTarget.api.path}`
             : '授权角色'
         }
-        open={roleModalOpen}
-        onOk={() => void submitRoles()}
-        onCancel={() => setRoleModalOpen(false)}
-        confirmLoading={roleLoading}
-        destroyOnHidden
+        open={Boolean(roleTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRoleTarget(undefined);
+          }
+        }}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={{ role_ids: roleTarget?.role_ids ?? [] }}
+        onFinish={async (values) => {
+          if (!roleTarget) {
+            return true;
+          }
+          await setAPIRoles(roleTarget.api.id, values.role_ids ?? []);
+          message.success('API授权角色已更新');
+          return true;
+        }}
       >
-        <Form<{ role_ids: number[] }> form={roleForm} layout="vertical">
-          <Form.Item label="角色" name="role_ids">
-            <Select
-              mode="multiple"
-              options={roles.map((role) => ({
-                value: role.id,
-                label: role.name,
-              }))}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+        <ProFormSelect
+          name="role_ids"
+          label="角色"
+          mode="multiple"
+          options={roles.map((role) => ({
+            value: role.id,
+            label: role.name,
+          }))}
+        />
+      </ModalForm>
     </PageContainer>
   );
 };

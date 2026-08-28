@@ -71,15 +71,15 @@ func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, err
 	admin, err := u.admins.FindByUsername(ctx, username)
 	if err != nil {
 		record := loginRecordFromInput(0, username, input, false, "invalid credentials")
-		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrUnauthorized, "invalid username or password"))
+		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrUnauthorized, "用户名或密码错误"))
 	}
 	if !admin.Active {
 		record := loginRecordFromInput(admin.ID, username, input, false, "account disabled")
-		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrAccountDisabled, "account disabled"))
+		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrAccountDisabled, "账号已停用，请联系管理员"))
 	}
 	if compareErr := bcrypt.CompareHashAndPassword(admin.PasswordHash, []byte(input.Password)); compareErr != nil {
 		record := loginRecordFromInput(admin.ID, username, input, false, "invalid credentials")
-		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrUnauthorized, "invalid username or password"))
+		return u.rejectLogin(ctx, attemptKey, now, record, apperr.New(apperr.ErrUnauthorized, "用户名或密码错误"))
 	}
 
 	if resetErr := u.loginLimiter.ResetLoginAttempts(ctx, attemptKey); resetErr != nil {
@@ -138,7 +138,7 @@ func (u *Usecase) UpdateProfile(ctx context.Context, input UpdateProfileInput) (
 		return CurrentUser{}, err
 	}
 	if !admin.Active {
-		return CurrentUser{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+		return CurrentUser{}, apperr.New(apperr.ErrAccountDisabled, "账号已停用，请联系管理员")
 	}
 	updated, err := admin.UpdateProfile(input.DisplayName, input.Email, admin.RoleIDs, admin.ActiveRoleID, admin.Active)
 	if err != nil {
@@ -169,7 +169,7 @@ func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSw
 		return RoleSwitchOutput{}, err
 	}
 	if !admin.Active {
-		return RoleSwitchOutput{}, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+		return RoleSwitchOutput{}, apperr.New(apperr.ErrAccountDisabled, "账号已停用，请联系管理员")
 	}
 	switched, err := admin.SwitchActiveRole(input.RoleID)
 	if err != nil {
@@ -204,10 +204,10 @@ func (u *Usecase) ChangePassword(ctx context.Context, input ChangePasswordInput)
 		return err
 	}
 	if !admin.Active {
-		return apperr.New(apperr.ErrAccountDisabled, "account disabled")
+		return apperr.New(apperr.ErrAccountDisabled, "账号已停用，请联系管理员")
 	}
 	if compareErr := bcrypt.CompareHashAndPassword(admin.PasswordHash, []byte(input.CurrentPassword)); compareErr != nil {
-		return apperr.New(apperr.ErrUnauthorized, "invalid current password")
+		return apperr.New(apperr.ErrUnauthorized, "当前密码不正确")
 	}
 	hash, err := hashPassword(input.NewPassword)
 	if err != nil {
@@ -363,7 +363,7 @@ func (u *Usecase) currentAdminAndRole(ctx context.Context) (identitydomain.Admin
 		return identitydomain.Admin{}, 0, err
 	}
 	if !admin.Active {
-		return identitydomain.Admin{}, 0, apperr.New(apperr.ErrAccountDisabled, "account disabled")
+		return identitydomain.Admin{}, 0, apperr.New(apperr.ErrAccountDisabled, "账号已停用，请联系管理员")
 	}
 	activeRoleID := admin.ActiveRoleID
 	if roleID, parseErr := currentRoleID(ctx); parseErr == nil && roleID > 0 {

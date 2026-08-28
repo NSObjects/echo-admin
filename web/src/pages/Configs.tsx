@@ -1,20 +1,17 @@
-import { DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import { PageContainer } from '@ant-design/pro-components';
-import { useAccess } from '@umijs/max';
+import { PlusOutlined } from '@ant-design/icons';
 import {
-  Button,
-  Form,
-  Input,
-  Modal,
-  message,
-  Popconfirm,
-  Space,
-  Switch,
-  Table,
-  Tag,
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import React, { useEffect, useState } from 'react';
+  type ActionType,
+  ModalForm,
+  PageContainer,
+  type ProColumns,
+  ProFormSwitch,
+  ProFormText,
+  ProFormTextArea,
+  ProTable,
+} from '@ant-design/pro-components';
+import { useAccess } from '@umijs/max';
+import { Button, message, Popconfirm, Tag } from 'antd';
+import React, { useRef, useState } from 'react';
 
 import {
   deleteConfig,
@@ -32,79 +29,42 @@ type ConfigFormValues = {
 
 const Configs: React.FC = () => {
   const access = useAccess();
-  const [configs, setConfigs] = useState<SystemConfig[]>([]);
-  const [loading, setLoading] = useState(false);
+  const actionRef = useRef<ActionType | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SystemConfig>();
-  const [form] = Form.useForm<ConfigFormValues>();
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      setConfigs(await listConfigs());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const openCreate = () => {
-    setEditing(undefined);
-    form.resetFields();
-    form.setFieldsValue({ public: false, value: '' });
-    setModalOpen(true);
-  };
-
-  const openEdit = (record: SystemConfig) => {
-    setEditing(record);
-    form.setFieldsValue(record);
-    setModalOpen(true);
-  };
-
-  const submit = async () => {
-    const values = await form.validateFields();
-    await upsertConfig(values.key, {
-      name: values.name,
-      value: values.value,
-      public: values.public,
-    });
-    message.success(editing ? '配置已更新' : '配置已创建');
-    setModalOpen(false);
-    await loadData();
-  };
-
-  const removeConfig = async (record: SystemConfig) => {
-    await deleteConfig(record.key);
-    message.success('配置已删除');
-    await loadData();
-  };
-
-  const columns: ColumnsType<SystemConfig> = [
+  const columns: ProColumns<SystemConfig>[] = [
     { title: '键', dataIndex: 'key' },
     { title: '名称', dataIndex: 'name' },
     { title: '值', dataIndex: 'value', ellipsis: true },
     {
       title: '公开',
       dataIndex: 'public',
-      render: (value: boolean) => (
-        <Tag color={value ? 'green' : 'default'}>{value ? '是' : '否'}</Tag>
+      render: (_, record) => (
+        <Tag color={record.public ? 'green' : 'default'}>
+          {record.public ? '是' : '否'}
+        </Tag>
       ),
     },
     {
       title: '操作',
-      key: 'actions',
+      valueType: 'option',
       render: (_, record) => {
         const actions: React.ReactNode[] = [];
         if (access.canConfigUpdate) {
           actions.push(
-            <Button key="edit" type="link" onClick={() => openEdit(record)}>
+            <a
+              key="edit"
+              onClick={() => {
+                setEditing(record);
+                setModalOpen(true);
+              }}
+            >
               编辑
-            </Button>,
+            </a>,
           );
         }
+        // site_name 是站点基础配置，禁止删除。
         if (access.canConfigDelete && record.key !== 'site_name') {
           actions.push(
             <Popconfirm
@@ -113,74 +73,92 @@ const Configs: React.FC = () => {
               description={`确认删除 ${record.key}？`}
               okText="删除"
               okButtonProps={{ danger: true }}
-              onConfirm={() => void removeConfig(record)}
+              onConfirm={async () => {
+                await deleteConfig(record.key);
+                message.success('配置已删除');
+                actionRef.current?.reload();
+              }}
             >
-              <Button danger type="link" icon={<DeleteOutlined />}>
+              <Button type="link" danger size="small">
                 删除
               </Button>
             </Popconfirm>,
           );
         }
-        return actions.length > 0 ? <Space>{actions}</Space> : '-';
+        return actions;
       },
     },
   ];
 
   return (
     <PageContainer title="系统配置">
-      <Table<SystemConfig>
+      <ProTable<SystemConfig>
+        headerTitle="配置列表"
         rowKey="key"
-        columns={columns}
-        dataSource={configs}
-        loading={loading}
+        actionRef={actionRef}
+        search={false}
         pagination={false}
-        title={() => (
-          <Space>
-            {access.canConfigUpdate ? (
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={openCreate}
-              >
-                新增配置
-              </Button>
-            ) : null}
-            <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
-              刷新
-            </Button>
-          </Space>
-        )}
+        columns={columns}
+        request={async () => {
+          const data = await listConfigs();
+          return { data, success: true, total: data.length };
+        }}
+        toolBarRender={() =>
+          access.canConfigUpdate
+            ? [
+                <Button
+                  key="create"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    setEditing(undefined);
+                    setModalOpen(true);
+                  }}
+                >
+                  新增配置
+                </Button>,
+              ]
+            : []
+        }
       />
-      <Modal
+      <ModalForm<ConfigFormValues>
+        key={editing?.key ?? 'create'}
         title={editing ? '编辑配置' : '新增配置'}
         open={modalOpen}
-        onOk={() => void submit()}
-        onCancel={() => setModalOpen(false)}
-        destroyOnHidden
+        onOpenChange={setModalOpen}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={editing ?? { public: false, value: '' }}
+        onFinish={async (values) => {
+          await upsertConfig(values.key, {
+            name: values.name,
+            value: values.value,
+            public: values.public,
+          });
+          message.success(editing ? '配置已更新' : '配置已创建');
+          actionRef.current?.reload();
+          return true;
+        }}
       >
-        <Form<ConfigFormValues> form={form} layout="vertical">
-          <Form.Item
-            label="键"
-            name="key"
-            rules={[{ required: true, message: '请输入配置键' }]}
-          >
-            <Input disabled={Boolean(editing)} maxLength={120} />
-          </Form.Item>
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入配置名称' }]}
-          >
-            <Input maxLength={120} />
-          </Form.Item>
-          <Form.Item label="值" name="value">
-            <Input.TextArea maxLength={4000} rows={4} />
-          </Form.Item>
-          <Form.Item label="公开" name="public" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+        <ProFormText
+          name="key"
+          label="键"
+          disabled={Boolean(editing)}
+          fieldProps={{ maxLength: 120 }}
+          rules={[{ required: true, message: '请输入配置键' }]}
+        />
+        <ProFormText
+          name="name"
+          label="名称"
+          fieldProps={{ maxLength: 120 }}
+          rules={[{ required: true, message: '请输入配置名称' }]}
+        />
+        <ProFormTextArea
+          name="value"
+          label="值"
+          fieldProps={{ maxLength: 4000, rows: 4 }}
+        />
+        <ProFormSwitch name="public" label="公开" />
+      </ModalForm>
     </PageContainer>
   );
 };

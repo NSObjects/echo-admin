@@ -19,6 +19,33 @@ export type ListParams = {
   page_size?: number;
 };
 
+/**
+ * 把 ProTable request 的 current/pageSize 映射为后端分页参数。
+ * ProTable 首次加载不传页码时默认第一页、每页 20 条。
+ */
+export function pageParams(params: {
+  current?: number;
+  pageSize?: number;
+}): ListParams {
+  return {
+    page: params.current ?? 1,
+    page_size: params.pageSize ?? 20,
+  };
+}
+
+/**
+ * 把后端 Envelope 分页响应适配成 ProTable request 需要的返回结构。
+ */
+export async function toTableResult<T>(
+  response: Envelope<T[]>,
+): Promise<{ data: T[]; success: boolean; total: number }> {
+  return {
+    data: response.data,
+    success: true,
+    total: response.page?.total ?? 0,
+  };
+}
+
 export type FileListParams = ListParams & {
   category_id?: number;
 };

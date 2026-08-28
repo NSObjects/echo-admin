@@ -2,7 +2,6 @@
 package fileassethttp
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,10 +15,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
-	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	"github.com/NSObjects/echo-admin/internal/modules/fileasset/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
-	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
@@ -29,21 +27,16 @@ const (
 	maxUploadBytes  = 10 << 20
 )
 
-// OperationRecorder records file mutations for audit.
-type OperationRecorder interface {
-	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
-}
-
 // Handler adapts file HTTP requests to the file usecase.
 type Handler struct {
 	usecase   *usecase.Usecase
-	operation OperationRecorder
+	audit     *oprec.Recorder
 	uploadDir string
 }
 
 // New creates a file HTTP handler.
-func New(uc *usecase.Usecase, operation OperationRecorder, uploadDir string) *Handler {
-	return &Handler{usecase: uc, operation: operation, uploadDir: uploadDir}
+func New(uc *usecase.Usecase, audit *oprec.Recorder, uploadDir string) *Handler {
+	return &Handler{usecase: uc, audit: audit, uploadDir: uploadDir}
 }
 
 // Register mounts file routes on group.
@@ -88,13 +81,8 @@ func (h *Handler) CreateCategory(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.recordOperation(
-		c,
-		"create",
-		"file_category",
-		strconv.FormatInt(category.ID, 10),
-		"created file category",
-	); err != nil {
+	err = h.audit.Record(c, "create", "file_category", strconv.FormatInt(category.ID, 10), "created file category", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.Created(c, category)
@@ -121,13 +109,8 @@ func (h *Handler) UpdateCategory(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.recordOperation(
-		c,
-		"update",
-		"file_category",
-		strconv.FormatInt(category.ID, 10),
-		"updated file category",
-	); err != nil {
+	err = h.audit.Record(c, "update", "file_category", strconv.FormatInt(category.ID, 10), "updated file category", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, category)
@@ -142,16 +125,9 @@ func (h *Handler) DeleteCategory(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteCategory(c.Request().Context(), id); err != nil {
-		return err
-	}
-	if err := h.recordOperation(
-		c,
-		"delete",
-		"file_category",
-		strconv.FormatInt(id, 10),
-		"deleted file category",
-	); err != nil {
+	err = h.usecase.DeleteCategory(c.Request().Context(), id)
+	err = h.audit.Record(c, "delete", "file_category", strconv.FormatInt(id, 10), "deleted file category", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
@@ -191,15 +167,17 @@ func (h *Handler) UploadFile(c *echo.Context) error {
 		return err
 	}
 	saved.CategoryID = categoryID
-	file, err := h.usecase.CreateFile(c.Request().Context(), saved)
-	if err != nil {
+	file, opErr := h.usecase.CreateFile(c.Request().Context(), saved)
+	if opErr != nil {
 		if cleanupErr := h.removeLocalUpload(usecase.FileObject{URL: saved.URL}); cleanupErr != nil {
-			return errors.Join(err, cleanupErr)
+			opErr = errors.Join(opErr, cleanupErr)
 		}
+	}
+	if err := h.audit.Record(c, "upload", "file", saved.URL, "uploaded file", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "upload", "file", file.URL, "uploaded file"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.Created(c, file)
 }
@@ -218,10 +196,8 @@ func (h *Handler) ImportURL(c *echo.Context) error {
 		URL:        req.URL,
 		CategoryID: req.CategoryID,
 	})
+	err = h.audit.Record(c, "import_url", "file", file.URL, "imported file url", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "import_url", "file", file.URL, "imported file url"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, file)
@@ -245,10 +221,7 @@ func (h *Handler) RenameFile(c *echo.Context) error {
 		ID:   id,
 		Name: req.Name,
 	})
-	if err != nil {
-		return err
-	}
-	err = h.recordOperation(c, "rename", "file", strconv.FormatInt(file.ID, 10), "renamed file")
+	err = h.audit.Record(c, "rename", "file", strconv.FormatInt(file.ID, 10), "renamed file", err)
 	if err != nil {
 		return err
 	}
@@ -264,16 +237,14 @@ func (h *Handler) DeleteFile(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	file, err := h.usecase.DeleteFile(c.Request().Context(), id)
-	if err != nil {
+	file, opErr := h.usecase.DeleteFile(c.Request().Context(), id)
+	if err := h.audit.Record(c, "delete", "file", strconv.FormatInt(file.ID, 10), "deleted file", opErr); err != nil {
 		return err
 	}
-	err = h.removeLocalUpload(file)
-	if err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
-	err = h.recordOperation(c, "delete", "file", strconv.FormatInt(file.ID, 10), "deleted file")
-	if err != nil {
+	if err := h.removeLocalUpload(file); err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{ID: file.ID})
@@ -349,28 +320,8 @@ func (h *Handler) removeLocalUpload(file usecase.FileObject) error {
 	return nil
 }
 
-func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
-	actorID, err := strconv.ParseInt(requestctx.GetUserID(c.Request().Context()), 10, 64)
-	if err != nil {
-		return apperr.NewUnauthorized()
-	}
-	_, err = h.operation.RecordOperation(c.Request().Context(), auditusecase.OperationInput{
-		ActorID:    actorID,
-		Action:     action,
-		Resource:   resource,
-		ResourceID: resourceID,
-		Method:     c.Request().Method,
-		Path:       c.Path(),
-		IP:         c.RealIP(),
-		UserAgent:  c.Request().UserAgent(),
-		Success:    true,
-		Message:    message,
-	})
-	return err
-}
-
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.operation == nil || strings.TrimSpace(h.uploadDir) == "" {
+	if h == nil || h.usecase == nil || h.audit == nil || strings.TrimSpace(h.uploadDir) == "" {
 		return apperr.New(apperr.ErrInternalServer, "file handler is not configured")
 	}
 	return nil

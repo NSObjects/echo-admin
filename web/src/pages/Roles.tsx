@@ -1,47 +1,37 @@
+import { PlusOutlined } from '@ant-design/icons';
 import {
-  CopyOutlined,
-  DeleteOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
-import { PageContainer } from '@ant-design/pro-components';
+  type ActionType,
+  ModalForm,
+  PageContainer,
+  type ProColumns,
+  ProFormSelect,
+  ProFormSwitch,
+  ProFormText,
+  ProTable,
+} from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
-import {
-  Button,
-  Form,
-  Input,
-  Modal,
-  message,
-  Popconfirm,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Tag,
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import React, { useEffect, useState } from 'react';
+import { Button, message, Popconfirm, Space, Tag } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
+  type AdminUser,
+  type APIResource,
   copyRole,
   createRole,
   deleteRole,
-  listRoleAdmins,
   listAdmins,
   listAPIs,
-  type AdminUser,
-  type ListParams,
   listMenus,
   listPermissions,
+  listRoleAdmins,
   listRoles,
   type Menu,
-  type PageMeta,
   type PermissionDefinition,
+  pageParams,
   type Role,
   setRoleAdmins,
+  toTableResult,
   updateRole,
-  type APIResource,
 } from '@/services/admin';
 
 type RoleFormValues = {
@@ -57,197 +47,84 @@ type RoleFormValues = {
   active: boolean;
 };
 
+type MemberTarget = {
+  role: Role;
+  admin_ids: number[];
+};
+
 const Roles: React.FC = () => {
   const access = useAccess();
-  const [roles, setRoles] = useState<Role[]>([]);
+  const actionRef = useRef<ActionType | undefined>(undefined);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [apis, setAPIs] = useState<APIResource[]>([]);
   const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
-  const [page, setPage] = useState<PageMeta>();
-  const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [membersOpen, setMembersOpen] = useState(false);
   const [editing, setEditing] = useState<Role>();
   const [copying, setCopying] = useState<Role>();
-  const [memberRole, setMemberRole] = useState<Role>();
-  const [memberAdminIDs, setMemberAdminIDs] = useState<number[]>([]);
-  const [form] = Form.useForm<RoleFormValues>();
-
-  const loadData = async (params: ListParams = {}) => {
-    setLoading(true);
-    try {
-      const [
-        roleResponse,
-        adminResponse,
-        menuResponse,
-        apiResponse,
-        permissionResponse,
-      ] = await Promise.all([
-        listRoles(params),
-        access.canAdminRead
-          ? listAdmins({ page_size: 100 })
-          : Promise.resolve({ data: [] }),
-        access.canMenuRead ? listMenus() : Promise.resolve([]),
-        access.canApiRead
-          ? listAPIs({ page_size: 100 })
-          : Promise.resolve({ data: [] }),
-        listPermissions(),
-      ]);
-      setRoles(roleResponse.data);
-      setAdmins(adminResponse.data);
-      setPage(roleResponse.page);
-      setMenus(menuResponse);
-      setAPIs(apiResponse.data);
-      setPermissions(permissionResponse);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [memberTarget, setMemberTarget] = useState<MemberTarget>();
+  // 列表数据缓存在组件内，供上级角色展示名和表单选项复用。
+  const [rolesCache, setRolesCache] = useState<Role[]>([]);
 
   useEffect(() => {
-    void loadData();
-  }, []);
+    void Promise.all([
+      access.canAdminRead
+        ? listAdmins({ page_size: 100 })
+        : Promise.resolve({ data: [] }),
+      access.canMenuRead ? listMenus() : Promise.resolve([]),
+      access.canApiRead
+        ? listAPIs({ page_size: 100 })
+        : Promise.resolve({ data: [] }),
+      listPermissions(),
+    ]).then(
+      ([adminResponse, menuResponse, apiResponse, permissionResponse]) => {
+        setAdmins(adminResponse.data);
+        setMenus(menuResponse);
+        setAPIs(apiResponse.data);
+        setPermissions(permissionResponse);
+      },
+    );
+  }, [access]);
 
   const openCreate = () => {
     setEditing(undefined);
     setCopying(undefined);
-    form.resetFields();
-    form.setFieldsValue({
-      active: true,
-      parent_id: 0,
-      permissions: [],
-      menu_ids: [],
-      api_ids: [],
-      button_ids: [],
-      data_role_ids: [],
-      default_path: '/dashboard',
-    });
     setModalOpen(true);
   };
 
   const openEdit = (record: Role) => {
-    setEditing(record);
     setCopying(undefined);
-    form.setFieldsValue({
-      parent_id: record.parent_id,
-      code: record.code,
-      name: record.name,
-      permissions: record.permissions,
-      menu_ids: record.menu_ids,
-      api_ids: record.api_ids,
-      button_ids: record.button_ids,
-      data_role_ids: record.data_role_ids,
-      default_path: record.default_path,
-      active: record.active,
-    });
+    setEditing(record);
     setModalOpen(true);
   };
 
   const openCopy = (record: Role) => {
     setEditing(undefined);
     setCopying(record);
-    form.setFieldsValue({
-      parent_id: record.parent_id,
-      code: `${record.code}_copy`,
-      name: `${record.name}副本`,
-      permissions: record.permissions,
-      menu_ids: record.menu_ids,
-      api_ids: record.api_ids,
-      button_ids: record.button_ids,
-      data_role_ids: record.data_role_ids,
-      default_path: record.default_path,
-      active: record.active,
-    });
     setModalOpen(true);
   };
 
-  const submit = async () => {
-    const values = await form.validateFields();
-    if (editing) {
-      await updateRole(editing.id, {
-        parent_id: values.parent_id,
-        name: values.name,
-        permissions: values.permissions,
-        menu_ids: values.menu_ids,
-        api_ids: values.api_ids,
-        button_ids: values.button_ids,
-        data_role_ids: values.data_role_ids,
-        default_path: values.default_path,
-        active: values.active,
-      });
-      message.success('角色已更新');
-    } else if (copying) {
-      await copyRole(copying.id, {
-        parent_id: values.parent_id,
-        code: values.code,
-        name: values.name,
-        default_path: values.default_path,
-        active: values.active,
-      });
-      message.success('角色已复制');
-    } else {
-      await createRole({
-        parent_id: values.parent_id,
-        code: values.code,
-        name: values.name,
-        permissions: values.permissions,
-        menu_ids: values.menu_ids,
-        api_ids: values.api_ids,
-        button_ids: values.button_ids,
-        data_role_ids: values.data_role_ids,
-        default_path: values.default_path,
-        active: values.active,
-      });
-      message.success('角色已创建');
-    }
-    setModalOpen(false);
-    setCopying(undefined);
-    await loadData({ page: page?.page, page_size: page?.page_size });
-  };
+  // 上级角色的展示名需要引用当前列表数据。
+  const parentRoleName = (roleID: number) =>
+    rolesCache.find((role) => role.id === roleID)?.name;
 
-  const openMembers = async (record: Role) => {
-    setMemberRole(record);
-    setMembersOpen(true);
-    setMemberAdminIDs(await listRoleAdmins(record.id));
-  };
-
-  const submitMembers = async () => {
-    if (!memberRole) {
-      return;
-    }
-    const assignedIDs = await setRoleAdmins(memberRole.id, memberAdminIDs);
-    setMemberAdminIDs(assignedIDs);
-    message.success('角色成员已更新');
-    setMembersOpen(false);
-    setMemberRole(undefined);
-    await loadData({ page: page?.page, page_size: page?.page_size });
-  };
-
-  const removeRole = async (record: Role) => {
-    await deleteRole(record.id);
-    message.success('角色已删除');
-    await loadData({ page: page?.page, page_size: page?.page_size });
-  };
-
-  const columns: ColumnsType<Role> = [
+  const columns: ProColumns<Role>[] = [
     { title: '编码', dataIndex: 'code' },
     { title: '名称', dataIndex: 'name' },
     {
       title: '上级',
       dataIndex: 'parent_id',
-      render: (parentID: number) =>
-        parentID === 0
+      render: (_, record) =>
+        record.parent_id === 0
           ? '顶级角色'
-          : (roles.find((role) => role.id === parentID)?.name ??
-            `#${parentID}`),
+          : (parentRoleName(record.parent_id) ?? `#${record.parent_id}`),
     },
     {
       title: '权限',
       dataIndex: 'permissions',
-      render: (permissions: string[]) => (
+      render: (_, record) => (
         <Space wrap>
-          {permissions.map((permission) => (
+          {record.permissions.map((permission) => (
             <Tag key={permission}>{permission}</Tag>
           ))}
         </Space>
@@ -256,91 +133,110 @@ const Roles: React.FC = () => {
     {
       title: '菜单',
       dataIndex: 'menu_ids',
-      render: (menuIDs: number[]) => `${menuIDs.length} 个`,
+      render: (_, record) => `${record.menu_ids.length} 个`,
     },
     {
       title: 'API',
       dataIndex: 'api_ids',
-      render: (apiIDs: number[]) => `${apiIDs.length} 个`,
+      render: (_, record) => `${record.api_ids.length} 个`,
     },
     {
       title: '按钮',
       dataIndex: 'button_ids',
-      render: (buttonIDs: number[]) => `${buttonIDs.length} 个`,
+      render: (_, record) => `${record.button_ids.length} 个`,
     },
     {
       title: '数据权限',
       dataIndex: 'data_role_ids',
-      render: (roleIDs: number[]) => `${roleIDs.length} 个`,
+      render: (_, record) => `${record.data_role_ids.length} 个`,
     },
     { title: '入口', dataIndex: 'default_path' },
     {
       title: '状态',
       dataIndex: 'active',
-      render: (active: boolean) => (
-        <Tag color={active ? 'green' : 'default'}>
-          {active ? '启用' : '停用'}
+      render: (_, record) => (
+        <Tag color={record.active ? 'green' : 'default'}>
+          {record.active ? '启用' : '停用'}
         </Tag>
       ),
     },
     {
       title: '操作',
-      key: 'actions',
-      render: (_, record) => (
-        <Space>
-          {access.canRoleUpdate ? (
-            <Button type="link" onClick={() => openEdit(record)}>
+      valueType: 'option',
+      width: 200,
+      render: (_, record) => {
+        const actions: React.ReactNode[] = [];
+        if (access.canRoleUpdate) {
+          actions.push(
+            <a key="edit" onClick={() => openEdit(record)}>
               编辑
-            </Button>
-          ) : null}
-          {access.canRoleCreate ? (
-            <Button
-              type="link"
-              icon={<CopyOutlined />}
-              onClick={() => openCopy(record)}
-            >
+            </a>,
+          );
+        }
+        if (access.canRoleCreate) {
+          actions.push(
+            <a key="copy" onClick={() => openCopy(record)}>
               复制
-            </Button>
-          ) : null}
-          {access.canRoleUpdate && access.canAdminRead ? (
-            <Button
-              type="link"
-              icon={<TeamOutlined />}
-              onClick={() => void openMembers(record)}
+            </a>,
+          );
+        }
+        if (access.canRoleUpdate && access.canAdminRead) {
+          actions.push(
+            <a
+              key="members"
+              onClick={() => {
+                void listRoleAdmins(record.id).then((adminIDs) => {
+                  setMemberTarget({ role: record, admin_ids: adminIDs });
+                });
+              }}
             >
               成员
-            </Button>
-          ) : null}
-          {access.canRoleDelete ? (
+            </a>,
+          );
+        }
+        if (access.canRoleDelete) {
+          actions.push(
             <Popconfirm
+              key="delete"
               title="删除角色"
               description={`确认删除 ${record.name}？`}
               okText="删除"
               okButtonProps={{ danger: true }}
-              onConfirm={() => void removeRole(record)}
+              onConfirm={async () => {
+                await deleteRole(record.id);
+                message.success('角色已删除');
+                actionRef.current?.reload();
+              }}
             >
-              <Button danger type="link" icon={<DeleteOutlined />}>
+              <Button type="link" danger size="small">
                 删除
               </Button>
-            </Popconfirm>
-          ) : null}
-        </Space>
-      ),
+            </Popconfirm>,
+          );
+        }
+        return actions;
+      },
     },
   ];
+
+  const rolesRequest = async (params: {
+    current?: number;
+    pageSize?: number;
+  }) => {
+    const response = await listRoles(pageParams(params));
+    setRolesCache(response.data);
+    return toTableResult(response);
+  };
 
   const permissionOptions = permissions.map((permission) => ({
     label: `${permission.name} (${permission.token})`,
     value: permission.token,
   }));
-  const roleOptions = [
+  const parentRoleOptions = [
     { label: '顶级角色', value: 0 },
-    ...roles
+    ...rolesCache
       .filter((role) => role.id !== editing?.id)
-      .map((role) => ({
-        label: role.name,
-        value: role.id,
-      })),
+      .map((role) => ({ label: role.name, value: role.id })),
   ];
   const menuOptions = menus.map((menu) => ({
     label: menu.name,
@@ -356,7 +252,7 @@ const Roles: React.FC = () => {
       value: button.id,
     })),
   );
-  const dataRoleOptions = roles.map((role) => ({
+  const dataRoleOptions = rolesCache.map((role) => ({
     label: role.name,
     value: role.id,
   }));
@@ -365,139 +261,229 @@ const Roles: React.FC = () => {
     value: admin.id,
   }));
 
+  const formInitialValues = editing
+    ? {
+        parent_id: editing.parent_id,
+        code: editing.code,
+        name: editing.name,
+        permissions: editing.permissions,
+        menu_ids: editing.menu_ids,
+        api_ids: editing.api_ids,
+        button_ids: editing.button_ids,
+        data_role_ids: editing.data_role_ids,
+        default_path: editing.default_path,
+        active: editing.active,
+      }
+    : copying
+      ? {
+          parent_id: copying.parent_id,
+          code: `${copying.code}_copy`,
+          name: `${copying.name}副本`,
+          permissions: copying.permissions,
+          menu_ids: copying.menu_ids,
+          api_ids: copying.api_ids,
+          button_ids: copying.button_ids,
+          data_role_ids: copying.data_role_ids,
+          default_path: copying.default_path,
+          active: copying.active,
+        }
+      : {
+          active: true,
+          parent_id: 0,
+          permissions: [],
+          menu_ids: [],
+          api_ids: [],
+          button_ids: [],
+          data_role_ids: [],
+          default_path: '/dashboard',
+        };
+
   return (
     <PageContainer title="角色权限">
-      <Table<Role>
+      <ProTable<Role>
+        headerTitle="角色列表"
         rowKey="id"
+        actionRef={actionRef}
+        search={false}
         columns={columns}
-        dataSource={roles}
-        loading={loading}
-        pagination={{
-          current: page?.page,
-          pageSize: page?.page_size,
-          total: page?.total,
-          showSizeChanger: true,
-        }}
-        onChange={(pagination) =>
-          void loadData({
-            page: pagination.current,
-            page_size: pagination.pageSize,
-          })
+        request={rolesRequest}
+        toolBarRender={() =>
+          access.canRoleCreate
+            ? [
+                <Button
+                  key="create"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                >
+                  新增角色
+                </Button>,
+              ]
+            : []
         }
-        title={() => (
-          <Space>
-            {access.canRoleCreate ? (
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={openCreate}
-              >
-                新增角色
-              </Button>
-            ) : null}
-            <Button icon={<ReloadOutlined />} onClick={() => void loadData()}>
-              刷新
-            </Button>
-          </Space>
-        )}
       />
-      <Modal
+      <ModalForm<RoleFormValues>
+        key={
+          editing
+            ? `edit-${editing.id}`
+            : copying
+              ? `copy-${copying.id}`
+              : 'create'
+        }
         title={editing ? '编辑角色' : copying ? '复制角色' : '新增角色'}
         open={modalOpen}
-        onOk={() => void submit()}
-        onCancel={() => {
-          setModalOpen(false);
-          setCopying(undefined);
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) {
+            setCopying(undefined);
+          }
         }}
-        destroyOnHidden
-      >
-        <Form<RoleFormValues> form={form} layout="vertical">
-          <Form.Item
-            label="编码"
-            name="code"
-            rules={[{ required: !editing, message: '请输入角色编码' }]}
-          >
-            <Input disabled={Boolean(editing)} maxLength={64} />
-          </Form.Item>
-          <Form.Item label="上级角色" name="parent_id">
-            <Select options={roleOptions} />
-          </Form.Item>
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入角色名称' }]}
-          >
-            <Input maxLength={80} />
-          </Form.Item>
-          <Form.Item
-            label="权限"
-            name="permissions"
-            rules={[{ required: true, message: '请选择权限' }]}
-          >
-            <Select
-              disabled={Boolean(copying)}
-              mode="multiple"
-              options={permissionOptions}
-            />
-          </Form.Item>
-          <Form.Item label="菜单" name="menu_ids">
-            <Select
-              disabled={Boolean(copying)}
-              mode="multiple"
-              options={menuOptions}
-            />
-          </Form.Item>
-          <Form.Item label="API" name="api_ids">
-            <Select
-              disabled={Boolean(copying)}
-              mode="multiple"
-              options={apiOptions}
-            />
-          </Form.Item>
-          <Form.Item label="按钮" name="button_ids">
-            <Select
-              disabled={Boolean(copying)}
-              mode="multiple"
-              options={buttonOptions}
-            />
-          </Form.Item>
-          <Form.Item label="数据权限" name="data_role_ids">
-            <Select
-              disabled={Boolean(copying)}
-              mode="multiple"
-              options={dataRoleOptions}
-            />
-          </Form.Item>
-          <Form.Item
-            label="默认入口"
-            name="default_path"
-            rules={[{ required: true, message: '请输入默认入口' }]}
-          >
-            <Input maxLength={160} />
-          </Form.Item>
-          <Form.Item label="启用" name="active" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
-      <Modal
-        title={memberRole ? `${memberRole.name}成员` : '角色成员'}
-        open={membersOpen}
-        onOk={() => void submitMembers()}
-        onCancel={() => {
-          setMembersOpen(false);
-          setMemberRole(undefined);
+        width={520}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={formInitialValues}
+        onFinish={async (values) => {
+          if (editing) {
+            await updateRole(editing.id, {
+              parent_id: values.parent_id,
+              name: values.name,
+              permissions: values.permissions,
+              menu_ids: values.menu_ids,
+              api_ids: values.api_ids,
+              button_ids: values.button_ids,
+              data_role_ids: values.data_role_ids,
+              default_path: values.default_path,
+              active: values.active,
+            });
+            message.success('角色已更新');
+          } else if (copying) {
+            await copyRole(copying.id, {
+              parent_id: values.parent_id,
+              code: values.code,
+              name: values.name,
+              default_path: values.default_path,
+              active: values.active,
+            });
+            message.success('角色已复制');
+          } else {
+            await createRole({
+              parent_id: values.parent_id,
+              code: values.code,
+              name: values.name,
+              permissions: values.permissions,
+              menu_ids: values.menu_ids,
+              api_ids: values.api_ids,
+              button_ids: values.button_ids,
+              data_role_ids: values.data_role_ids,
+              default_path: values.default_path,
+              active: values.active,
+            });
+            message.success('角色已创建');
+          }
+          actionRef.current?.reload();
+          return true;
         }}
-        destroyOnHidden
       >
-        <Select
-          mode="multiple"
-          style={{ width: '100%' }}
-          value={memberAdminIDs}
-          options={adminOptions}
-          onChange={setMemberAdminIDs}
+        <ProFormText
+          name="code"
+          label="编码"
+          disabled={Boolean(editing)}
+          fieldProps={{ maxLength: 64 }}
+          rules={editing ? [] : [{ required: true, message: '请输入角色编码' }]}
         />
-      </Modal>
+        <ProFormSelect
+          name="parent_id"
+          label="上级角色"
+          options={parentRoleOptions}
+        />
+        <ProFormText
+          name="name"
+          label="名称"
+          fieldProps={{ maxLength: 80 }}
+          rules={[{ required: true, message: '请输入角色名称' }]}
+        />
+        <ProFormSelect
+          name="permissions"
+          label="权限"
+          mode="multiple"
+          disabled={Boolean(copying)}
+          options={permissionOptions}
+          fieldProps={{ maxTagCount: 'responsive' }}
+          rules={copying ? [] : [{ required: true, message: '请选择权限' }]}
+        />
+        <ProFormSelect
+          name="menu_ids"
+          label="菜单"
+          mode="multiple"
+          disabled={Boolean(copying)}
+          options={menuOptions}
+          fieldProps={{ maxTagCount: 'responsive' }}
+        />
+        <ProFormSelect
+          name="api_ids"
+          label="API"
+          mode="multiple"
+          disabled={Boolean(copying)}
+          options={apiOptions}
+          fieldProps={{ maxTagCount: 'responsive' }}
+        />
+        <ProFormSelect
+          name="button_ids"
+          label="按钮"
+          mode="multiple"
+          disabled={Boolean(copying)}
+          options={buttonOptions}
+          fieldProps={{ maxTagCount: 'responsive' }}
+        />
+        <ProFormSelect
+          name="data_role_ids"
+          label="数据权限"
+          mode="multiple"
+          disabled={Boolean(copying)}
+          options={dataRoleOptions}
+          fieldProps={{ maxTagCount: 'responsive' }}
+        />
+        <ProFormText
+          name="default_path"
+          label="默认入口"
+          fieldProps={{ maxLength: 160 }}
+          rules={[{ required: true, message: '请输入默认入口' }]}
+        />
+        <ProFormSwitch name="active" label="启用" />
+      </ModalForm>
+      <ModalForm<{ admin_ids: number[] }>
+        key={memberTarget?.role.id ?? 'idle'}
+        title={memberTarget ? `${memberTarget.role.name}成员` : '角色成员'}
+        open={Boolean(memberTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMemberTarget(undefined);
+          }
+        }}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={{ admin_ids: memberTarget?.admin_ids ?? [] }}
+        onFinish={async (values) => {
+          if (!memberTarget) {
+            return true;
+          }
+          const assignedIDs = await setRoleAdmins(
+            memberTarget.role.id,
+            values.admin_ids ?? [],
+          );
+          setMemberTarget((previous) =>
+            previous ? { ...previous, admin_ids: assignedIDs } : previous,
+          );
+          message.success('角色成员已更新');
+          return true;
+        }}
+      >
+        <ProFormSelect
+          name="admin_ids"
+          label="成员"
+          mode="multiple"
+          options={adminOptions}
+          fieldProps={{ maxTagCount: 'responsive' }}
+        />
+      </ModalForm>
     </PageContainer>
   );
 };

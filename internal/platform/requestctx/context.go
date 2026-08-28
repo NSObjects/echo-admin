@@ -2,10 +2,7 @@
 // HTTP framework.
 package requestctx
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
 type contextKey struct{}
 
@@ -24,14 +21,10 @@ type Info struct {
 	UserID         string
 	RoleID         string
 	LoginSessionID string
-	StartTime      time.Time
 }
 
 // WithInfo returns a child context carrying request metadata.
 func WithInfo(ctx context.Context, info Info) context.Context {
-	if info.StartTime.IsZero() {
-		info.StartTime = time.Now()
-	}
 	return context.WithValue(ctx, contextKey{}, info)
 }
 
@@ -46,15 +39,6 @@ func CleanMetadataID(value string) string {
 		}
 	}
 	return value
-}
-
-// WithTraceInfo returns a child context carrying common trace metadata.
-func WithTraceInfo(ctx context.Context, traceID, spanID, requestID string) context.Context {
-	return WithInfo(ctx, Info{
-		TraceID:   traceID,
-		SpanID:    spanID,
-		RequestID: requestID,
-	})
 }
 
 // WithTraceSpan returns a child context with updated trace metadata while
@@ -97,15 +81,6 @@ func FromContext(ctx context.Context) (Info, bool) {
 	return info, ok
 }
 
-// GetTraceID returns the trace ID stored in ctx.
-func GetTraceID(ctx context.Context) string {
-	info, ok := FromContext(ctx)
-	if !ok {
-		return ""
-	}
-	return info.TraceID
-}
-
 // GetRequestID returns the request ID stored in ctx.
 func GetRequestID(ctx context.Context) string {
 	info, ok := FromContext(ctx)
@@ -140,13 +115,4 @@ func GetLoginSessionID(ctx context.Context) string {
 		return ""
 	}
 	return info.LoginSessionID
-}
-
-// GetStartTime returns the request start time stored in ctx.
-func GetStartTime(ctx context.Context) time.Time {
-	info, ok := FromContext(ctx)
-	if !ok {
-		return time.Time{}
-	}
-	return info.StartTime
 }

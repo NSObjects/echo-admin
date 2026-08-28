@@ -225,9 +225,11 @@ func (u *Usecase) DictionaryBundleJSON(ctx context.Context) ([]byte, error) {
 	return data, nil
 }
 
-// ImportDictionaries validates and imports a dictionary bundle.
+// ImportDictionaries validates and imports a dictionary bundle. Every
+// dictionary replacement commits in one transaction, so a mid-import failure
+// changes nothing.
 func (u *Usecase) ImportDictionaries(ctx context.Context, bundle DictionaryBundle) ([]Dictionary, error) {
-	if err := u.ready(); err != nil {
+	if err := u.readyForImport(); err != nil {
 		return nil, err
 	}
 	if len(bundle.Dictionaries) == 0 {
@@ -237,7 +239,15 @@ func (u *Usecase) ImportDictionaries(ctx context.Context, bundle DictionaryBundl
 	if err != nil {
 		return nil, mapDomainError(err)
 	}
-	if err := u.importVersionDictionaries(ctx, dictionaries); err != nil {
+	err = u.imports.RunImport(ctx, func(txCtx context.Context, tx ImportTransaction) error {
+		for _, dictionary := range dictionaries {
+			if replaceErr := tx.ReplaceDictionary(txCtx, dictionary); replaceErr != nil {
+				return replaceErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return u.ListDictionaries(ctx)
@@ -489,23 +499,32 @@ func (u *Usecase) exportVersionResources(ctx context.Context, input ExportVersio
 }
 
 // ImportVersion imports a version bundle and records the import result.
+// Menu upserts, dictionary replacements, and the version record commit in one
+// transaction, so a mid-import failure leaves stored data unchanged.
 func (u *Usecase) ImportVersion(ctx context.Context, bundle VersionBundle) (SystemVersion, error) {
-	if err := u.ready(); err != nil {
+	if err := u.readyForImport(); err != nil {
 		return SystemVersion{}, err
 	}
 	plan, err := u.prepareVersionImport(bundle)
 	if err != nil {
 		return SystemVersion{}, err
 	}
-	catalogErr := u.importVersionCatalog(ctx, bundle)
-	if catalogErr != nil {
-		return SystemVersion{}, catalogErr
-	}
-	dictionaryErr := u.importVersionDictionaries(ctx, plan.dictionaries)
-	if dictionaryErr != nil {
-		return SystemVersion{}, dictionaryErr
-	}
-	created, err := u.store.CreateVersion(ctx, plan.version)
+	var created domain.SystemVersion
+	err = u.imports.RunImport(ctx, func(txCtx context.Context, tx ImportTransaction) error {
+		if len(bundle.Menus) > 0 {
+			if menuErr := tx.ImportMenus(txCtx, bundle.Menus); menuErr != nil {
+				return menuErr
+			}
+		}
+		for _, dictionary := range plan.dictionaries {
+			if replaceErr := tx.ReplaceDictionary(txCtx, dictionary); replaceErr != nil {
+				return replaceErr
+			}
+		}
+		var createErr error
+		created, createErr = tx.CreateVersion(txCtx, plan.version)
+		return createErr
+	})
 	if err != nil {
 		return SystemVersion{}, err
 	}
@@ -520,10 +539,6 @@ type versionImportPlan struct {
 func (u *Usecase) prepareVersionImport(bundle VersionBundle) (versionImportPlan, error) {
 	if bundle.Version.Code == "" || bundle.Version.Name == "" {
 		return versionImportPlan{}, apperr.NewBadRequest("invalid version bundle")
-	}
-	catalogErr := u.ensureVersionCatalogFromBundle(bundle)
-	if catalogErr != nil {
-		return versionImportPlan{}, catalogErr
 	}
 	dictionaries, err := domainDictionariesFromVersion(bundle.Dictionaries)
 	if err != nil {
@@ -548,13 +563,6 @@ func (u *Usecase) prepareVersionImport(bundle VersionBundle) (versionImportPlan,
 		return versionImportPlan{}, mapDomainError(err)
 	}
 	return versionImportPlan{version: version, dictionaries: dictionaries}, nil
-}
-
-func (u *Usecase) importVersionCatalog(ctx context.Context, bundle VersionBundle) error {
-	if len(bundle.Menus) == 0 {
-		return nil
-	}
-	return u.catalog.ImportVersionMenus(ctx, bundle.Menus)
 }
 
 // CreateVersion validates and stores one release record.
@@ -630,18 +638,20 @@ func (u *Usecase) ready() error {
 	return nil
 }
 
-func (u *Usecase) ensureVersionCatalog(menuIDs []int64) error {
-	if len(menuIDs) == 0 {
-		return nil
+// readyForImport guards the import workflows, which write through the
+// transaction-scoped import runner instead of the plain store.
+func (u *Usecase) readyForImport() error {
+	if err := u.ready(); err != nil {
+		return err
 	}
-	if u.catalog == nil {
-		return apperr.New(apperr.ErrInternalServer, "version catalog is not configured")
+	if u.imports == nil {
+		return apperr.New(apperr.ErrInternalServer, "settings import runner is not configured")
 	}
 	return nil
 }
 
-func (u *Usecase) ensureVersionCatalogFromBundle(bundle VersionBundle) error {
-	if len(bundle.Menus) == 0 {
+func (u *Usecase) ensureVersionCatalog(menuIDs []int64) error {
+	if len(menuIDs) == 0 {
 		return nil
 	}
 	if u.catalog == nil {
@@ -675,18 +685,6 @@ func (u *Usecase) exportVersionDictionaries(ctx context.Context, ids []int64) ([
 		out = append(out, versionDictionaryFromDomain(dictionary))
 	}
 	return out, nil
-}
-
-func (u *Usecase) importVersionDictionaries(ctx context.Context, dictionaries []domain.Dictionary) error {
-	for _, dictionary := range dictionaries {
-		if err := u.store.DeleteDictionary(ctx, dictionary.Code); err != nil && !isNotFound(err) {
-			return err
-		}
-		if _, err := u.store.CreateDictionary(ctx, dictionary); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func domainDictionariesFromVersion(inputs []VersionDictionary) ([]domain.Dictionary, error) {
@@ -874,11 +872,6 @@ func domainItemsFromVersion(items []VersionDictionaryItem) ([]domain.DictionaryI
 		out = append(out, item)
 	}
 	return out, nil
-}
-
-func isNotFound(err error) bool {
-	appErr, ok := apperr.Parse(err)
-	return ok && appErr.Code() == apperr.ErrNotFound
 }
 
 func mapConfigs(configs []domain.SystemConfig) []SystemConfig {

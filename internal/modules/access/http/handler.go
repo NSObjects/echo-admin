@@ -8,29 +8,23 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/usecase"
-	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
-	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
 const defaultPageSize = 20
 
-// OperationRecorder records access mutations for audit.
-type OperationRecorder interface {
-	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
-}
-
 // Handler adapts role and menu HTTP requests to the access usecase.
 type Handler struct {
-	usecase   *usecase.Usecase
-	operation OperationRecorder
+	usecase *usecase.Usecase
+	audit   *oprec.Recorder
 }
 
 // New creates an access HTTP handler.
-func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, operation: operation}
+func New(uc *usecase.Usecase, audit *oprec.Recorder) *Handler {
+	return &Handler{usecase: uc, audit: audit}
 }
 
 // Register mounts role and menu routes on group.
@@ -95,12 +89,12 @@ func (h *Handler) CreateRole(c *echo.Context) error {
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	role, err := h.usecase.CreateRole(c.Request().Context(), roleInputFromRequest(req))
-	if err != nil {
+	role, opErr := h.usecase.CreateRole(c.Request().Context(), roleInputFromRequest(req))
+	if err := h.audit.Record(c, "create", "role", strconv.FormatInt(role.ID, 10), "created role", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "create", "role", strconv.FormatInt(role.ID, 10), "created role"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.Created(c, role)
 }
@@ -114,12 +108,12 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	role, err := h.usecase.UpdateRole(c.Request().Context(), input)
-	if err != nil {
+	role, opErr := h.usecase.UpdateRole(c.Request().Context(), input)
+	if err := h.audit.Record(c, "update", "role", strconv.FormatInt(role.ID, 10), "updated role", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "update", "role", strconv.FormatInt(role.ID, 10), "updated role"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.OK(c, role)
 }
@@ -133,11 +127,12 @@ func (h *Handler) DeleteRole(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteRole(c.Request().Context(), id); err != nil {
+	opErr := h.usecase.DeleteRole(c.Request().Context(), id)
+	if err := h.audit.Record(c, "delete", "role", strconv.FormatInt(id, 10), "deleted role", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "delete", "role", strconv.FormatInt(id, 10), "deleted role"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
 }
@@ -155,7 +150,7 @@ func (h *Handler) CopyRole(c *echo.Context) error {
 	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
 		return bindErr
 	}
-	role, err := h.usecase.CopyRole(c.Request().Context(), usecase.CopyRoleInput{
+	role, opErr := h.usecase.CopyRole(c.Request().Context(), usecase.CopyRoleInput{
 		SourceID:    id,
 		ParentID:    req.ParentID,
 		Code:        req.Code,
@@ -163,11 +158,11 @@ func (h *Handler) CopyRole(c *echo.Context) error {
 		DefaultPath: req.DefaultPath,
 		Active:      req.Active,
 	})
-	if err != nil {
+	if err := h.audit.Record(c, "copy", "role", strconv.FormatInt(role.ID, 10), "copied role", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "copy", "role", strconv.FormatInt(role.ID, 10), "copied role"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.Created(c, role)
 }
@@ -276,12 +271,12 @@ func (h *Handler) CreateMenu(c *echo.Context) error {
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
 	}
-	menu, err := h.usecase.CreateMenu(c.Request().Context(), menuInputFromRequest(req))
-	if err != nil {
+	menu, opErr := h.usecase.CreateMenu(c.Request().Context(), menuInputFromRequest(req))
+	if err := h.audit.Record(c, "create", "menu", strconv.FormatInt(menu.ID, 10), "created menu", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "create", "menu", strconv.FormatInt(menu.ID, 10), "created menu"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.Created(c, menu)
 }
@@ -295,12 +290,12 @@ func (h *Handler) UpdateMenu(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	menu, err := h.usecase.UpdateMenu(c.Request().Context(), input)
-	if err != nil {
+	menu, opErr := h.usecase.UpdateMenu(c.Request().Context(), input)
+	if err := h.audit.Record(c, "update", "menu", strconv.FormatInt(menu.ID, 10), "updated menu", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "update", "menu", strconv.FormatInt(menu.ID, 10), "updated menu"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.OK(c, menu)
 }
@@ -314,11 +309,12 @@ func (h *Handler) DeleteMenu(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.usecase.DeleteMenu(c.Request().Context(), id); err != nil {
+	opErr := h.usecase.DeleteMenu(c.Request().Context(), id)
+	if err := h.audit.Record(c, "delete", "menu", strconv.FormatInt(id, 10), "deleted menu", opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "delete", "menu", strconv.FormatInt(id, 10), "deleted menu"); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
 }
@@ -363,38 +359,18 @@ func (h *Handler) setRoleAssignments(
 	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
 		return bindErr
 	}
-	roleIDs, err := assign(c.Request().Context(), id, req.RoleIDs)
-	if err != nil {
+	roleIDs, opErr := assign(c.Request().Context(), id, req.RoleIDs)
+	if err := h.audit.Record(c, "set_roles", resource, strconv.FormatInt(id, 10), message, opErr); err != nil {
 		return err
 	}
-	if err := h.recordOperation(c, "set_roles", resource, strconv.FormatInt(id, 10), message); err != nil {
-		return err
+	if opErr != nil {
+		return opErr
 	}
 	return httpresp.OK(c, roleIDsResponse{RoleIDs: roleIDs})
 }
 
-func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
-	actorID, err := strconv.ParseInt(requestctx.GetUserID(c.Request().Context()), 10, 64)
-	if err != nil {
-		return apperr.NewUnauthorized()
-	}
-	_, err = h.operation.RecordOperation(c.Request().Context(), auditusecase.OperationInput{
-		ActorID:    actorID,
-		Action:     action,
-		Resource:   resource,
-		ResourceID: resourceID,
-		Method:     c.Request().Method,
-		Path:       c.Path(),
-		IP:         c.RealIP(),
-		UserAgent:  c.Request().UserAgent(),
-		Success:    true,
-		Message:    message,
-	})
-	return err
-}
-
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.audit == nil {
 		return apperr.New(apperr.ErrInternalServer, "access handler is not configured")
 	}
 	return nil

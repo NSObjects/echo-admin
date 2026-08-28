@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -282,7 +283,8 @@ func TestExportDictionariesReturnsPortableBundle(t *testing.T) {
 
 func TestImportDictionariesValidatesBeforeWriting(t *testing.T) {
 	store := &storeSpy{}
-	uc := usecase.New(store)
+	runner := &importRunnerSpy{}
+	uc := usecase.New(store, usecase.WithImportRunner(runner))
 
 	_, err := uc.ImportDictionaries(context.Background(), usecase.DictionaryBundle{
 		Dictionaries: []usecase.VersionDictionary{{Code: "", Name: "状态"}},
@@ -294,14 +296,15 @@ func TestImportDictionariesValidatesBeforeWriting(t *testing.T) {
 	if !ok || def.Kind != apperr.KindBadRequest {
 		t.Fatalf("ImportDictionaries() kind = %v, want %s", def.Kind, apperr.KindBadRequest)
 	}
-	if len(store.createdDictionaries) != 0 {
-		t.Fatalf("createdDictionaries = %d, want 0", len(store.createdDictionaries))
+	if len(runner.replacedDictionaryCodes) != 0 {
+		t.Fatalf("replacedDictionaryCodes = %v, want none", runner.replacedDictionaryCodes)
 	}
 }
 
 func TestImportDictionariesWritesBundle(t *testing.T) {
 	store := &storeSpy{}
-	uc := usecase.New(store)
+	runner := &importRunnerSpy{}
+	uc := usecase.New(store, usecase.WithImportRunner(runner))
 
 	_, err := uc.ImportDictionaries(context.Background(), usecase.DictionaryBundle{
 		Dictionaries: []usecase.VersionDictionary{{
@@ -318,8 +321,43 @@ func TestImportDictionariesWritesBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportDictionaries() error = %v", err)
 	}
-	if len(store.createdDictionaries) != 1 || store.createdDictionaries[0].Code != statusDictionaryCode {
-		t.Fatalf("createdDictionaries = %+v, want status dictionary", store.createdDictionaries)
+	if len(runner.replacedDictionaryCodes) != 1 || runner.replacedDictionaryCodes[0] != statusDictionaryCode {
+		t.Fatalf("replacedDictionaryCodes = %v, want [%s]", runner.replacedDictionaryCodes, statusDictionaryCode)
+	}
+}
+
+func TestImportDictionariesStopsAtFirstFailure(t *testing.T) {
+	store := &storeSpy{}
+	runner := &importRunnerSpy{failDictionaryCode: "first"}
+	uc := usecase.New(store, usecase.WithImportRunner(runner))
+
+	_, err := uc.ImportDictionaries(context.Background(), usecase.DictionaryBundle{
+		Dictionaries: []usecase.VersionDictionary{
+			{Code: "first", Name: "一"},
+			{Code: "second", Name: "二"},
+		},
+	})
+	if err == nil {
+		t.Fatal("ImportDictionaries() error = nil, want replace failure")
+	}
+	if len(runner.replacedDictionaryCodes) != 1 || runner.replacedDictionaryCodes[0] != "first" {
+		t.Fatalf("replacedDictionaryCodes = %v, want only [first]", runner.replacedDictionaryCodes)
+	}
+}
+
+func TestImportRequiresImportRunner(t *testing.T) {
+	store := &storeSpy{}
+	uc := usecase.New(store)
+
+	_, err := uc.ImportDictionaries(context.Background(), usecase.DictionaryBundle{
+		Dictionaries: []usecase.VersionDictionary{{Code: "status", Name: "状态"}},
+	})
+	if err == nil {
+		t.Fatal("ImportDictionaries() error = nil, want missing runner failure")
+	}
+	def, ok := apperr.ParseRegistered(err)
+	if !ok || def.Kind != apperr.KindInternal {
+		t.Fatalf("ImportDictionaries() kind = %v, want %s", def.Kind, apperr.KindInternal)
 	}
 }
 
@@ -354,10 +392,10 @@ func decodeVersionBundle(t *testing.T, data string) usecase.VersionBundle {
 	return bundle
 }
 
-func TestImportVersionImportsCatalogAndDictionaries(t *testing.T) {
+func TestImportVersionImportsMenusAndDictionaries(t *testing.T) {
 	store := &storeSpy{}
-	catalog := &versionCatalogSpy{}
-	uc := usecase.New(store, usecase.WithVersionCatalog(catalog))
+	runner := &importRunnerSpy{}
+	uc := usecase.New(store, usecase.WithVersionCatalog(&versionCatalogSpy{}), usecase.WithImportRunner(runner))
 
 	_, err := uc.ImportVersion(context.Background(), usecase.VersionBundle{
 		Version: usecase.VersionInfo{Code: "v2.0.0", Name: "权限包", Description: "初始化权限"},
@@ -381,21 +419,21 @@ func TestImportVersionImportsCatalogAndDictionaries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportVersion() error = %v", err)
 	}
-	if len(catalog.importMenus) != 1 {
-		t.Fatalf("importMenus = %d, want 1", len(catalog.importMenus))
+	if len(runner.importedMenus) != 1 {
+		t.Fatalf("importedMenus = %d, want 1", len(runner.importedMenus))
 	}
-	if len(store.createdDictionaries) != 1 || store.createdDictionaries[0].Code != statusDictionaryCode {
-		t.Fatalf("createdDictionaries = %+v, want status dictionary", store.createdDictionaries)
+	if len(runner.replacedDictionaryCodes) != 1 || runner.replacedDictionaryCodes[0] != statusDictionaryCode {
+		t.Fatalf("replacedDictionaryCodes = %v, want [%s]", runner.replacedDictionaryCodes, statusDictionaryCode)
 	}
-	if store.createdVersion.Version == "" {
+	if runner.createdVersion.Version == "" {
 		t.Fatal("createdVersion.Version is empty, want import audit version")
 	}
 }
 
-func TestImportVersionRejectsInvalidDictionaryBeforeWritingCatalog(t *testing.T) {
+func TestImportVersionRejectsInvalidDictionaryBeforeWriting(t *testing.T) {
 	store := &storeSpy{}
-	catalog := &versionCatalogSpy{}
-	uc := usecase.New(store, usecase.WithVersionCatalog(catalog))
+	runner := &importRunnerSpy{}
+	uc := usecase.New(store, usecase.WithVersionCatalog(&versionCatalogSpy{}), usecase.WithImportRunner(runner))
 
 	_, err := uc.ImportVersion(context.Background(), usecase.VersionBundle{
 		Version: usecase.VersionInfo{Code: "v2.0.0", Name: "权限包"},
@@ -414,14 +452,49 @@ func TestImportVersionRejectsInvalidDictionaryBeforeWritingCatalog(t *testing.T)
 	if !ok || def.Kind != apperr.KindBadRequest {
 		t.Fatalf("ImportVersion() kind = %v, want %s", def.Kind, apperr.KindBadRequest)
 	}
-	if len(catalog.importMenus) != 0 {
-		t.Fatalf("importMenus = %d, want 0", len(catalog.importMenus))
+	if len(runner.importedMenus) != 0 {
+		t.Fatalf("importedMenus = %d, want 0", len(runner.importedMenus))
 	}
-	if len(store.createdDictionaries) != 0 {
-		t.Fatalf("createdDictionaries = %d, want 0", len(store.createdDictionaries))
+	if len(runner.replacedDictionaryCodes) != 0 {
+		t.Fatalf("replacedDictionaryCodes = %v, want none", runner.replacedDictionaryCodes)
 	}
-	if store.createdVersion.Version != "" {
-		t.Fatalf("createdVersion = %q, want empty", store.createdVersion.Version)
+	if runner.createdVersion.Version != "" {
+		t.Fatalf("createdVersion = %q, want empty", runner.createdVersion.Version)
+	}
+}
+
+// TestImportVersionStopsOnFailure locks the step order inside the import
+// transaction: when menu import, dictionary replacement, or version creation
+// fails, every later step is skipped so the whole import rolls back together.
+func TestImportVersionStopsOnFailure(t *testing.T) {
+	bundle := usecase.VersionBundle{
+		Version:      usecase.VersionInfo{Code: "v2.0.0", Name: "权限包"},
+		Menus:        []usecase.VersionMenu{{Name: "角色权限", Path: "/roles", Active: true}},
+		Dictionaries: []usecase.VersionDictionary{{Code: statusDictionaryCode, Name: "状态"}},
+	}
+	tests := []struct {
+		name   string
+		runner *importRunnerSpy
+	}{
+		{"menu import failure", &importRunnerSpy{failOnMenus: true}},
+		{"dictionary replace failure", &importRunnerSpy{failDictionaryCode: statusDictionaryCode}},
+		{"version create failure", &importRunnerSpy{failOnVersion: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := usecase.New(&storeSpy{}, usecase.WithImportRunner(tt.runner))
+
+			_, err := uc.ImportVersion(context.Background(), bundle)
+			if err == nil {
+				t.Fatal("ImportVersion() error = nil, want import failure")
+			}
+			if tt.runner.createdVersion.Version != "" {
+				t.Fatalf("createdVersion = %q, want empty", tt.runner.createdVersion.Version)
+			}
+			if tt.name == "menu import failure" && len(tt.runner.replacedDictionaryCodes) != 0 {
+				t.Fatalf("replacedDictionaryCodes = %v, want none", tt.runner.replacedDictionaryCodes)
+			}
+		})
 	}
 }
 
@@ -612,7 +685,6 @@ func mustParamNoT(id int64, name, key, value, desc string) (settingsdomain.Syste
 type versionCatalogSpy struct {
 	menus         []usecase.VersionMenu
 	exportMenuIDs []int64
-	importMenus   []usecase.VersionMenu
 }
 
 func (s *versionCatalogSpy) ExportVersionMenus(_ context.Context, ids []int64) ([]usecase.VersionMenu, error) {
@@ -620,9 +692,44 @@ func (s *versionCatalogSpy) ExportVersionMenus(_ context.Context, ids []int64) (
 	return s.menus, nil
 }
 
-func (s *versionCatalogSpy) ImportVersionMenus(_ context.Context, menus []usecase.VersionMenu) error {
-	s.importMenus = append([]usecase.VersionMenu(nil), menus...)
+// importRunnerSpy records the import steps executed through the transaction so
+// tests can assert the step order and the skip-after-failure behavior.
+type importRunnerSpy struct {
+	failOnMenus        bool
+	failDictionaryCode string // empty means never fail; otherwise the code that fails
+	failOnVersion      bool
+
+	importedMenus           []usecase.VersionMenu
+	replacedDictionaryCodes []string
+	createdVersion          settingsdomain.SystemVersion
+}
+
+func (s *importRunnerSpy) RunImport(ctx context.Context, fn func(context.Context, usecase.ImportTransaction) error) error {
+	return fn(ctx, s)
+}
+
+func (s *importRunnerSpy) ImportMenus(_ context.Context, menus []usecase.VersionMenu) error {
+	s.importedMenus = append([]usecase.VersionMenu(nil), menus...)
+	if s.failOnMenus {
+		return errors.New("menu import failed")
+	}
 	return nil
+}
+
+func (s *importRunnerSpy) ReplaceDictionary(_ context.Context, dictionary settingsdomain.Dictionary) error {
+	s.replacedDictionaryCodes = append(s.replacedDictionaryCodes, dictionary.Code)
+	if s.failDictionaryCode != "" && dictionary.Code == s.failDictionaryCode {
+		return errors.New("replace dictionary failed")
+	}
+	return nil
+}
+
+func (s *importRunnerSpy) CreateVersion(_ context.Context, version settingsdomain.SystemVersion) (settingsdomain.SystemVersion, error) {
+	if s.failOnVersion {
+		return settingsdomain.SystemVersion{}, errors.New("create version failed")
+	}
+	s.createdVersion = version
+	return version, nil
 }
 
 func sameInt64s(got, want []int64) bool {

@@ -265,22 +265,51 @@ func (s *Store) DeleteDictionary(ctx context.Context, code string) error {
 		return err
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var dictionary dictionaryModel
-		if err := tx.First(&dictionary, "code = ?", code).Error; err != nil {
-			return mapReadError(err, "dictionary", "find dictionary")
-		}
-		if err := tx.Delete(&dictionaryItemModel{}, "dictionary_id = ?", dictionary.ID).Error; err != nil {
-			return apperr.WrapDatabase(err, "delete dictionary items")
-		}
-		result := tx.Delete(&dictionaryModel{}, "id = ?", dictionary.ID)
-		if result.Error != nil {
-			return apperr.WrapDatabase(result.Error, "delete dictionary")
-		}
-		if result.RowsAffected == 0 {
-			return apperr.NewNotFound("dictionary")
-		}
-		return nil
+		return deleteDictionary(ctx, tx, code)
 	})
+}
+
+// ReplaceDictionary removes any dictionary stored under code and creates the
+// replacement in its place. It runs on the receiver's db, so the outer import
+// transaction scopes it; a missing dictionary is not an error.
+func (s *Store) ReplaceDictionary(ctx context.Context, dictionary domain.Dictionary) (domain.Dictionary, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Dictionary{}, err
+	}
+	if err := deleteDictionary(ctx, s.db, dictionary.Code); err != nil && !isNotFound(err) {
+		return domain.Dictionary{}, err
+	}
+	now := time.Now().UTC()
+	model := dictionaryModelFromDomain(dictionary, now)
+	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return domain.Dictionary{}, mapWriteError(err, "dictionary code already exists", "replace dictionary")
+	}
+	return s.findDictionaryByCode(ctx, model.Code)
+}
+
+// deleteDictionary removes one dictionary and its items on db and reports a
+// missing dictionary as not-found.
+func deleteDictionary(ctx context.Context, db *gorm.DB, code string) error {
+	var dictionary dictionaryModel
+	if err := db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
+		return mapReadError(err, "dictionary", "find dictionary")
+	}
+	if err := db.WithContext(ctx).Delete(&dictionaryItemModel{}, "dictionary_id = ?", dictionary.ID).Error; err != nil {
+		return apperr.WrapDatabase(err, "delete dictionary items")
+	}
+	result := db.WithContext(ctx).Delete(&dictionaryModel{}, "id = ?", dictionary.ID)
+	if result.Error != nil {
+		return apperr.WrapDatabase(result.Error, "delete dictionary")
+	}
+	if result.RowsAffected == 0 {
+		return apperr.NewNotFound("dictionary")
+	}
+	return nil
+}
+
+func isNotFound(err error) bool {
+	appErr, ok := apperr.Parse(err)
+	return ok && appErr.Code() == apperr.ErrNotFound
 }
 
 // AddDictionaryItem inserts one dictionary item under code.

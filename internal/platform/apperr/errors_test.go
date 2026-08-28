@@ -147,7 +147,7 @@ func TestNewInfoConflict(t *testing.T) {
 }
 
 func TestNewInfoMethodNotAllowed(t *testing.T) {
-	err := NewMethodNotAllowed("")
+	err := New(ErrMethodNotAllowed, "")
 	info := NewInfo(err)
 
 	if info.Kind != KindMethodNotAllowed {
@@ -258,12 +258,6 @@ func TestParse(t *testing.T) {
 func TestWrapHelpers(t *testing.T) {
 	if err := WrapDatabase(nil, "query"); err != nil {
 		t.Fatalf("WrapDatabase(nil) = %v, want nil", err)
-	}
-	if err := WrapRedis(nil, "get"); err != nil {
-		t.Fatalf("WrapRedis(nil) = %v, want nil", err)
-	}
-	if err := WrapKafka(nil, "publish"); err != nil {
-		t.Fatalf("WrapKafka(nil) = %v, want nil", err)
 	}
 	if err := Wrap(nil, ErrForbidden, "access denied"); err != nil {
 		t.Fatalf("Wrap(nil) = %v, want nil", err)

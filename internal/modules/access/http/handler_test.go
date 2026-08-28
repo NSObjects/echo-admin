@@ -14,6 +14,7 @@ import (
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	accesshttp "github.com/NSObjects/echo-admin/internal/modules/access/http"
 	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
@@ -245,7 +246,7 @@ func newAccessEcho() (*echo.Echo, *accessStore, *operationRecorder) {
 	store := &accessStore{}
 	uc := accessusecase.New(store, accessAdminRoleReader{})
 	recorder := &operationRecorder{}
-	handler := accesshttp.New(uc, recorder)
+	handler := accesshttp.New(uc, oprec.New(recorder))
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}

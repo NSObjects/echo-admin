@@ -54,6 +54,15 @@ func New(store Store, admins AdminRoleReader) *Usecase {
 	return &Usecase{store: store, admins: admins}
 }
 
+// WithStore returns a shallow copy of the usecase bound to store. The
+// composition root uses it to run menu imports on a transaction-scoped store;
+// the copy shares no mutable state with the receiver.
+func (u *Usecase) WithStore(store Store) *Usecase {
+	bound := *u
+	bound.store = store
+	return &bound
+}
+
 // RoleInput carries mutable role fields.
 type RoleInput struct {
 	ParentID    int64

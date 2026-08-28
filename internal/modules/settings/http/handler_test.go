@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	settingsdomain "github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 	settingshttp "github.com/NSObjects/echo-admin/internal/modules/settings/http"
@@ -253,15 +254,45 @@ func TestBatchDeleteVersionsRecordsOperation(t *testing.T) {
 
 func newSettingsEcho() (*echo.Echo, *settingsStore, *operationRecorder) {
 	store := &settingsStore{}
-	uc := settingsusecase.New(store)
+	uc := settingsusecase.New(store, settingsusecase.WithImportRunner(settingsImportRunner{store: store}))
 	recorder := &operationRecorder{}
-	handler := settingshttp.New(uc, recorder)
+	handler := settingshttp.New(uc, oprec.New(recorder))
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	settingshttp.Register(e.Group("/api"), handler)
 	return e, store, recorder
+}
+
+// settingsImportRunner mimics the boot runner without a database: dictionary
+// replaces and version creates delegate straight to the fake store.
+type settingsImportRunner struct {
+	store *settingsStore
+}
+
+func (r settingsImportRunner) RunImport(ctx context.Context, fn func(context.Context, settingsusecase.ImportTransaction) error) error {
+	return fn(ctx, settingsImportTx(r))
+}
+
+type settingsImportTx struct {
+	store *settingsStore
+}
+
+func (t settingsImportTx) ImportMenus(context.Context, []settingsusecase.VersionMenu) error {
+	return nil
+}
+
+func (t settingsImportTx) ReplaceDictionary(ctx context.Context, dictionary settingsdomain.Dictionary) error {
+	if err := t.store.DeleteDictionary(ctx, dictionary.Code); err != nil {
+		return err
+	}
+	_, err := t.store.CreateDictionary(ctx, dictionary)
+	return err
+}
+
+func (t settingsImportTx) CreateVersion(ctx context.Context, version settingsdomain.SystemVersion) (settingsdomain.SystemVersion, error) {
+	return t.store.CreateVersion(ctx, version)
 }
 
 func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {

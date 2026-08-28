@@ -30,9 +30,16 @@ type AdminReader interface {
 	AdminSnapshot(context.Context, int64) (AdminSnapshot, error)
 }
 
-// RolePolicy checks whether the active role may act as a root token issuer.
+// RoleView is the access-owned role state that token policy decisions need.
+type RoleView struct {
+	IsSuper bool
+}
+
+// RolePolicy reads the active role's policy state for token issuance and
+// visibility decisions. It stays a structured projection instead of a bare
+// bool so future policy fields extend it without reshaping the bridge.
 type RolePolicy interface {
-	RoleIsSuper(context.Context, int64) (bool, error)
+	RoleView(context.Context, int64) (RoleView, error)
 }
 
 // SecretSource generates a raw API token secret.

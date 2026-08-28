@@ -68,11 +68,6 @@ func Wrap(err error, code int, message string) error {
 	return wrapOrNew(err, code, message)
 }
 
-// Wrapf adds an application code and formatted safe message to err.
-func Wrapf(err error, code int, format string, args ...interface{}) error {
-	return wrapOrNewf(err, code, format, args...)
-}
-
 func wrapIfError(err error, code int, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
@@ -86,14 +81,6 @@ func wrapOrNew(err error, code int, message string) error {
 	if err == nil {
 		return nil
 	}
-	return newError(code, message, joinDetail(message, err), err)
-}
-
-func wrapOrNewf(err error, code int, format string, args ...interface{}) error {
-	if err == nil {
-		return nil
-	}
-	message := fmt.Sprintf(format, args...)
 	return newError(code, message, joinDetail(message, err), err)
 }
 
@@ -157,21 +144,6 @@ func WrapDatabase(err error, operation string) error {
 	return wrapIfError(err, ErrDatabase, "database %s failed", operation)
 }
 
-// WrapRedis wraps Redis errors.
-func WrapRedis(err error, operation string) error {
-	return wrapIfError(err, ErrRedis, "redis %s failed", operation)
-}
-
-// WrapKafka wraps Kafka errors.
-func WrapKafka(err error, operation string) error {
-	return wrapIfError(err, ErrKafka, "kafka %s failed", operation)
-}
-
-// WrapExternal wraps external service errors.
-func WrapExternal(err error, service, operation string) error {
-	return wrapIfError(err, ErrExternalService, "external service %s %s failed", service, operation)
-}
-
 // WrapBadRequest wraps a bad request error.
 func WrapBadRequest(err error, message string) error {
 	return wrapOrNew(err, ErrBadRequest, message)
@@ -212,24 +184,9 @@ func NewValidation(field, message string) error {
 	return newError(ErrValidation, message, fmt.Sprintf("validation failed for field %s: %s", field, message), nil)
 }
 
-// NewTokenInvalid creates an invalid-token error.
-func NewTokenInvalid() error {
-	return New(ErrTokenInvalid, "token is invalid")
-}
-
-// NewTokenExpired creates an expired-token error.
-func NewTokenExpired() error {
-	return New(ErrExpired, "token is expired")
-}
-
 // NewUnauthorized creates an unauthorized error.
 func NewUnauthorized() error {
 	return New(ErrUnauthorized, "unauthorized")
-}
-
-// NewForbidden creates a forbidden error.
-func NewForbidden() error {
-	return New(ErrForbidden, "forbidden")
 }
 
 // NewPermissionDenied creates a permission-denied error.
@@ -240,11 +197,6 @@ func NewPermissionDenied(resource, action string) error {
 // NewNotFound creates a not found error for resource.
 func NewNotFound(resource string) error {
 	return Newf(ErrNotFound, "%s not found", resource)
-}
-
-// NewMethodNotAllowed creates a method-not-allowed error.
-func NewMethodNotAllowed(message string) error {
-	return New(ErrMethodNotAllowed, message)
 }
 
 // NewConflict creates a conflict error.

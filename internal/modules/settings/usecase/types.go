@@ -36,16 +36,32 @@ type Store interface {
 	DeleteVersions(context.Context, []int64) error
 }
 
-// VersionCatalog imports and exports access-owned resources for version bundles.
+// VersionCatalog exports access-owned resources for version bundles.
 type VersionCatalog interface {
 	ExportVersionMenus(context.Context, []int64) ([]VersionMenu, error)
-	ImportVersionMenus(context.Context, []VersionMenu) error
+}
+
+// ImportRunner executes version and dictionary imports inside one database
+// transaction so a failed import leaves stored menus, dictionaries, and
+// version records unchanged.
+type ImportRunner interface {
+	RunImport(context.Context, func(context.Context, ImportTransaction) error) error
+}
+
+// ImportTransaction contains the write capabilities required inside an import
+// transaction. Implementations must apply every write to the same
+// transaction-scoped storage.
+type ImportTransaction interface {
+	ImportMenus(context.Context, []VersionMenu) error
+	ReplaceDictionary(context.Context, domain.Dictionary) error
+	CreateVersion(context.Context, domain.SystemVersion) (domain.SystemVersion, error)
 }
 
 // Usecase coordinates system setting and dictionary rules.
 type Usecase struct {
 	store   Store
 	catalog VersionCatalog
+	imports ImportRunner
 }
 
 // Option customizes settings usecase dependencies.
@@ -55,6 +71,13 @@ type Option func(*Usecase)
 func WithVersionCatalog(catalog VersionCatalog) Option {
 	return func(u *Usecase) {
 		u.catalog = catalog
+	}
+}
+
+// WithImportRunner installs the transactional runner used by import workflows.
+func WithImportRunner(runner ImportRunner) Option {
+	return func(u *Usecase) {
+		u.imports = runner
 	}
 }
 

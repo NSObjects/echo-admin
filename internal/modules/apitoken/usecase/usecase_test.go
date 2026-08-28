@@ -300,8 +300,8 @@ type rolePolicy struct {
 	super map[int64]bool
 }
 
-func (p rolePolicy) RoleIsSuper(_ context.Context, roleID int64) (bool, error) {
-	return p.super[roleID], nil
+func (p rolePolicy) RoleView(_ context.Context, roleID int64) (usecase.RoleView, error) {
+	return usecase.RoleView{IsSuper: p.super[roleID]}, nil
 }
 
 func mustToken(t *testing.T, id, adminID, roleID int64, active bool, expiresAt time.Time) apitokendomain.APIToken {

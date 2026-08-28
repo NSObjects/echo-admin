@@ -15,6 +15,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	filedomain "github.com/NSObjects/echo-admin/internal/modules/fileasset/domain"
 	filehttp "github.com/NSObjects/echo-admin/internal/modules/fileasset/http"
@@ -104,8 +105,12 @@ func TestImportURLRejectsUnsafeURLBeforeStore(t *testing.T) {
 	if store.createCalls != 0 {
 		t.Fatalf("createCalls = %d, want 0", store.createCalls)
 	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
+	// Failed operations are audited too, marked unsuccessful.
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1 failed record", len(recorder.records))
+	}
+	if recorder.records[0].Success {
+		t.Fatal("operation record Success = true, want false for rejected import")
 	}
 }
 
@@ -218,8 +223,12 @@ func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
 	if store.deletedCategoryID != 0 {
 		t.Fatalf("deleted category id = %d, want 0", store.deletedCategoryID)
 	}
-	if len(recorder.records) != 0 {
-		t.Fatalf("operation records = %d, want 0", len(recorder.records))
+	// Failed operations are audited too, marked unsuccessful.
+	if len(recorder.records) != 1 {
+		t.Fatalf("operation records = %d, want 1 failed record", len(recorder.records))
+	}
+	if recorder.records[0].Success {
+		t.Fatal("operation record Success = true, want false for rejected delete")
 	}
 }
 
@@ -229,7 +238,7 @@ func newFileEcho(t *testing.T) (*echo.Echo, *fileStore, *operationRecorder, stri
 	uc := fileusecase.New(store)
 	recorder := &operationRecorder{}
 	uploadDir := t.TempDir()
-	handler := filehttp.New(uc, recorder, uploadDir)
+	handler := filehttp.New(uc, oprec.New(recorder), uploadDir)
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}

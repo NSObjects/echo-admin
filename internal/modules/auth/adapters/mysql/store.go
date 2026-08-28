@@ -171,7 +171,7 @@ func (s *Store) CheckLoginAttempt(ctx context.Context, key string, now time.Time
 	}
 	now = now.UTC()
 	if attempt.LockedUntil != nil && attempt.LockedUntil.After(now) {
-		return apperr.New(apperr.ErrTooManyAttempts, "too many login attempts")
+		return apperr.New(apperr.ErrTooManyAttempts, "尝试次数过多，请稍后再试")
 	}
 	if loginAttemptExpired(attempt, now) {
 		return s.ResetLoginAttempts(ctx, key)

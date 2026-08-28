@@ -2,35 +2,28 @@
 package identityhttp
 
 import (
-	"context"
 	"strconv"
 
 	"github.com/labstack/echo/v5"
 
-	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	"github.com/NSObjects/echo-admin/internal/modules/identity/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
-	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
 const defaultPageSize = 20
 
-// OperationRecorder records administrator mutations for audit.
-type OperationRecorder interface {
-	RecordOperation(context.Context, auditusecase.OperationInput) (auditusecase.OperationLog, error)
-}
-
 // Handler adapts administrator HTTP requests to the identity usecase.
 type Handler struct {
-	usecase   *usecase.Usecase
-	operation OperationRecorder
+	usecase *usecase.Usecase
+	audit   *oprec.Recorder
 }
 
 // New creates an identity HTTP handler.
-func New(uc *usecase.Usecase, operation OperationRecorder) *Handler {
-	return &Handler{usecase: uc, operation: operation}
+func New(uc *usecase.Usecase, audit *oprec.Recorder) *Handler {
+	return &Handler{usecase: uc, audit: audit}
 }
 
 // Register mounts administrator routes on group.
@@ -77,10 +70,8 @@ func (h *Handler) CreateAdmin(c *echo.Context) error {
 		ActiveRoleID: req.ActiveRoleID,
 		Active:       req.Active,
 	})
+	err = h.audit.Record(c, "create", "admin", strconv.FormatInt(admin.ID, 10), "created admin", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "create", "admin", strconv.FormatInt(admin.ID, 10), "created admin"); err != nil {
 		return err
 	}
 	return httpresp.Created(c, admin)
@@ -108,10 +99,8 @@ func (h *Handler) UpdateAdmin(c *echo.Context) error {
 		ActiveRoleID: req.ActiveRoleID,
 		Active:       req.Active,
 	})
+	err = h.audit.Record(c, "update", "admin", strconv.FormatInt(admin.ID, 10), "updated admin", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "update", "admin", strconv.FormatInt(admin.ID, 10), "updated admin"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, admin)
@@ -126,10 +115,9 @@ func (h *Handler) DeleteAdmin(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.usecase.Delete(c.Request().Context(), id); err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "delete", "admin", strconv.FormatInt(id, 10), "deleted admin"); err != nil {
+	err = h.usecase.Delete(c.Request().Context(), id)
+	err = h.audit.Record(c, "delete", "admin", strconv.FormatInt(id, 10), "deleted admin", err)
+	if err != nil {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
@@ -168,37 +156,15 @@ func (h *Handler) SetRoleAdmins(c *echo.Context) error {
 		RoleID:   id,
 		AdminIDs: req.AdminIDs,
 	})
+	err = h.audit.Record(c, "set_admins", "role", strconv.FormatInt(id, 10), "updated role admins", err)
 	if err != nil {
-		return err
-	}
-	if err := h.recordOperation(c, "set_admins", "role", strconv.FormatInt(id, 10), "updated role admins"); err != nil {
 		return err
 	}
 	return httpresp.OK(c, adminIDsResponse{AdminIDs: adminIDs})
 }
 
-func (h *Handler) recordOperation(c *echo.Context, action, resource, resourceID, message string) error {
-	actorID, err := strconv.ParseInt(requestctx.GetUserID(c.Request().Context()), 10, 64)
-	if err != nil {
-		return apperr.NewUnauthorized()
-	}
-	_, err = h.operation.RecordOperation(c.Request().Context(), auditusecase.OperationInput{
-		ActorID:    actorID,
-		Action:     action,
-		Resource:   resource,
-		ResourceID: resourceID,
-		Method:     c.Request().Method,
-		Path:       c.Path(),
-		IP:         c.RealIP(),
-		UserAgent:  c.Request().UserAgent(),
-		Success:    true,
-		Message:    message,
-	})
-	return err
-}
-
 func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.operation == nil {
+	if h == nil || h.usecase == nil || h.audit == nil {
 		return apperr.New(apperr.ErrInternalServer, "identity handler is not configured")
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
+	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	identityhttp "github.com/NSObjects/echo-admin/internal/modules/identity/http"
@@ -99,7 +100,7 @@ func newIdentityEcho() (*echo.Echo, *identityStore, *operationRecorder) {
 	store := &identityStore{}
 	uc := identityusecase.New(store, identityRoleScope{}, identitySessionRevoker{})
 	recorder := &operationRecorder{}
-	handler := identityhttp.New(uc, recorder)
+	handler := identityhttp.New(uc, oprec.New(recorder))
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
