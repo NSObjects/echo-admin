@@ -118,7 +118,7 @@ func scopedManagerUsecaseWithStore(t *testing.T) (*usecase.Usecase, context.Cont
 	if err != nil {
 		t.Fatalf("RestoreRole(manager) error = %v", err)
 	}
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
@@ -132,7 +132,7 @@ func scopedManagerUsecaseWithStore(t *testing.T) (*usecase.Usecase, context.Cont
 
 func TestVisibleRoleIDsUsesDataAuthorityInsideDelegationScope(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2, 3, 4}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2, 3, 4}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
@@ -164,7 +164,7 @@ func TestVisibleRoleIDsUsesDataAuthorityInsideDelegationScope(t *testing.T) {
 
 func TestCopyRoleCopiesSourceGrants(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
@@ -219,7 +219,7 @@ func assertCopiedRole(t *testing.T, gotRole, wantRole accessdomain.Role) {
 
 func TestDeleteRoleRejectsAssignedRole(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
@@ -241,7 +241,7 @@ func TestDeleteRoleRejectsAssignedRole(t *testing.T) {
 
 func TestDeleteRoleDeletesLeafRole(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
@@ -262,7 +262,7 @@ func TestDeleteRoleDeletesLeafRole(t *testing.T) {
 
 func TestDeleteMenuRejectsAssignedMenu(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{2}, []int64{1}, []int64{1}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
+	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{2}, []int64{1}, []int64{1}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(role) error = %v", err)
 	}
@@ -284,7 +284,7 @@ func TestDeleteMenuRejectsAssignedMenu(t *testing.T) {
 
 func TestDeleteMenuRejectsAssignedMenuButton(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), nil, nil, []int64{7}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
+	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), nil, nil, []int64{7}, []int64{1}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(role) error = %v", err)
 	}
@@ -327,7 +327,7 @@ func TestDeleteMenuDeletesUnassignedLeafMenu(t *testing.T) {
 
 func TestSetMenuRolesUpdatesRoleGrants(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}
@@ -357,7 +357,7 @@ func TestSetMenuRolesUpdatesRoleGrants(t *testing.T) {
 
 func TestSetAPIRolesRejectsAPIOutsideActiveGrantScope(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), []int64{1}, []int64{1, 2}, []int64{1}, []int64{1, 2, 3}, accessdomain.DefaultRolePath, true, now, now)
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1, 2}, []int64{1}, []int64{1, 2, 3}, accessdomain.DefaultRolePath, true, now, now)
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}

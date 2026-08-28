@@ -300,7 +300,7 @@ func (s *accessStore) ListAllRoles(ctx context.Context) ([]accessdomain.Role, er
 	if len(s.roles) > 0 {
 		return s.roles, nil
 	}
-	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessusecase.AllPermissions(), []int64{1}, []int64{1}, []int64{1}, []int64{1}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
+	role, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func (accessAdminRoleReader) RoleAssigned(context.Context, int64) (bool, error) 
 
 func twoRoles(t *testing.T) []accessdomain.Role {
 	t.Helper()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessusecase.AllPermissions(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
+	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, fixedTime(), fixedTime())
 	if err != nil {
 		t.Fatalf("RestoreRole(root) error = %v", err)
 	}

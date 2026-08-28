@@ -13,16 +13,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
 
-// AllPermissions returns the current foundation permission set.
-func AllPermissions() []string {
-	catalog := domain.PermissionCatalog()
-	out := make([]string, 0, len(catalog))
-	for _, permission := range catalog {
-		out = append(out, permission.Token)
-	}
-	return out
-}
-
 // ListPermissions returns grant metadata for role editing UIs.
 func (u *Usecase) ListPermissions(ctx context.Context) ([]PermissionDefinition, error) {
 	if err := u.ready(); err != nil {

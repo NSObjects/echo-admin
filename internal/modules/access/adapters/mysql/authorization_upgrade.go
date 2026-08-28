@@ -60,7 +60,7 @@ func (s *Store) upgradeManagedAPIRouteCatalogData(ctx context.Context) error {
 	if _, _, err := s.seedMenus(ctx); err != nil {
 		return err
 	}
-	permissionTokens := permissionCatalogTokens()
+	permissionTokens := domain.PermissionCatalogTokens()
 	if err := s.deleteRetiredAuthorizationRows(ctx, permissionTokens, apiIDs); err != nil {
 		return err
 	}
@@ -172,18 +172,9 @@ func (s *Store) upgradeRoleAuthorization(ctx context.Context, catalog authorizat
 	return nil
 }
 
-func permissionCatalogTokens() []string {
-	definitions := domain.PermissionCatalog()
-	tokens := make([]string, 0, len(definitions))
-	for _, definition := range definitions {
-		tokens = append(tokens, definition.Token)
-	}
-	return tokens
-}
-
 func upgradeRolePermissions(current []string) []string {
 	allowed := make(map[string]struct{})
-	for _, token := range permissionCatalogTokens() {
+	for _, token := range domain.PermissionCatalogTokens() {
 		allowed[token] = struct{}{}
 	}
 	out := make([]string, 0, len(current)+2)

@@ -59,6 +59,19 @@ func TestRestoreMenuNormalizesMetaAndButtons(t *testing.T) {
 	}
 }
 
+func TestPermissionCatalogTokensMatchesCatalog(t *testing.T) {
+	catalog := PermissionCatalog()
+	tokens := PermissionCatalogTokens()
+	if len(tokens) != len(catalog) {
+		t.Fatalf("PermissionCatalogTokens() length = %d, want %d", len(tokens), len(catalog))
+	}
+	for index, definition := range catalog {
+		if tokens[index] != definition.Token {
+			t.Fatalf("PermissionCatalogTokens()[%d] = %q, want %q", index, tokens[index], definition.Token)
+		}
+	}
+}
+
 func TestPermissionCatalogCoversFoundationPermissions(t *testing.T) {
 	catalog := map[string]struct{}{}
 	for _, permission := range PermissionCatalog() {

@@ -11,7 +11,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/domain"
-	"github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysqljson"
 )
@@ -528,7 +527,7 @@ func (s *Store) seedSuperAdminRole(ctx context.Context, menuIDs, apiIDs, buttonI
 	if err == nil {
 		existing.ParentID = 0
 		existing.Name = "超级管理员"
-		existing.Permissions = mysqljson.Strings(usecase.AllPermissions())
+		existing.Permissions = mysqljson.Strings(domain.PermissionCatalogTokens())
 		existing.MenuIDs = mysqljson.Int64s(menuIDs)
 		existing.APIIDs = mysqljson.Int64s(apiIDs)
 		existing.ButtonIDs = mysqljson.Int64s(buttonIDs)
@@ -544,7 +543,7 @@ func (s *Store) seedSuperAdminRole(ctx context.Context, menuIDs, apiIDs, buttonI
 		return apperr.WrapDatabase(err, "find seed role")
 	}
 	now := time.Now().UTC()
-	role, err := domain.RestoreRole(0, 0, domain.RoleCodeSuperAdmin, "超级管理员", usecase.AllPermissions(), menuIDs, apiIDs, buttonIDs, roleIDs, domain.DefaultRolePath, true, now, now)
+	role, err := domain.RestoreRole(0, 0, domain.RoleCodeSuperAdmin, "超级管理员", domain.PermissionCatalogTokens(), menuIDs, apiIDs, buttonIDs, roleIDs, domain.DefaultRolePath, true, now, now)
 	if err != nil {
 		return err
 	}

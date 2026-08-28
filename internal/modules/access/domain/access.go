@@ -85,6 +85,18 @@ func PermissionCatalog() []PermissionDefinition {
 	return append([]PermissionDefinition(nil), permissionCatalog...)
 }
 
+// PermissionCatalogTokens returns the token projection of the permission
+// catalog for seed and authorization upgrade writes. Each call builds a
+// fresh slice so callers cannot mutate the catalog through it.
+func PermissionCatalogTokens() []string {
+	definitions := PermissionCatalog()
+	tokens := make([]string, 0, len(definitions))
+	for _, definition := range definitions {
+		tokens = append(tokens, definition.Token)
+	}
+	return tokens
+}
+
 // Access validation errors.
 var (
 	ErrInvalidRoleID      = errors.New("invalid role id")

@@ -10,7 +10,7 @@ import (
 
 func planUpgradeCatalog() authorizationCatalog {
 	return authorizationCatalog{
-		permissionTokens: permissionCatalogTokens(),
+		permissionTokens: domain.PermissionCatalogTokens(),
 		apiIDs:           []int64{1, 2, 3},
 		menuIDs:          []int64{10, 20},
 		buttonIDs:        []int64{100, 200},
