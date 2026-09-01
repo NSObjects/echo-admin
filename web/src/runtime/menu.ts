@@ -67,7 +67,12 @@ export function filterMenuDataByGrantedMenus(
   // reachable in the navigation instead of hiding an otherwise valid grant.
   for (const menu of visibleMenus) {
     if (rendered.has(menu.id)) continue;
-    const item = buildNavigationItem(menu, childrenByParent, routeByPath, rendered);
+    const item = buildNavigationItem(
+      menu,
+      childrenByParent,
+      routeByPath,
+      rendered,
+    );
     if (item) out.push(item);
   }
   return out;
@@ -105,7 +110,12 @@ function buildNavigationItems(
 ): NavigationItem[] {
   const out: NavigationItem[] = [];
   for (const menu of menus) {
-    const item = buildNavigationItem(menu, childrenByParent, routeByPath, rendered);
+    const item = buildNavigationItem(
+      menu,
+      childrenByParent,
+      routeByPath,
+      rendered,
+    );
     if (item) out.push(item);
   }
   return out;
@@ -142,6 +152,12 @@ function buildNavigationItem(
     ...route,
     icon: normalizeMenuIcon(route.icon ?? menu.icon),
   };
+}
+
+/** 按菜单 icon 字段解析对应的 antd 图标元素；无法识别时返回 undefined，由调用方兜底。 */
+export function menuIconElement(name?: string): React.ReactNode {
+  const Icon = name ? menuIconComponents[name] : undefined;
+  return Icon ? React.createElement(Icon) : undefined;
 }
 
 function routeNameFromPath(path: string): string {
