@@ -19,6 +19,7 @@ import (
 	authmysql "github.com/NSObjects/echo-admin/internal/modules/auth/adapters/mysql"
 	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/fileasset/adapters/localstorage"
 	filemysql "github.com/NSObjects/echo-admin/internal/modules/fileasset/adapters/mysql"
 	filehttp "github.com/NSObjects/echo-admin/internal/modules/fileasset/http"
 	fileusecase "github.com/NSObjects/echo-admin/internal/modules/fileasset/usecase"
@@ -525,7 +526,11 @@ func newFileUsecase(i do.Injector) (*fileusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fileusecase.New(store), nil
+	cfg, err := do.Invoke[configs.Config](i)
+	if err != nil {
+		return nil, err
+	}
+	return fileusecase.New(store, localstorage.New(cfg.Admin.UploadDir)), nil
 }
 
 func newFileHandler(i do.Injector) (*filehttp.Handler, error) {
@@ -537,11 +542,7 @@ func newFileHandler(i do.Injector) (*filehttp.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := do.Invoke[configs.Config](i)
-	if err != nil {
-		return nil, err
-	}
-	return filehttp.New(uc, oprec.New(audit), cfg.Admin.UploadDir), nil
+	return filehttp.New(uc, oprec.New(audit)), nil
 }
 
 func startupMySQL(i do.Injector) (context.Context, *gorm.DB, error) {

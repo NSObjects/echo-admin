@@ -3,6 +3,8 @@ package usecase
 
 import (
 	"context"
+	"io"
+	"io/fs"
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/modules/fileasset/domain"
@@ -11,6 +13,9 @@ import (
 const (
 	defaultPageSize = 20
 	maxPageSize     = 100
+
+	// defaultMaxUploadBytes bounds one uploaded file's byte size.
+	defaultMaxUploadBytes = 10 << 20
 )
 
 // Store persists uploaded file metadata and its operator-managed categories.
@@ -28,14 +33,54 @@ type Store interface {
 	CategoryNameExists(context.Context, string, int64, int64) (bool, error)
 }
 
-// Usecase coordinates uploaded file metadata rules.
-type Usecase struct {
-	store Store
+// FileStorage stores and retrieves uploaded file bytes. Stored names are
+// opaque to callers; UploadURL/StoredName translate between stored names and
+// the public URL space the adapter owns.
+type FileStorage interface {
+	Store(ctx context.Context, name, contentType string, src io.Reader, maxBytes int64) (storedName string, size int64, err error)
+	Open(ctx context.Context, storedName string) (fs.File, error)
+	Remove(ctx context.Context, storedName string) error
+	UploadURL(storedName string) string
+	StoredName(url string) string
 }
 
-// New creates a file asset usecase.
-func New(store Store) *Usecase {
-	return &Usecase{store: store}
+// FileSource is one uploaded file's bytes with delivery metadata.
+type FileSource struct {
+	Name        string
+	ContentType string
+	Reader      io.Reader
+}
+
+// Usecase coordinates uploaded file metadata and byte-storage rules.
+type Usecase struct {
+	store         Store
+	storage       FileStorage
+	maxUploadSize int64
+}
+
+// Option customizes the file asset usecase.
+type Option func(*Usecase)
+
+// WithMaxUploadBytes replaces the default upload size ceiling; tests use it
+// to exercise the limit without allocating default-sized inputs.
+func WithMaxUploadBytes(max int64) Option {
+	return func(u *Usecase) {
+		if max > 0 {
+			u.maxUploadSize = max
+		}
+	}
+}
+
+// New creates a file asset usecase over one metadata store and one byte
+// storage adapter.
+func New(store Store, storage FileStorage, opts ...Option) *Usecase {
+	u := &Usecase{store: store, storage: storage, maxUploadSize: defaultMaxUploadBytes}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(u)
+		}
+	}
+	return u
 }
 
 // FileInput carries an uploaded file record after the HTTP adapter stores bytes.

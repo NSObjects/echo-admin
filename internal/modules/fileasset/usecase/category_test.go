@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NSObjects/echo-admin/internal/modules/fileasset/adapters/memorystorage"
 	"github.com/NSObjects/echo-admin/internal/modules/fileasset/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
 func TestCreateCategoryRejectsDuplicateNameUnderSameParent(t *testing.T) {
 	store := &categoryStore{categoryNameTaken: true}
-	uc := New(store)
+	uc := New(store, memorystorage.New())
 
 	_, err := uc.CreateCategory(context.Background(), CategoryInput{Name: "合同"})
 	if code := appCode(t, err); code != apperr.ErrConflict {
@@ -27,7 +28,7 @@ func TestUpdateCategoryRejectsCycle(t *testing.T) {
 		mustUsecaseCategory(t, 1, 0, "合同"),
 		mustUsecaseCategory(t, 2, 1, "采购合同"),
 	}}
-	uc := New(store)
+	uc := New(store, memorystorage.New())
 
 	_, err := uc.UpdateCategory(context.Background(), UpdateCategoryInput{ID: 1, Name: "合同", ParentID: 2})
 	if code := appCode(t, err); code != apperr.ErrBadRequest {
@@ -43,7 +44,7 @@ func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
 		mustUsecaseCategory(t, 1, 0, "合同"),
 		mustUsecaseCategory(t, 2, 1, "采购合同"),
 	}}
-	uc := New(store)
+	uc := New(store, memorystorage.New())
 
 	err := uc.DeleteCategory(context.Background(), 1)
 	if code := appCode(t, err); code != apperr.ErrBadRequest {

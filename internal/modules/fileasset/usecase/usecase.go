@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net/url"
 	"path"
 	"strings"
@@ -13,23 +14,32 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
-// CreateFile stores uploaded file metadata.
-func (u *Usecase) CreateFile(ctx context.Context, input FileInput) (FileObject, error) {
+// CreateFile stores uploaded bytes and their metadata as one unit: when
+// metadata persistence fails after bytes were stored, the stored bytes are
+// removed so no orphaned upload survives.
+func (u *Usecase) CreateFile(ctx context.Context, input FileInput, source FileSource) (FileObject, error) {
 	if err := u.ready(); err != nil {
 		return FileObject{}, err
 	}
-	if categoryErr := u.ensureCategory(ctx, input.CategoryID); categoryErr != nil {
-		return FileObject{}, categoryErr
+	if source.Name == "" {
+		source.Name = input.Name
 	}
-	file, err := domain.RestoreFileObject(0, input.Name, input.URL, input.Size, input.ContentType, input.CategoryID, time.Time{})
-	if err != nil {
-		return FileObject{}, mapDomainError(err)
-	}
-	created, err := u.store.CreateFile(ctx, file)
+	storedName, size, err := u.storage.Store(ctx, source.Name, source.ContentType, source.Reader, u.maxUploadSize)
 	if err != nil {
 		return FileObject{}, err
 	}
-	return fromFile(created), nil
+	file, buildErr := domain.RestoreFileObject(0, source.Name, u.storage.UploadURL(storedName), size, source.ContentType, input.CategoryID, time.Time{})
+	if buildErr == nil {
+		created, storeErr := u.store.CreateFile(ctx, file)
+		if storeErr == nil {
+			return fromFile(created), nil
+		}
+		buildErr = storeErr
+	}
+	if removeErr := u.storage.Remove(ctx, storedName); removeErr != nil {
+		return FileObject{}, errors.Join(buildErr, removeErr)
+	}
+	return FileObject{}, buildErr
 }
 
 // ImportURL registers an external HTTP(S) URL as a file asset without fetching
@@ -117,7 +127,21 @@ func (u *Usecase) DeleteFile(ctx context.Context, id int64) (FileObject, error) 
 	if err := u.store.DeleteFile(ctx, id); err != nil {
 		return FileObject{}, err
 	}
+	if stored := u.storage.StoredName(file.URL); stored != "" {
+		if err := u.storage.Remove(ctx, stored); err != nil {
+			return FileObject{}, err
+		}
+	}
 	return fromFile(file), nil
+}
+
+// OpenUpload returns one stored upload for delivery after its stored name
+// has been validated.
+func (u *Usecase) OpenUpload(ctx context.Context, storedName string) (fs.File, error) {
+	if err := u.ready(); err != nil {
+		return nil, err
+	}
+	return u.storage.Open(ctx, storedName)
 }
 
 func (u *Usecase) ready() error {

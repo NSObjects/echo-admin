@@ -17,6 +17,7 @@ import (
 
 	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
+	"github.com/NSObjects/echo-admin/internal/modules/fileasset/adapters/localstorage"
 	filedomain "github.com/NSObjects/echo-admin/internal/modules/fileasset/domain"
 	filehttp "github.com/NSObjects/echo-admin/internal/modules/fileasset/http"
 	fileusecase "github.com/NSObjects/echo-admin/internal/modules/fileasset/usecase"
@@ -235,10 +236,10 @@ func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
 func newFileEcho(t *testing.T) (*echo.Echo, *fileStore, *operationRecorder, string) {
 	t.Helper()
 	store := &fileStore{}
-	uc := fileusecase.New(store)
-	recorder := &operationRecorder{}
 	uploadDir := t.TempDir()
-	handler := filehttp.New(uc, oprec.New(recorder), uploadDir)
+	uc := fileusecase.New(store, localstorage.New(uploadDir))
+	recorder := &operationRecorder{}
+	handler := filehttp.New(uc, oprec.New(recorder))
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
