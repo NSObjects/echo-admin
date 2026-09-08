@@ -77,3 +77,15 @@ func QueryBool(c *echo.Context, name string, fallback bool) (bool, error) {
 	}
 	return value, nil
 }
+
+// BindIDs binds and validates a batch-operation request body carrying IDs:
+// at least one ID and every ID positive.
+func BindIDs(c *echo.Context) ([]int64, error) {
+	var req struct {
+		IDs []int64 `json:"ids" validate:"required,min=1,dive,gt=0"`
+	}
+	if err := BindAndValidate(c, &req); err != nil {
+		return nil, err
+	}
+	return req.IDs, nil
+}

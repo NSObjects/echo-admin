@@ -171,3 +171,22 @@ func setResponseRequestID(c *echo.Context, requestID string) {
 func generateRequestID() string {
 	return uuid.NewString()
 }
+
+// Paginated renders a successful paginated list response envelope; invalid
+// pagination turns into the same bad-request error as NewPageMeta.
+func Paginated(c *echo.Context, data interface{}, page, pageSize, total int) error {
+	meta, err := NewPageMeta(page, pageSize, total)
+	if err != nil {
+		return err
+	}
+	return List(c, data, meta)
+}
+
+type deletedIDsData struct {
+	IDs []int64 `json:"ids"`
+}
+
+// DeletedIDs renders a successful batch-delete response echoing the IDs.
+func DeletedIDs(c *echo.Context, ids []int64) error {
+	return OK(c, deletedIDsData{IDs: ids})
+}

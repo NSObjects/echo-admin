@@ -5,7 +5,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
-	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
@@ -43,9 +42,6 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListOperationLogs returns operation logs.
 func (h *Handler) ListOperationLogs(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := listInput(c)
 	if err != nil {
 		return err
@@ -54,14 +50,11 @@ func (h *Handler) ListOperationLogs(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return paginated(c, output.Items, output.Page, output.PageSize, output.Total)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // ReadOperationLog returns one operation log.
 func (h *Handler) ReadOperationLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "operation log")
 	if err != nil {
 		return err
@@ -75,9 +68,6 @@ func (h *Handler) ReadOperationLog(c *echo.Context) error {
 
 // DeleteOperationLog removes one operation log.
 func (h *Handler) DeleteOperationLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "operation log")
 	if err != nil {
 		return err
@@ -85,26 +75,23 @@ func (h *Handler) DeleteOperationLog(c *echo.Context) error {
 	if err := h.usecase.DeleteOperationLogs(c.Request().Context(), []int64{id}); err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedResponse{IDs: []int64{id}})
+	return httpresp.DeletedIDs(c, []int64{id})
 }
 
 // BatchDeleteOperationLogs removes multiple operation logs.
 func (h *Handler) BatchDeleteOperationLogs(c *echo.Context) error {
-	ids, err := h.deleteIDs(c)
+	ids, err := deleteIDs(c)
 	if err != nil {
 		return err
 	}
 	if err := h.usecase.DeleteOperationLogs(c.Request().Context(), ids); err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedResponse{IDs: ids})
+	return httpresp.DeletedIDs(c, ids)
 }
 
 // ListLoginLogs returns login logs.
 func (h *Handler) ListLoginLogs(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := listInput(c)
 	if err != nil {
 		return err
@@ -113,14 +100,11 @@ func (h *Handler) ListLoginLogs(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return paginated(c, output.Items, output.Page, output.PageSize, output.Total)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // ReadLoginLog returns one login log.
 func (h *Handler) ReadLoginLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "login log")
 	if err != nil {
 		return err
@@ -134,9 +118,6 @@ func (h *Handler) ReadLoginLog(c *echo.Context) error {
 
 // DeleteLoginLog removes one login log.
 func (h *Handler) DeleteLoginLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "login log")
 	if err != nil {
 		return err
@@ -144,26 +125,23 @@ func (h *Handler) DeleteLoginLog(c *echo.Context) error {
 	if err := h.usecase.DeleteLoginLogs(c.Request().Context(), []int64{id}); err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedResponse{IDs: []int64{id}})
+	return httpresp.DeletedIDs(c, []int64{id})
 }
 
 // BatchDeleteLoginLogs removes multiple login logs.
 func (h *Handler) BatchDeleteLoginLogs(c *echo.Context) error {
-	ids, err := h.deleteIDs(c)
+	ids, err := deleteIDs(c)
 	if err != nil {
 		return err
 	}
 	if err := h.usecase.DeleteLoginLogs(c.Request().Context(), ids); err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedResponse{IDs: ids})
+	return httpresp.DeletedIDs(c, ids)
 }
 
 // ListSystemErrorLogs returns internal API failure logs.
 func (h *Handler) ListSystemErrorLogs(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := listInput(c)
 	if err != nil {
 		return err
@@ -172,14 +150,11 @@ func (h *Handler) ListSystemErrorLogs(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return paginated(c, output.Items, output.Page, output.PageSize, output.Total)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // ReadSystemErrorLog returns one system error log.
 func (h *Handler) ReadSystemErrorLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system error log")
 	if err != nil {
 		return err
@@ -193,9 +168,6 @@ func (h *Handler) ReadSystemErrorLog(c *echo.Context) error {
 
 // ResolveSystemErrorLog marks one system error as handled.
 func (h *Handler) ResolveSystemErrorLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system error log")
 	if err != nil {
 		return err
@@ -221,9 +193,6 @@ func (h *Handler) ResolveSystemErrorLog(c *echo.Context) error {
 
 // ReopenSystemErrorLog clears the handled state for one system error.
 func (h *Handler) ReopenSystemErrorLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system error log")
 	if err != nil {
 		return err
@@ -237,9 +206,6 @@ func (h *Handler) ReopenSystemErrorLog(c *echo.Context) error {
 
 // DeleteSystemErrorLog removes one system error log.
 func (h *Handler) DeleteSystemErrorLog(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system error log")
 	if err != nil {
 		return err
@@ -247,37 +213,27 @@ func (h *Handler) DeleteSystemErrorLog(c *echo.Context) error {
 	if err := h.usecase.DeleteSystemErrorLogs(c.Request().Context(), []int64{id}); err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedResponse{IDs: []int64{id}})
+	return httpresp.DeletedIDs(c, []int64{id})
 }
 
 // BatchDeleteSystemErrorLogs removes multiple system error logs.
 func (h *Handler) BatchDeleteSystemErrorLogs(c *echo.Context) error {
-	ids, err := h.deleteIDs(c)
+	ids, err := deleteIDs(c)
 	if err != nil {
 		return err
 	}
 	if err := h.usecase.DeleteSystemErrorLogs(c.Request().Context(), ids); err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedResponse{IDs: ids})
+	return httpresp.DeletedIDs(c, ids)
 }
 
-func (h *Handler) deleteIDs(c *echo.Context) ([]int64, error) {
-	if err := h.ready(); err != nil {
-		return nil, err
-	}
-	var req idsRequest
-	if err := httpreq.BindAndValidate(c, &req); err != nil {
-		return nil, err
-	}
-	return req.IDs, nil
+type resolveErrorRequest struct {
+	Note string `json:"note" validate:"omitempty,max=1000"`
 }
 
-func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil {
-		return apperr.New(apperr.ErrInternalServer, "audit handler is not configured")
-	}
-	return nil
+func deleteIDs(c *echo.Context) ([]int64, error) {
+	return httpreq.BindIDs(c)
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
@@ -286,24 +242,4 @@ func listInput(c *echo.Context) (usecase.ListInput, error) {
 		return usecase.ListInput{}, err
 	}
 	return usecase.ListInput{Page: page, PageSize: pageSize}, nil
-}
-
-func paginated(c *echo.Context, items interface{}, page, pageSize, total int) error {
-	meta, err := httpresp.NewPageMeta(page, pageSize, total)
-	if err != nil {
-		return err
-	}
-	return httpresp.List(c, items, meta)
-}
-
-type idsRequest struct {
-	IDs []int64 `json:"ids" validate:"required,min=1,dive,gt=0"`
-}
-
-type resolveErrorRequest struct {
-	Note string `json:"note" validate:"omitempty,max=1000"`
-}
-
-type deletedResponse struct {
-	IDs []int64 `json:"ids"`
 }

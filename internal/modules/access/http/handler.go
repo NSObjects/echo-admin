@@ -8,7 +8,6 @@ import (
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
-	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
@@ -46,9 +45,6 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListPermissions returns grant metadata.
 func (h *Handler) ListPermissions(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	// The catalog feeds role editors. Route authorization keeps disabled
 	// identities, unassigned API tokens, and non-role-management users from
 	// enumerating the grant surface.
@@ -61,9 +57,6 @@ func (h *Handler) ListPermissions(c *echo.Context) error {
 
 // ListRoles returns roles.
 func (h *Handler) ListRoles(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := listInput(c)
 	if err != nil {
 		return err
@@ -72,14 +65,11 @@ func (h *Handler) ListRoles(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return paginated(c, output.Items, output.Page, output.PageSize, output.Total)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // CreateRole creates a role.
 func (h *Handler) CreateRole(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req createRoleRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -96,9 +86,6 @@ func (h *Handler) CreateRole(c *echo.Context) error {
 
 // UpdateRole updates a role.
 func (h *Handler) UpdateRole(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := updateRoleInput(c)
 	if err != nil {
 		return err
@@ -115,9 +102,6 @@ func (h *Handler) UpdateRole(c *echo.Context) error {
 
 // DeleteRole deletes a role.
 func (h *Handler) DeleteRole(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "role")
 	if err != nil {
 		return err
@@ -134,9 +118,6 @@ func (h *Handler) DeleteRole(c *echo.Context) error {
 
 // CopyRole copies a role with its grants.
 func (h *Handler) CopyRole(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "role")
 	if err != nil {
 		return err
@@ -164,9 +145,6 @@ func (h *Handler) CopyRole(c *echo.Context) error {
 
 // ListAPIs returns API routes.
 func (h *Handler) ListAPIs(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := listInput(c)
 	if err != nil {
 		return err
@@ -175,14 +153,11 @@ func (h *Handler) ListAPIs(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return paginated(c, output.Items, output.Page, output.PageSize, output.Total)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // ListAPIGroups returns API group names.
 func (h *Handler) ListAPIGroups(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	groups, err := h.usecase.APIGroups(c.Request().Context())
 	if err != nil {
 		return err
@@ -192,9 +167,6 @@ func (h *Handler) ListAPIGroups(c *echo.Context) error {
 
 // ReadAPI returns one API route.
 func (h *Handler) ReadAPI(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "api")
 	if err != nil {
 		return err
@@ -208,9 +180,6 @@ func (h *Handler) ReadAPI(c *echo.Context) error {
 
 // ListMenus returns menus.
 func (h *Handler) ListMenus(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	menus, err := h.usecase.ListMenus(c.Request().Context())
 	if err != nil {
 		return err
@@ -220,9 +189,6 @@ func (h *Handler) ListMenus(c *echo.Context) error {
 
 // ReadMenu returns one menu.
 func (h *Handler) ReadMenu(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "menu")
 	if err != nil {
 		return err
@@ -236,9 +202,6 @@ func (h *Handler) ReadMenu(c *echo.Context) error {
 
 // CreateMenu creates a menu.
 func (h *Handler) CreateMenu(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req menuRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -255,9 +218,6 @@ func (h *Handler) CreateMenu(c *echo.Context) error {
 
 // UpdateMenu updates a menu.
 func (h *Handler) UpdateMenu(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := updateMenuInput(c)
 	if err != nil {
 		return err
@@ -274,9 +234,6 @@ func (h *Handler) UpdateMenu(c *echo.Context) error {
 
 // DeleteMenu deletes a menu.
 func (h *Handler) DeleteMenu(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "menu")
 	if err != nil {
 		return err
@@ -289,13 +246,6 @@ func (h *Handler) DeleteMenu(c *echo.Context) error {
 		return opErr
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
-}
-
-func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.audit == nil {
-		return apperr.New(apperr.ErrInternalServer, "access handler is not configured")
-	}
-	return nil
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
@@ -388,14 +338,6 @@ func buttonInputsFromRequest(buttons []menuButtonRequest) []usecase.MenuButtonIn
 		})
 	}
 	return out
-}
-
-func paginated(c *echo.Context, items interface{}, page, pageSize, total int) error {
-	meta, err := httpresp.NewPageMeta(page, pageSize, total)
-	if err != nil {
-		return err
-	}
-	return httpresp.List(c, items, meta)
 }
 
 type deletedResponse struct {

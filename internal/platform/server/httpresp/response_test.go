@@ -258,3 +258,54 @@ func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, wantStatu
 		t.Fatalf("timestamp = %T, want number", got["timestamp"])
 	}
 }
+
+func TestPaginatedRendersListEnvelope(t *testing.T) {
+	c, rec := GetContext()
+
+	if err := Paginated(c, []string{"a"}, 1, 20, 1); err != nil {
+		t.Fatalf("Paginated() error = %v, want nil", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("response body is not valid JSON: %v", err)
+	}
+	page, ok := got["page"].(map[string]any)
+	if !ok {
+		t.Fatalf("page = %T, want object", got["page"])
+	}
+	if page["total"] != float64(1) {
+		t.Fatalf("page.total = %v, want 1", page["total"])
+	}
+	if page["has_next"] != false {
+		t.Fatalf("page.has_next = %v, want false", page["has_next"])
+	}
+}
+
+func TestPaginatedRejectsInvalidPagination(t *testing.T) {
+	c, _ := GetContext()
+
+	if err := Paginated(c, nil, 0, 20, 1); err == nil {
+		t.Fatal("Paginated() error = nil, want invalid pagination error")
+	}
+}
+
+func TestDeletedIDsEchoesIDs(t *testing.T) {
+	c, rec := GetContext()
+
+	if err := DeletedIDs(c, []int64{4, 8}); err != nil {
+		t.Fatalf("DeletedIDs() error = %v, want nil", err)
+	}
+
+	var got struct {
+		Data struct {
+			IDs []int64 `json:"ids"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("response body is not valid JSON: %v", err)
+	}
+	if len(got.Data.IDs) != 2 || got.Data.IDs[0] != 4 || got.Data.IDs[1] != 8 {
+		t.Fatalf("data.ids = %v, want [4 8]", got.Data.IDs)
+	}
+}

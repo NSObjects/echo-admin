@@ -35,9 +35,6 @@ func Register(group *echo.Group, handler *Handler) {
 
 // Login handles administrator login.
 func (h *Handler) Login(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req loginRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -59,9 +56,6 @@ func (h *Handler) Login(c *echo.Context) error {
 
 // Logout revokes the current login session on the server.
 func (h *Handler) Logout(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	if err := h.usecase.Logout(c.Request().Context()); err != nil {
 		return err
 	}
@@ -71,9 +65,6 @@ func (h *Handler) Logout(c *echo.Context) error {
 
 // LogoutOthers revokes the current administrator's other login sessions.
 func (h *Handler) LogoutOthers(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	if err := h.usecase.LogoutOthers(c.Request().Context()); err != nil {
 		return err
 	}
@@ -83,9 +74,6 @@ func (h *Handler) LogoutOthers(c *echo.Context) error {
 // ChangePassword updates the current administrator password and revokes other
 // login sessions for the same administrator.
 func (h *Handler) ChangePassword(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req changePasswordRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -101,9 +89,6 @@ func (h *Handler) ChangePassword(c *echo.Context) error {
 
 // SwitchRole changes the active role for the current administrator.
 func (h *Handler) SwitchRole(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req switchRoleRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -117,9 +102,6 @@ func (h *Handler) SwitchRole(c *echo.Context) error {
 
 // Me returns the authenticated administrator profile.
 func (h *Handler) Me(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	user, err := h.usecase.CurrentUser(c.Request().Context())
 	if err != nil {
 		return err
@@ -129,9 +111,6 @@ func (h *Handler) Me(c *echo.Context) error {
 
 // UpdateProfile updates the current administrator's profile fields.
 func (h *Handler) UpdateProfile(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req updateProfileRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -144,13 +123,6 @@ func (h *Handler) UpdateProfile(c *echo.Context) error {
 		return err
 	}
 	return httpresp.OK(c, user)
-}
-
-func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil {
-		return apperr.New(apperr.ErrInternalServer, "auth usecase is not configured")
-	}
-	return nil
 }
 
 func handlerSetLoginCookies(c *echo.Context, output usecase.LoginOutput, secure bool) error {

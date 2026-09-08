@@ -3,10 +3,20 @@ package httpreq
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 )
+
+type testValidator struct {
+	validator *validator.Validate
+}
+
+func (v *testValidator) Validate(i interface{}) error {
+	return v.validator.Struct(i)
+}
 
 func TestPathIDParsesPositiveID(t *testing.T) {
 	e := echo.New()
@@ -45,5 +55,48 @@ func TestQueryBoolRejectsInvalidValue(t *testing.T) {
 	_, err := QueryBool(c, "active_only", false)
 	if err == nil {
 		t.Fatal("QueryBool() error = nil, want invalid bool error")
+	}
+}
+
+func TestBindIDsAcceptsPositiveIDs(t *testing.T) {
+	e := echo.New()
+	e.Validator = &testValidator{validator: validator.New()}
+	req := httptest.NewRequest(http.MethodPost, "/items/batch-delete", strings.NewReader(`{"ids":[3,7,9]}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	ids, err := BindIDs(c)
+	if err != nil {
+		t.Fatalf("BindIDs() error = %v, want nil", err)
+	}
+	if len(ids) != 3 || ids[0] != 3 || ids[2] != 9 {
+		t.Fatalf("BindIDs() = %v, want [3 7 9]", ids)
+	}
+}
+
+func TestBindIDsRejectsInvalidBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing ids", body: `{}`},
+		{name: "empty ids", body: `{"ids":[]}`},
+		{name: "non positive id", body: `{"ids":[5,0]}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			e.Validator = &testValidator{validator: validator.New()}
+			req := httptest.NewRequest(http.MethodPost, "/items/batch-delete", strings.NewReader(tt.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			ids, err := BindIDs(c)
+			if err == nil {
+				t.Fatalf("BindIDs() error = nil, ids = %v, want validation error", ids)
+			}
+		})
 	}
 }

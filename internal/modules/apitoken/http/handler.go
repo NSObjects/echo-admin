@@ -8,7 +8,6 @@ import (
 
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
-	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
@@ -36,9 +35,6 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListTokens returns token metadata without raw secrets or hashes.
 func (h *Handler) ListTokens(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := listInput(c)
 	if err != nil {
 		return err
@@ -56,9 +52,6 @@ func (h *Handler) ListTokens(c *echo.Context) error {
 
 // CreateToken creates an API token and returns the raw secret once.
 func (h *Handler) CreateToken(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req tokenRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -73,9 +66,6 @@ func (h *Handler) CreateToken(c *echo.Context) error {
 
 // UpdateToken updates token metadata without changing the secret.
 func (h *Handler) UpdateToken(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "api token")
 	if err != nil {
 		return err
@@ -100,9 +90,6 @@ func (h *Handler) UpdateToken(c *echo.Context) error {
 
 // DeleteToken revokes an API token.
 func (h *Handler) DeleteToken(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "api token")
 	if err != nil {
 		return err
@@ -113,13 +100,6 @@ func (h *Handler) DeleteToken(c *echo.Context) error {
 		return err
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
-}
-
-func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.audit == nil {
-		return apperr.New(apperr.ErrInternalServer, "api token handler is not configured")
-	}
-	return nil
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {

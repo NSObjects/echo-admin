@@ -65,9 +65,6 @@ func Register(group *echo.Group, handler *Handler) {
 
 // ListConfigs returns system configs.
 func (h *Handler) ListConfigs(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	configs, err := h.usecase.ListConfigs(c.Request().Context())
 	if err != nil {
 		return err
@@ -77,9 +74,6 @@ func (h *Handler) ListConfigs(c *echo.Context) error {
 
 // UpsertConfig creates or updates a system config.
 func (h *Handler) UpsertConfig(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req configRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -100,9 +94,6 @@ func (h *Handler) UpsertConfig(c *echo.Context) error {
 
 // DeleteConfig deletes a system config.
 func (h *Handler) DeleteConfig(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	key := c.Param("key")
 	err := h.usecase.DeleteConfig(c.Request().Context(), key)
 	err = h.audit.Record(c, "delete", "config", key, "deleted config", err)
@@ -114,9 +105,6 @@ func (h *Handler) DeleteConfig(c *echo.Context) error {
 
 // ListParams returns system parameters.
 func (h *Handler) ListParams(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	input, err := paramListInput(c)
 	if err != nil {
 		return err
@@ -125,14 +113,11 @@ func (h *Handler) ListParams(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return paginated(c, output.Items, output.Page, output.PageSize, output.Total)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // FindParam returns one system parameter by id.
 func (h *Handler) FindParam(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system param")
 	if err != nil {
 		return err
@@ -146,9 +131,6 @@ func (h *Handler) FindParam(c *echo.Context) error {
 
 // FindParamByKey returns one system parameter by key.
 func (h *Handler) FindParamByKey(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	param, err := h.usecase.FindParamByKey(c.Request().Context(), c.Param("key"))
 	if err != nil {
 		return err
@@ -158,9 +140,6 @@ func (h *Handler) FindParamByKey(c *echo.Context) error {
 
 // CreateParam creates one system parameter.
 func (h *Handler) CreateParam(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req paramRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -175,9 +154,6 @@ func (h *Handler) CreateParam(c *echo.Context) error {
 
 // UpdateParam updates one system parameter.
 func (h *Handler) UpdateParam(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system param")
 	if err != nil {
 		return err
@@ -196,9 +172,6 @@ func (h *Handler) UpdateParam(c *echo.Context) error {
 
 // DeleteParam deletes one system parameter.
 func (h *Handler) DeleteParam(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system param")
 	if err != nil {
 		return err
@@ -213,26 +186,20 @@ func (h *Handler) DeleteParam(c *echo.Context) error {
 
 // BatchDeleteParams deletes system parameters by id.
 func (h *Handler) BatchDeleteParams(c *echo.Context) error {
-	if err := h.ready(); err != nil {
+	ids, err := httpreq.BindIDs(c)
+	if err != nil {
 		return err
 	}
-	var req idsRequest
-	if err := httpreq.BindAndValidate(c, &req); err != nil {
-		return err
-	}
-	err := h.usecase.DeleteParams(c.Request().Context(), req.IDs)
+	err = h.usecase.DeleteParams(c.Request().Context(), ids)
 	err = h.audit.Record(c, "delete", "system_param", "batch", "deleted system params", err)
 	if err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedIDsResponse(req))
+	return httpresp.DeletedIDs(c, ids)
 }
 
 // ListDictionaries returns dictionaries.
 func (h *Handler) ListDictionaries(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	dictionaries, err := h.usecase.ListDictionaries(c.Request().Context())
 	if err != nil {
 		return err
@@ -242,9 +209,6 @@ func (h *Handler) ListDictionaries(c *echo.Context) error {
 
 // ExportDictionaries downloads all dictionaries as a JSON bundle.
 func (h *Handler) ExportDictionaries(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	data, err := h.usecase.DictionaryBundleJSON(c.Request().Context())
 	if err != nil {
 		return err
@@ -255,9 +219,6 @@ func (h *Handler) ExportDictionaries(c *echo.Context) error {
 
 // ImportDictionaries imports dictionaries from a JSON bundle.
 func (h *Handler) ImportDictionaries(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var bundle usecase.DictionaryBundle
 	if err := httpreq.BindAndValidate(c, &bundle); err != nil {
 		return err
@@ -272,9 +233,6 @@ func (h *Handler) ImportDictionaries(c *echo.Context) error {
 
 // CreateDictionary creates a dictionary.
 func (h *Handler) CreateDictionary(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req dictionaryRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -292,9 +250,6 @@ func (h *Handler) CreateDictionary(c *echo.Context) error {
 
 // UpdateDictionary updates a dictionary.
 func (h *Handler) UpdateDictionary(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req updateDictionaryRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -312,9 +267,6 @@ func (h *Handler) UpdateDictionary(c *echo.Context) error {
 
 // DeleteDictionary deletes a dictionary.
 func (h *Handler) DeleteDictionary(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	code := c.Param("code")
 	err := h.usecase.DeleteDictionary(c.Request().Context(), code)
 	err = h.audit.Record(c, "delete", "dictionary", code, "deleted dictionary", err)
@@ -326,9 +278,6 @@ func (h *Handler) DeleteDictionary(c *echo.Context) error {
 
 // AddDictionaryItem appends one dictionary item.
 func (h *Handler) AddDictionaryItem(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req dictionaryItemRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -350,9 +299,6 @@ func (h *Handler) AddDictionaryItem(c *echo.Context) error {
 
 // UpdateDictionaryItem updates one dictionary item.
 func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	itemID, err := httpreq.PathID(c, "item_id", "dictionary item")
 	if err != nil {
 		return err
@@ -379,9 +325,6 @@ func (h *Handler) UpdateDictionaryItem(c *echo.Context) error {
 
 // DeleteDictionaryItem deletes one dictionary item.
 func (h *Handler) DeleteDictionaryItem(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	itemID, err := httpreq.PathID(c, "item_id", "dictionary item")
 	if err != nil {
 		return err
@@ -396,9 +339,6 @@ func (h *Handler) DeleteDictionaryItem(c *echo.Context) error {
 
 // ListVersions returns release records.
 func (h *Handler) ListVersions(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	versions, err := h.usecase.ListVersions(c.Request().Context())
 	if err != nil {
 		return err
@@ -408,9 +348,6 @@ func (h *Handler) ListVersions(c *echo.Context) error {
 
 // FindVersion returns one release record.
 func (h *Handler) FindVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system version")
 	if err != nil {
 		return err
@@ -424,9 +361,6 @@ func (h *Handler) FindVersion(c *echo.Context) error {
 
 // DownloadVersion returns one release record as a JSON attachment.
 func (h *Handler) DownloadVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system version")
 	if err != nil {
 		return err
@@ -442,9 +376,6 @@ func (h *Handler) DownloadVersion(c *echo.Context) error {
 
 // CreateVersion creates a release record.
 func (h *Handler) CreateVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req versionRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -464,9 +395,6 @@ func (h *Handler) CreateVersion(c *echo.Context) error {
 
 // ExportVersion creates a portable version bundle from selected resources.
 func (h *Handler) ExportVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	var req exportVersionRequest
 	if err := httpreq.BindAndValidate(c, &req); err != nil {
 		return err
@@ -487,9 +415,6 @@ func (h *Handler) ExportVersion(c *echo.Context) error {
 
 // ImportVersion imports a portable version bundle.
 func (h *Handler) ImportVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	bundle, err := decodeVersionBundle(c)
 	if err != nil {
 		return err
@@ -523,9 +448,6 @@ func decodeVersionBundle(c *echo.Context) (usecase.VersionBundle, error) {
 
 // UpdateVersion updates a release record.
 func (h *Handler) UpdateVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system version")
 	if err != nil {
 		return err
@@ -550,9 +472,6 @@ func (h *Handler) UpdateVersion(c *echo.Context) error {
 
 // DeleteVersion deletes a release record.
 func (h *Handler) DeleteVersion(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
 	id, err := httpreq.PathID(c, "id", "system version")
 	if err != nil {
 		return err
@@ -567,26 +486,16 @@ func (h *Handler) DeleteVersion(c *echo.Context) error {
 
 // BatchDeleteVersions deletes release records by id.
 func (h *Handler) BatchDeleteVersions(c *echo.Context) error {
-	if err := h.ready(); err != nil {
+	ids, err := httpreq.BindIDs(c)
+	if err != nil {
 		return err
 	}
-	var req idsRequest
-	if err := httpreq.BindAndValidate(c, &req); err != nil {
-		return err
-	}
-	err := h.usecase.DeleteVersions(c.Request().Context(), req.IDs)
+	err = h.usecase.DeleteVersions(c.Request().Context(), ids)
 	err = h.audit.Record(c, "delete", "system_version", "batch", "deleted system versions", err)
 	if err != nil {
 		return err
 	}
-	return httpresp.OK(c, deletedIDsResponse(req))
-}
-
-func (h *Handler) ready() error {
-	if h == nil || h.usecase == nil || h.audit == nil {
-		return apperr.New(apperr.ErrInternalServer, "settings handler is not configured")
-	}
-	return nil
+	return httpresp.DeletedIDs(c, ids)
 }
 
 func paramListInput(c *echo.Context) (usecase.ParamListInput, error) {
@@ -621,26 +530,10 @@ func updateParamInput(id int64, req paramRequest) usecase.UpdateParamInput {
 	}
 }
 
-func paginated(c *echo.Context, data interface{}, page, pageSize, total int) error {
-	meta, err := httpresp.NewPageMeta(page, pageSize, total)
-	if err != nil {
-		return err
-	}
-	return httpresp.List(c, data, meta)
-}
-
 type deletedResponse struct {
 	Code string `json:"code"`
 }
 
 type deletedIDResponse struct {
 	ID int64 `json:"id"`
-}
-
-type idsRequest struct {
-	IDs []int64 `json:"ids" validate:"required,min=1,dive,gt=0"`
-}
-
-type deletedIDsResponse struct {
-	IDs []int64 `json:"ids"`
 }
