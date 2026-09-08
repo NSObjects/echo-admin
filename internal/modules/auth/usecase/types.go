@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 )
@@ -16,9 +17,12 @@ type AdminReader interface {
 	Update(context.Context, identitydomain.Admin) (identitydomain.Admin, error)
 }
 
-// AuthorizationReader reads current Administration Authorization state.
+// AuthorizationReader reads current Administration Authorization state. The
+// subject and view shapes are owned by the access module — Administration
+// Authorization is its domain — so auth composes the view into current-user
+// responses instead of keeping a mirrored copy.
 type AuthorizationReader interface {
-	CurrentAuthorization(context.Context, AuthorizationSubject) (AuthorizationView, error)
+	CurrentAuthorization(context.Context, accessusecase.AuthorizationSubject) (accessusecase.AuthorizationView, error)
 }
 
 // LoginRecorder stores sign-in attempts without exposing audit storage details.
@@ -135,22 +139,6 @@ type LoginRecord struct {
 	Reason    string
 }
 
-// AuthorizationSubject identifies the administrator and active role whose
-// current grants are returned.
-type AuthorizationSubject struct {
-	AdminID      int64
-	ActiveRoleID int64
-}
-
-// AuthorizationView is the current active-role authorization snapshot.
-type AuthorizationView struct {
-	ActiveRole  Role
-	Roles       []Role
-	Permissions []string
-	Menus       []Menu
-	DefaultPath string
-}
-
 // LoginSessionIdentity is the authenticated browser login identity stored on
 // request context by HTTP middleware.
 type LoginSessionIdentity struct {
@@ -159,83 +147,16 @@ type LoginSessionIdentity struct {
 	RoleID    int64
 }
 
-// Admin is the current-user administrator DTO.
-type Admin struct {
-	ID           int64     `json:"id"`
-	Username     string    `json:"username"`
-	DisplayName  string    `json:"display_name"`
-	Email        string    `json:"email"`
-	RoleIDs      []int64   `json:"role_ids"`
-	ActiveRoleID int64     `json:"active_role_id"`
-	Active       bool      `json:"active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-// CurrentUser is the adapter-facing current-user snapshot.
+// CurrentUser is the adapter-facing current-user snapshot: administrator
+// summary fields plus the access-owned authorization view. The view is
+// embedded so its fields flatten into the /auth/me JSON contract; adding a
+// field to accessusecase.AuthorizationView intentionally extends that
+// response without any auth-side copy.
 type CurrentUser struct {
-	ID           int64    `json:"id"`
-	Username     string   `json:"username"`
-	DisplayName  string   `json:"display_name"`
-	Email        string   `json:"email"`
-	ActiveRoleID int64    `json:"active_role_id"`
-	ActiveRole   Role     `json:"active_role"`
-	DefaultPath  string   `json:"default_path"`
-	Roles        []Role   `json:"roles"`
-	Permissions  []string `json:"permissions"`
-	Menus        []Menu   `json:"menus"`
-}
-
-// Role is the current-user role DTO.
-type Role struct {
-	ID          int64     `json:"id"`
-	ParentID    int64     `json:"parent_id"`
-	Code        string    `json:"code"`
-	Name        string    `json:"name"`
-	Permissions []string  `json:"permissions"`
-	MenuIDs     []int64   `json:"menu_ids"`
-	APIIDs      []int64   `json:"api_ids"`
-	ButtonIDs   []int64   `json:"button_ids"`
-	DataRoleIDs []int64   `json:"data_role_ids"`
-	DefaultPath string    `json:"default_path"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-// Menu is the current-user menu DTO.
-type Menu struct {
-	ID         int64     `json:"id"`
-	ParentID   int64     `json:"parent_id"`
-	Name       string    `json:"name"`
-	Path       string    `json:"path"`
-	Icon       string    `json:"icon"`
-	Hidden     bool      `json:"hidden"`
-	Component  string    `json:"component"`
-	Meta       MenuMeta  `json:"meta"`
-	Permission string    `json:"permission"`
-	Sort       int       `json:"sort"`
-	Active     bool      `json:"active"`
-	Buttons    []Button  `json:"buttons"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-}
-
-// MenuMeta is router metadata returned with the current-user menu tree.
-type MenuMeta struct {
-	ActiveName     string `json:"active_name"`
-	KeepAlive      bool   `json:"keep_alive"`
-	DefaultMenu    bool   `json:"default_menu"`
-	CloseTab       bool   `json:"close_tab"`
-	TransitionType string `json:"transition_type"`
-}
-
-// Button is a page-level operation key returned with the current user's menu.
-type Button struct {
-	ID          int64     `json:"id"`
-	MenuID      int64     `json:"menu_id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           int64  `json:"id"`
+	Username     string `json:"username"`
+	DisplayName  string `json:"display_name"`
+	Email        string `json:"email"`
+	ActiveRoleID int64  `json:"active_role_id"`
+	accessusecase.AuthorizationView
 }

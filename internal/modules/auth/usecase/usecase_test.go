@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
@@ -275,26 +276,26 @@ func newUsecaseWithStore(t *testing.T) (*authusecase.Usecase, *loginRecorder, *a
 	return uc, recorder, store
 }
 
-func authorizationViews(now time.Time) map[int64]authusecase.AuthorizationView {
-	rootRole := authusecase.Role{ID: 1, Code: accessdomain.RoleCodeSuperAdmin, Name: "超级管理员", Permissions: []string{accessdomain.PermissionAdminRead}, MenuIDs: []int64{1}, APIIDs: []int64{1}, DefaultPath: accessdomain.DefaultRolePath, Active: true, CreatedAt: now, UpdatedAt: now}
-	operatorRole := authusecase.Role{ID: 2, ParentID: 1, Code: "operator", Name: "运营", Permissions: []string{accessdomain.PermissionRoleRead}, MenuIDs: []int64{2}, APIIDs: []int64{2}, ButtonIDs: []int64{22}, DefaultPath: "/roles", Active: true, CreatedAt: now, UpdatedAt: now}
-	adminMenu := authusecase.Menu{ID: 1, Name: "管理员管理", Path: "/admins", Component: "./Admins", Permission: accessdomain.PermissionAdminRead, Active: true, Buttons: []authusecase.Button{{ID: 11, MenuID: 1, Name: "create"}, {ID: 12, MenuID: 1, Name: "delete"}}}
-	roleMenu := authusecase.Menu{ID: 2, Name: "角色权限", Path: "/roles", Component: "./Roles", Permission: accessdomain.PermissionRoleRead, Active: true, Buttons: []authusecase.Button{{ID: 22, MenuID: 2, Name: "update"}}}
-	roles := []authusecase.Role{rootRole, operatorRole}
-	return map[int64]authusecase.AuthorizationView{
-		1: {ActiveRole: rootRole, Roles: roles, Permissions: rootRole.Permissions, Menus: []authusecase.Menu{adminMenu}, DefaultPath: rootRole.DefaultPath},
-		2: {ActiveRole: operatorRole, Roles: roles, Permissions: operatorRole.Permissions, Menus: []authusecase.Menu{roleMenu}, DefaultPath: operatorRole.DefaultPath},
+func authorizationViews(now time.Time) map[int64]accessusecase.AuthorizationView {
+	rootRole := accessusecase.Role{ID: 1, Code: accessdomain.RoleCodeSuperAdmin, Name: "超级管理员", Permissions: []string{accessdomain.PermissionAdminRead}, MenuIDs: []int64{1}, APIIDs: []int64{1}, DefaultPath: accessdomain.DefaultRolePath, Active: true, CreatedAt: now, UpdatedAt: now}
+	operatorRole := accessusecase.Role{ID: 2, ParentID: 1, Code: "operator", Name: "运营", Permissions: []string{accessdomain.PermissionRoleRead}, MenuIDs: []int64{2}, APIIDs: []int64{2}, ButtonIDs: []int64{22}, DefaultPath: "/roles", Active: true, CreatedAt: now, UpdatedAt: now}
+	adminMenu := accessusecase.Menu{ID: 1, Name: "管理员管理", Path: "/admins", Component: "./Admins", Permission: accessdomain.PermissionAdminRead, Active: true, Buttons: []accessusecase.Button{{ID: 11, MenuID: 1, Name: "create"}, {ID: 12, MenuID: 1, Name: "delete"}}}
+	roleMenu := accessusecase.Menu{ID: 2, Name: "角色权限", Path: "/roles", Component: "./Roles", Permission: accessdomain.PermissionRoleRead, Active: true, Buttons: []accessusecase.Button{{ID: 22, MenuID: 2, Name: "update"}}}
+	roles := []accessusecase.Role{rootRole, operatorRole}
+	return map[int64]accessusecase.AuthorizationView{
+		1: {ActiveRole: rootRole, Roles: roles, Permissions: rootRole.Permissions, Menus: []accessusecase.Menu{adminMenu}, DefaultPath: rootRole.DefaultPath},
+		2: {ActiveRole: operatorRole, Roles: roles, Permissions: operatorRole.Permissions, Menus: []accessusecase.Menu{roleMenu}, DefaultPath: operatorRole.DefaultPath},
 	}
 }
 
 type authorizationReader struct {
-	views map[int64]authusecase.AuthorizationView
+	views map[int64]accessusecase.AuthorizationView
 }
 
-func (r *authorizationReader) CurrentAuthorization(_ context.Context, subject authusecase.AuthorizationSubject) (authusecase.AuthorizationView, error) {
+func (r *authorizationReader) CurrentAuthorization(_ context.Context, subject accessusecase.AuthorizationSubject) (accessusecase.AuthorizationView, error) {
 	view, ok := r.views[subject.ActiveRoleID]
 	if !ok {
-		return authusecase.AuthorizationView{}, apperr.NewPermissionDenied("role", strconv.FormatInt(subject.ActiveRoleID, 10))
+		return accessusecase.AuthorizationView{}, apperr.NewPermissionDenied("role", strconv.FormatInt(subject.ActiveRoleID, 10))
 	}
 	return view, nil
 }

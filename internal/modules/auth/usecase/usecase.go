@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -310,7 +311,7 @@ func (u *Usecase) currentAdminAndRole(ctx context.Context) (identitydomain.Admin
 }
 
 func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin, activeRoleID int64) (CurrentUser, error) {
-	authorization, err := u.authorization.CurrentAuthorization(ctx, AuthorizationSubject{
+	authorization, err := u.authorization.CurrentAuthorization(ctx, accessusecase.AuthorizationSubject{
 		AdminID:      admin.ID,
 		ActiveRoleID: activeRoleID,
 	})
@@ -318,16 +319,12 @@ func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin, 
 		return CurrentUser{}, err
 	}
 	return CurrentUser{
-		ID:           admin.ID,
-		Username:     admin.Username,
-		DisplayName:  admin.DisplayName,
-		Email:        admin.Email,
-		ActiveRoleID: authorization.ActiveRole.ID,
-		ActiveRole:   authorization.ActiveRole,
-		DefaultPath:  authorization.DefaultPath,
-		Roles:        authorization.Roles,
-		Permissions:  authorization.Permissions,
-		Menus:        authorization.Menus,
+		ID:                admin.ID,
+		Username:          admin.Username,
+		DisplayName:       admin.DisplayName,
+		Email:             admin.Email,
+		ActiveRoleID:      authorization.ActiveRole.ID,
+		AuthorizationView: authorization,
 	}, nil
 }
 

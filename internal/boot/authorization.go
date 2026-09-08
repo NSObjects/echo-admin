@@ -7,7 +7,6 @@ import (
 	"github.com/samber/do/v2"
 
 	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
-	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
@@ -61,85 +60,6 @@ func (a routeAuthorizerAdapter) AuthorizeRoute(ctx context.Context, method, path
 	}, method, path)
 }
 
-func (r authAuthorizationReader) CurrentAuthorization(ctx context.Context, subject authusecase.AuthorizationSubject) (authusecase.AuthorizationView, error) {
-	view, err := r.access.CurrentAuthorization(ctx, accessusecase.AuthorizationSubject{
-		AdminID:      subject.AdminID,
-		ActiveRoleID: subject.ActiveRoleID,
-	})
-	if err != nil {
-		return authusecase.AuthorizationView{}, err
-	}
-	return authusecase.AuthorizationView{
-		ActiveRole:  authRole(view.ActiveRole),
-		Roles:       authRoles(view.Roles),
-		Permissions: view.Permissions,
-		Menus:       authMenus(view.Menus),
-		DefaultPath: view.DefaultPath,
-	}, nil
-}
-
-func authRoles(roles []accessusecase.Role) []authusecase.Role {
-	out := make([]authusecase.Role, 0, len(roles))
-	for _, role := range roles {
-		out = append(out, authRole(role))
-	}
-	return out
-}
-
-func authRole(role accessusecase.Role) authusecase.Role {
-	return authusecase.Role{
-		ID:          role.ID,
-		ParentID:    role.ParentID,
-		Code:        role.Code,
-		Name:        role.Name,
-		Permissions: role.Permissions,
-		MenuIDs:     role.MenuIDs,
-		APIIDs:      role.APIIDs,
-		ButtonIDs:   role.ButtonIDs,
-		DataRoleIDs: role.DataRoleIDs,
-		DefaultPath: role.DefaultPath,
-		Active:      role.Active,
-		CreatedAt:   role.CreatedAt,
-		UpdatedAt:   role.UpdatedAt,
-	}
-}
-
-func authMenus(menus []accessusecase.Menu) []authusecase.Menu {
-	out := make([]authusecase.Menu, 0, len(menus))
-	for _, menu := range menus {
-		buttons := make([]authusecase.Button, 0, len(menu.Buttons))
-		for _, button := range menu.Buttons {
-			buttons = append(buttons, authusecase.Button{
-				ID:          button.ID,
-				MenuID:      button.MenuID,
-				Name:        button.Name,
-				Description: button.Description,
-				CreatedAt:   button.CreatedAt,
-				UpdatedAt:   button.UpdatedAt,
-			})
-		}
-		out = append(out, authusecase.Menu{
-			ID:        menu.ID,
-			ParentID:  menu.ParentID,
-			Name:      menu.Name,
-			Path:      menu.Path,
-			Icon:      menu.Icon,
-			Hidden:    menu.Hidden,
-			Component: menu.Component,
-			Meta: authusecase.MenuMeta{
-				ActiveName:     menu.Meta.ActiveName,
-				KeepAlive:      menu.Meta.KeepAlive,
-				DefaultMenu:    menu.Meta.DefaultMenu,
-				CloseTab:       menu.Meta.CloseTab,
-				TransitionType: menu.Meta.TransitionType,
-			},
-			Permission: menu.Permission,
-			Sort:       menu.Sort,
-			Active:     menu.Active,
-			Buttons:    buttons,
-			CreatedAt:  menu.CreatedAt,
-			UpdatedAt:  menu.UpdatedAt,
-		})
-	}
-	return out
+func (r authAuthorizationReader) CurrentAuthorization(ctx context.Context, subject accessusecase.AuthorizationSubject) (accessusecase.AuthorizationView, error) {
+	return r.access.CurrentAuthorization(ctx, subject)
 }
