@@ -24,7 +24,7 @@ import (
 func TestCreateAdminRecordsOperation(t *testing.T) {
 	e, store, recorder := newIdentityEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/admins", `{"username":"operator","display_name":"运营","email":"operator@example.com","password":"operator123","role_ids":[1],"active":true}`, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/admins", `{"username":"operator","display_name":"运营","email":"operator@example.com","password":"operator123","role_ids":[1],"active":true}`, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create admin status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -51,7 +51,7 @@ func TestDeleteAdminRecordsOperation(t *testing.T) {
 		7: newAdmin(t, 7, "operator"),
 	}
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/admins/7", "", "42")
+	rec := doJSON(t, e, http.MethodDelete, "/api/admins/7", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete admin status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -72,7 +72,7 @@ func TestListRoleAdmins(t *testing.T) {
 		7: newAdmin(t, 7, "operator"),
 	}
 
-	rec := doJSON(t, e, http.MethodGet, "/api/roles/1/admins", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/roles/1/admins", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get role admins status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -84,7 +84,7 @@ func TestSetRoleAdminsRecordsOperation(t *testing.T) {
 		7: newAdmin(t, 7, "operator"),
 	}
 
-	rec := doJSON(t, e, http.MethodPut, "/api/roles/1/admins", `{"admin_ids":[7]}`, "42")
+	rec := doJSON(t, e, http.MethodPut, "/api/roles/1/admins", `{"admin_ids":[7]}`, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("set role admins status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -109,7 +109,7 @@ func newIdentityEcho() (*echo.Echo, *identityStore, *operationRecorder) {
 	return e, store, recorder
 }
 
-func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, e *echo.Echo, method, path, body string, userID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	if body != "" {

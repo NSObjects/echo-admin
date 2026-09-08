@@ -26,7 +26,7 @@ const statusDictionaryImportBody = `{"dictionaries":[{"code":"status","name":"�
 func TestUpsertConfigRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodPut, "/api/system/configs/site_name", `{"name":"站点名称","value":"Echo Admin","public":true}`, "42")
+	rec := doJSON(t, e, http.MethodPut, "/api/system/configs/site_name", `{"name":"站点名称","value":"Echo Admin","public":true}`, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("upsert config status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -47,7 +47,7 @@ func TestUpsertConfigRecordsOperation(t *testing.T) {
 func TestDeleteConfigRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/system/configs/feature_flag", "", "42")
+	rec := doJSON(t, e, http.MethodDelete, "/api/system/configs/feature_flag", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete config status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -64,7 +64,7 @@ func TestCreateParamRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
 	body := `{"name":"支付超时","key":"pay_timeout","value":"30","desc":"秒"}`
-	rec := doJSON(t, e, http.MethodPost, "/api/system/params", body, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/params", body, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create param status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -80,7 +80,7 @@ func TestCreateParamRecordsOperation(t *testing.T) {
 func TestBatchDeleteParamsRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/system/params/batch-delete", `{"ids":[1,2]}`, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/params/batch-delete", `{"ids":[1,2]}`, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete params status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -96,7 +96,7 @@ func TestBatchDeleteParamsRecordsOperation(t *testing.T) {
 func TestDeleteDictionaryRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/dictionaries/color", "", "42")
+	rec := doJSON(t, e, http.MethodDelete, "/api/dictionaries/color", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete dictionary status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -121,7 +121,7 @@ func TestExportDictionaries(t *testing.T) {
 	}
 	store.dictionaries = []settingsdomain.Dictionary{dictionary}
 
-	rec := doJSON(t, e, http.MethodGet, "/api/dictionaries/export", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/dictionaries/export", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("export dictionaries status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -136,7 +136,7 @@ func TestExportDictionaries(t *testing.T) {
 func TestImportDictionariesRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/dictionaries/import", statusDictionaryImportBody, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/dictionaries/import", statusDictionaryImportBody, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("import dictionaries status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -148,7 +148,7 @@ func TestCreateVersionRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":"v1.2.3","name":"稳定版","description":"权限后台初始化","published_at":"2026-06-20T08:00:00Z"}`
-	rec := doJSON(t, e, http.MethodPost, "/api/system/versions", body, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/versions", body, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create version status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -167,7 +167,7 @@ func TestExportVersionRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":"v2.0.0","name":"权限包","description":"初始化权限"}`
-	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/export", body, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/export", body, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("export version status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -184,7 +184,7 @@ func TestImportVersionRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":{"code":"v2.0.0","name":"权限包","description":"初始化权限"},"dictionaries":[{"code":"status","name":"状态","items":[{"label":"启用","value":"enabled","sort":10,"active":true}]}]}`
-	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/import", body, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/import", body, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("import version status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -196,7 +196,7 @@ func TestImportVersionRejectsManagedAPIRouteCatalog(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
 	body := `{"version":{"code":"v2.0.0","name":"release"},"apis":[{"method":"GET","path":"/api/admins","description":"admins","group":"admin"}]}`
-	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/import", body, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/import", body, 42)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("import version status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
@@ -211,7 +211,7 @@ func TestImportVersionRejectsManagedAPIRouteCatalog(t *testing.T) {
 func TestDownloadVersion(t *testing.T) {
 	e, _, _ := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodGet, "/api/system/versions/3/download", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/system/versions/3/download", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("download version status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -223,7 +223,7 @@ func TestDownloadVersion(t *testing.T) {
 func TestDeleteVersionRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/system/versions/7", "", "42")
+	rec := doJSON(t, e, http.MethodDelete, "/api/system/versions/7", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete version status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -239,7 +239,7 @@ func TestDeleteVersionRecordsOperation(t *testing.T) {
 func TestBatchDeleteVersionsRecordsOperation(t *testing.T) {
 	e, store, recorder := newSettingsEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/batch-delete", `{"ids":[7,8]}`, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/system/versions/batch-delete", `{"ids":[7,8]}`, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete versions status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -295,7 +295,7 @@ func (t settingsImportTx) CreateVersion(ctx context.Context, version settingsdom
 	return t.store.CreateVersion(ctx, version)
 }
 
-func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, e *echo.Echo, method, path, body string, userID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	if body != "" {

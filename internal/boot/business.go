@@ -2,7 +2,6 @@ package boot
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/samber/do/v2"
@@ -389,9 +388,9 @@ func (a loginSessionAuthenticator) AuthenticateLoginSession(ctx context.Context,
 		return server.LoginSessionIdentity{}, err
 	}
 	return server.LoginSessionIdentity{
-		SessionID: formatID(identity.SessionID),
-		UserID:    formatID(identity.AdminID),
-		RoleID:    formatID(identity.RoleID),
+		SessionID: identity.SessionID,
+		UserID:    identity.AdminID,
+		RoleID:    identity.RoleID,
 	}, nil
 }
 
@@ -413,13 +412,9 @@ func (v apiKeyVerifier) VerifyAPIKey(ctx context.Context, secret string) (server
 		return server.APIKeyIdentity{}, err
 	}
 	return server.APIKeyIdentity{
-		UserID: formatID(identity.AdminID),
-		RoleID: formatID(identity.RoleID),
+		UserID: identity.AdminID,
+		RoleID: identity.RoleID,
 	}, nil
-}
-
-func formatID(id int64) string {
-	return strconv.FormatInt(id, 10)
 }
 
 type systemErrorRecorder struct {

@@ -2,7 +2,6 @@ package boot
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/samber/do/v2"
 
@@ -46,13 +45,13 @@ func (a routeAuthorizerAdapter) AuthorizeRoute(ctx context.Context, method, path
 	if a.access == nil {
 		return apperr.New(apperr.ErrInternalServer, "route authorizer is not configured")
 	}
-	adminID, err := strconv.ParseInt(requestctx.GetUserID(ctx), 10, 64)
-	if err != nil || adminID <= 0 {
-		return apperr.NewUnauthorized()
+	adminID, err := requestctx.RequireUserID(ctx)
+	if err != nil {
+		return err
 	}
-	roleID, err := strconv.ParseInt(requestctx.GetRoleID(ctx), 10, 64)
-	if err != nil || roleID <= 0 {
-		return apperr.NewUnauthorized()
+	roleID, err := requestctx.RequireRoleID(ctx)
+	if err != nil {
+		return err
 	}
 	return a.access.AuthorizeRoute(ctx, accessusecase.AuthorizationSubject{
 		AdminID:      adminID,

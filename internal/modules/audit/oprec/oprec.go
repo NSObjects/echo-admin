@@ -6,12 +6,10 @@ package oprec
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/labstack/echo/v5"
 
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
-	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
 )
@@ -46,9 +44,9 @@ func New(audit Audit) *Recorder {
 //	}
 func (r *Recorder) Record(c *echo.Context, action, resource, resourceID, message string, opErr error) error {
 	ctx := c.Request().Context()
-	actorID, err := strconv.ParseInt(requestctx.GetUserID(ctx), 10, 64)
+	actorID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
-		return apperr.NewUnauthorized()
+		return err
 	}
 	_, err = r.audit.RecordOperation(ctx, auditusecase.OperationInput{
 		ActorID:    actorID,

@@ -240,17 +240,17 @@ func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
 	config.EnableLoginSession = true
 	config.LoginSession = &LoginSessionConfig{
 		CookieName:    LoginSessionCookieName,
-		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-9", UserID: "99", RoleID: "9"}},
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 9, UserID: 99, RoleID: 9}},
 		Enabled:       true,
 	}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
 	e.GET("/private", func(c *echo.Context) error {
-		if got := requestctx.GetUserID(c.Request().Context()); got != "42" {
-			t.Fatalf("UserID = %q, want 42", got)
+		if got := requestctx.GetUserID(c.Request().Context()); got != 42 {
+			t.Fatalf("UserID = %d, want 42", got)
 		}
-		if got := requestctx.GetRoleID(c.Request().Context()); got != "7" {
-			t.Fatalf("RoleID = %q, want 7", got)
+		if got := requestctx.GetRoleID(c.Request().Context()); got != 7 {
+			t.Fatalf("RoleID = %d, want 7", got)
 		}
 		return c.NoContent(http.StatusNoContent)
 	})
@@ -320,8 +320,8 @@ func TestRequestContextMiddlewareStoresMetadata(t *testing.T) {
 		if info.TraceID != "trace-123" {
 			t.Fatalf("TraceID = %q, want trace-123", info.TraceID)
 		}
-		if info.UserID != "" {
-			t.Fatalf("UserID = %q, want empty because request metadata does not authenticate users", info.UserID)
+		if info.UserID != 0 {
+			t.Fatalf("UserID = %d, want zero because request metadata does not authenticate users", info.UserID)
 		}
 		return c.NoContent(http.StatusNoContent)
 	})
@@ -435,9 +435,9 @@ func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
 	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
 		CookieName: LoginSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{
-			SessionID: "session-123",
-			UserID:    "user-123",
-			RoleID:    "role-456",
+			SessionID: 123,
+			UserID:    123,
+			RoleID:    456,
 		}},
 		Enabled: true,
 	})
@@ -449,14 +449,14 @@ func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
 	e.Use(RequestContext())
 	e.Use(sessionMiddleware)
 	e.GET("/me", func(c *echo.Context) error {
-		if got := requestctx.GetUserID(c.Request().Context()); got != "user-123" {
-			t.Fatalf("GetUserID() = %q, want user-123", got)
+		if got := requestctx.GetUserID(c.Request().Context()); got != 123 {
+			t.Fatalf("GetUserID() = %d, want 123", got)
 		}
-		if got := requestctx.GetRoleID(c.Request().Context()); got != "role-456" {
-			t.Fatalf("GetRoleID() = %q, want role-456", got)
+		if got := requestctx.GetRoleID(c.Request().Context()); got != 456 {
+			t.Fatalf("GetRoleID() = %d, want 456", got)
 		}
-		if got := requestctx.GetLoginSessionID(c.Request().Context()); got != "session-123" {
-			t.Fatalf("GetLoginSessionID() = %q, want session-123", got)
+		if got := requestctx.GetLoginSessionID(c.Request().Context()); got != 123 {
+			t.Fatalf("GetLoginSessionID() = %d, want 123", got)
 		}
 		return c.NoContent(http.StatusNoContent)
 	})
@@ -502,7 +502,7 @@ func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
 func TestLoginSessionMissingCookieReturnsGenericUnauthorized(t *testing.T) {
 	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
 		CookieName:    LoginSessionCookieName,
-		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
 		Enabled:       true,
 	})
 	if err != nil {
@@ -532,7 +532,7 @@ func TestCSRFProtectsLoginSessionUnsafeRequests(t *testing.T) {
 	e.Use(RequestContext())
 	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
 		CookieName:    LoginSessionCookieName,
-		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
 		Enabled:       true,
 	})
 	if err != nil {
@@ -655,7 +655,7 @@ func TestErrorHandlerRecordsInternalSystemError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
 	req.Header.Set(headerRequestID, testRequestID)
 	req.Header.Set("User-Agent", "test-agent")
-	req = req.WithContext(requestctx.WithUserID(req.Context(), "42"))
+	req = req.WithContext(requestctx.WithUserID(req.Context(), 42))
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath("/users")
@@ -783,7 +783,7 @@ func (staticAPIKeyVerifier) VerifyAPIKey(_ context.Context, secret string) (APIK
 	if secret != "ea_known_secret" {
 		return APIKeyIdentity{}, apperr.NewUnauthorized()
 	}
-	return APIKeyIdentity{UserID: "42", RoleID: "7"}, nil
+	return APIKeyIdentity{UserID: 42, RoleID: 7}, nil
 }
 
 type countingAPIKeyVerifier struct {
@@ -795,7 +795,7 @@ func (v *countingAPIKeyVerifier) VerifyAPIKey(_ context.Context, secret string) 
 	if secret != "ea_known_secret" {
 		return APIKeyIdentity{}, apperr.NewUnauthorized()
 	}
-	return APIKeyIdentity{UserID: "42", RoleID: "7"}, nil
+	return APIKeyIdentity{UserID: 42, RoleID: 7}, nil
 }
 
 type staticLoginSessionAuthenticator struct {
@@ -859,7 +859,7 @@ func TestLoginSessionConfig(t *testing.T) {
 			config: &LoginSessionConfig{
 				CookieName:    LoginSessionCookieName,
 				Exemptions:    []RouteExemption{{Method: http.MethodGet, Path: "/api/health"}},
-				Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}},
+				Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
 				Enabled:       true,
 			},
 		},

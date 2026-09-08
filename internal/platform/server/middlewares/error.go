@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 
 	"github.com/labstack/echo/v5"
 
@@ -147,7 +148,10 @@ func recordSystemError(c *echo.Context, info apperr.Info, recorder SystemErrorRe
 		IP:        c.RealIP(),
 		UserAgent: c.Request().UserAgent(),
 		RequestID: httpresp.RequestID(c),
-		UserID:    requestctx.GetUserID(c.Request().Context()),
+		// The system-error log keeps user_id as a JSON string contract, so the
+		// int64 context identity is formatted here and stays empty for
+		// unauthenticated requests.
+		UserID: formatUserID(requestctx.GetUserID(c.Request().Context())),
 	}
 	if err := recorder.RecordSystemError(c.Request().Context(), input); err != nil {
 		logging.FromContext(c.Request().Context()).
@@ -175,4 +179,11 @@ func ErrorRecovery() echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+func formatUserID(id int64) string {
+	if id <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(id, 10)
 }

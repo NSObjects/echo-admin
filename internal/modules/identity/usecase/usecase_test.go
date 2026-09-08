@@ -20,7 +20,7 @@ func TestDeleteRejectsCurrentAdmin(t *testing.T) {
 	sessions := &sessionRevokerSpy{}
 	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
-	err := uc.Delete(requestctx.WithUserID(context.Background(), "42"), 42)
+	err := uc.Delete(requestctx.WithUserID(context.Background(), 42), 42)
 	if err == nil {
 		t.Fatal("Delete(current admin) error = nil, want bad request")
 	}
@@ -39,7 +39,7 @@ func TestDeleteRemovesScopedAdmin(t *testing.T) {
 	sessions := &sessionRevokerSpy{}
 	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
-	if err := uc.Delete(requestctx.WithUserID(context.Background(), "42"), 7); err != nil {
+	if err := uc.Delete(requestctx.WithUserID(context.Background(), 42), 7); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 	if store.deletedID != 7 {
@@ -58,7 +58,7 @@ func TestUpdateRevokesSessionsWhenAdminIsDisabled(t *testing.T) {
 	sessions := &sessionRevokerSpy{}
 	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
-	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), 42), usecase.UpdateAdminInput{
 		ID:     7,
 		Active: &inactive,
 	})
@@ -78,7 +78,7 @@ func TestUpdateRevokesSessionsWhenPasswordIsReset(t *testing.T) {
 	sessions := &sessionRevokerSpy{}
 	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
-	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), 42), usecase.UpdateAdminInput{
 		ID:       7,
 		Password: &password,
 	})
@@ -98,7 +98,7 @@ func TestUpdateRejectsSecurityChangeWhenSessionRevocationFails(t *testing.T) {
 	sessions := &sessionRevokerSpy{err: errors.New("revoke sessions")}
 	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
-	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), 42), usecase.UpdateAdminInput{
 		ID:       7,
 		Password: &password,
 	})
@@ -121,7 +121,7 @@ func TestUpdateProfileDoesNotRevokeSessions(t *testing.T) {
 	sessions := &sessionRevokerSpy{}
 	uc := usecase.New(store, roleScopeSpy{}, sessions)
 
-	_, err := uc.Update(requestctx.WithUserID(context.Background(), "42"), usecase.UpdateAdminInput{
+	_, err := uc.Update(requestctx.WithUserID(context.Background(), 42), usecase.UpdateAdminInput{
 		ID:          7,
 		DisplayName: &displayName,
 	})
@@ -178,7 +178,7 @@ func TestSetRoleAdminsReplacesVisibleRoleMembership(t *testing.T) {
 	}}
 	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{1, 2}}, &sessionRevokerSpy{})
 
-	got, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), "42"), usecase.RoleAdminsInput{
+	got, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), 42), usecase.RoleAdminsInput{
 		RoleID:   2,
 		AdminIDs: []int64{8},
 	})
@@ -206,7 +206,7 @@ func TestSetRoleAdminsRejectsRemovingOnlyRole(t *testing.T) {
 	}}
 	uc := usecase.New(store, roleScopeSpy{assignableIDs: []int64{2}, visibleIDs: []int64{2}}, &sessionRevokerSpy{})
 
-	_, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), "42"), usecase.RoleAdminsInput{
+	_, err := uc.SetRoleAdmins(requestctx.WithUserID(context.Background(), 42), usecase.RoleAdminsInput{
 		RoleID: 2,
 	})
 	if err == nil {

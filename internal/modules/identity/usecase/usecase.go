@@ -191,7 +191,7 @@ func (u *Usecase) prepareRoleAdminAssignment(ctx context.Context, input RoleAdmi
 	if visibilityErr != nil {
 		return roleAdminAssignment{}, visibilityErr
 	}
-	currentID, err := currentAdminID(ctx)
+	currentID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return roleAdminAssignment{}, err
 	}
@@ -322,7 +322,7 @@ func rejectSelfDisable(ctx context.Context, adminID int64, active *bool) error {
 	if active == nil || *active {
 		return nil
 	}
-	currentID, err := currentAdminID(ctx)
+	currentID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return err
 	}
@@ -335,7 +335,7 @@ func rejectSelfDisable(ctx context.Context, adminID int64, active *bool) error {
 // The current administrator must keep at least one usable session owner; deleting
 // self would immediately invalidate accountability for the request in progress.
 func rejectSelfDelete(ctx context.Context, adminID int64) error {
-	currentID, err := currentAdminID(ctx)
+	currentID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return err
 	}
@@ -343,15 +343,6 @@ func rejectSelfDelete(ctx context.Context, adminID int64) error {
 		return apperr.NewBadRequest("不能删除当前登录的管理员")
 	}
 	return nil
-}
-
-func currentAdminID(ctx context.Context) (int64, error) {
-	raw := requestctx.GetUserID(ctx)
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
 }
 
 func hashPassword(password string) ([]byte, error) {

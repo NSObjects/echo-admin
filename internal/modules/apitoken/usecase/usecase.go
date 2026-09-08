@@ -184,7 +184,11 @@ type issueTarget struct {
 }
 
 func (u *Usecase) issueTarget(ctx context.Context, input TokenInput) (issueTarget, error) {
-	currentAdminID, currentRoleID, err := currentIdentity(ctx)
+	currentAdminID, err := requestctx.RequireUserID(ctx)
+	if err != nil {
+		return issueTarget{}, err
+	}
+	currentRoleID, err := requestctx.RequireRoleID(ctx)
 	if err != nil {
 		return issueTarget{}, err
 	}
@@ -213,7 +217,11 @@ func (u *Usecase) issueTarget(ctx context.Context, input TokenInput) (issueTarge
 }
 
 func (u *Usecase) scopeListFilter(ctx context.Context, filter *ListFilter) error {
-	currentAdminID, currentRoleID, err := currentIdentity(ctx)
+	currentAdminID, err := requestctx.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
+	currentRoleID, err := requestctx.RequireRoleID(ctx)
 	if err != nil {
 		return err
 	}
@@ -232,7 +240,11 @@ func (u *Usecase) scopeListFilter(ctx context.Context, filter *ListFilter) error
 }
 
 func (u *Usecase) ensureTokenVisible(ctx context.Context, token domain.APIToken) error {
-	currentAdminID, currentRoleID, err := currentIdentity(ctx)
+	currentAdminID, err := requestctx.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
+	currentRoleID, err := requestctx.RequireRoleID(ctx)
 	if err != nil {
 		return err
 	}
@@ -296,26 +308,6 @@ func generateSecret() (string, error) {
 		return "", fmt.Errorf("read secure random bytes: %w", err)
 	}
 	return secretPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
-func currentIdentity(ctx context.Context) (int64, int64, error) {
-	adminID, err := currentContextID(requestctx.GetUserID(ctx))
-	if err != nil {
-		return 0, 0, err
-	}
-	roleID, err := currentContextID(requestctx.GetRoleID(ctx))
-	if err != nil {
-		return 0, 0, err
-	}
-	return adminID, roleID, nil
-}
-
-func currentContextID(raw string) (int64, error) {
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
 }
 
 func containsID(ids []int64, want int64) bool {

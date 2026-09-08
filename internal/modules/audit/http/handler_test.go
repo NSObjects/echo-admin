@@ -94,7 +94,7 @@ func TestDeleteOperationLog(t *testing.T) {
 func TestBatchDeleteLoginLogsDeletesSelectedRecords(t *testing.T) {
 	e, store := newAuditEcho(t)
 
-	rec := doPOST(e, "/api/logs/logins/batch-delete", `{"ids":[1,2]}`, "42")
+	rec := doPOST(e, "/api/logs/logins/batch-delete", `{"ids":[1,2]}`, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("batch delete login logs status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -106,7 +106,7 @@ func TestBatchDeleteLoginLogsDeletesSelectedRecords(t *testing.T) {
 func TestResolveSystemErrorLogRequiresResolvePermission(t *testing.T) {
 	e, store := newAuditEcho(t)
 
-	rec := doPOST(e, "/api/logs/errors/1/resolve", `{"note":"handled by restart"}`, "42")
+	rec := doPOST(e, "/api/logs/errors/1/resolve", `{"note":"handled by restart"}`, 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("resolve system error status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -168,7 +168,7 @@ func doDELETE(e *echo.Echo, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
-func doPOST(e *echo.Echo, path, body, userID string) *httptest.ResponseRecorder {
+func doPOST(e *echo.Echo, path, body string, userID int64) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	req = req.WithContext(requestctx.WithUserID(req.Context(), userID))

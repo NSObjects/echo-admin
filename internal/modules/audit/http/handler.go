@@ -2,9 +2,6 @@
 package audithttp
 
 import (
-	"context"
-	"strconv"
-
 	"github.com/labstack/echo/v5"
 
 	"github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
@@ -207,7 +204,7 @@ func (h *Handler) ResolveSystemErrorLog(c *echo.Context) error {
 	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
 		return bindErr
 	}
-	actorID, err := currentActorID(c.Request().Context())
+	actorID, err := requestctx.RequireUserID(c.Request().Context())
 	if err != nil {
 		return err
 	}
@@ -281,14 +278,6 @@ func (h *Handler) ready() error {
 		return apperr.New(apperr.ErrInternalServer, "audit handler is not configured")
 	}
 	return nil
-}
-
-func currentActorID(ctx context.Context) (int64, error) {
-	id, err := strconv.ParseInt(requestctx.GetUserID(ctx), 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {

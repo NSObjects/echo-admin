@@ -24,7 +24,7 @@ import (
 func TestCreateRoleRecordsOperation(t *testing.T) {
 	e, store, recorder := newAccessEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/roles", `{"code":"operator","name":"运营","permissions":["log:read"],"menu_ids":[1],"active":true}`, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/roles", `{"code":"operator","name":"运营","permissions":["log:read"],"menu_ids":[1],"active":true}`, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create role status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -49,7 +49,7 @@ func TestCopyRoleRecordsOperation(t *testing.T) {
 	e, store, recorder := newAccessEcho()
 	store.roles = twoRoles(t)
 
-	rec := doJSON(t, e, http.MethodPost, "/api/roles/2/copy", `{"code":"operator_copy","name":"运营副本"}`, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/roles/2/copy", `{"code":"operator_copy","name":"运营副本"}`, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("copy role status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -70,7 +70,7 @@ func TestCopyRoleRecordsOperation(t *testing.T) {
 func TestListPermissionsRequiresRoleReadPermission(t *testing.T) {
 	e, _, _ := newAccessEcho()
 
-	rec := doJSON(t, e, http.MethodGet, "/api/permissions", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/permissions", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list permissions status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -79,7 +79,7 @@ func TestListPermissionsRequiresRoleReadPermission(t *testing.T) {
 func TestCreateMenuAcceptsMetaAndButtons(t *testing.T) {
 	e, store, recorder := newAccessEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/menus", `{"name":"菜单管理","path":"/menus","icon":"menu","component":"./Menus","meta":{"keep_alive":true},"permission":"menu:read","sort":40,"active":true,"buttons":[{"name":"create","description":"新增菜单"}]}`, "42")
+	rec := doJSON(t, e, http.MethodPost, "/api/menus", `{"name":"菜单管理","path":"/menus","icon":"menu","component":"./Menus","meta":{"keep_alive":true},"permission":"menu:read","sort":40,"active":true,"buttons":[{"name":"create","description":"新增菜单"}]}`, 42)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create menu status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -105,7 +105,7 @@ func TestReadMenu(t *testing.T) {
 	}
 	store.menus = []accessdomain.Menu{menu}
 
-	rec := doJSON(t, e, http.MethodGet, "/api/menus/2", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/menus/2", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get menu status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -115,7 +115,7 @@ func TestDeleteRoleRecordsOperation(t *testing.T) {
 	e, store, recorder := newAccessEcho()
 	store.roles = twoRoles(t)
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/roles/2", "", "42")
+	rec := doJSON(t, e, http.MethodDelete, "/api/roles/2", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete role status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -138,7 +138,7 @@ func TestDeleteMenuRecordsOperation(t *testing.T) {
 	}
 	store.menus = []accessdomain.Menu{menu}
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/menus/2", "", "42")
+	rec := doJSON(t, e, http.MethodDelete, "/api/menus/2", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete menu status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -165,7 +165,7 @@ func TestListAPIGroups(t *testing.T) {
 	}
 	store.apis = []accessdomain.API{secondAPI, firstAPI}
 
-	rec := doJSON(t, e, http.MethodGet, "/api/apis/groups", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/apis/groups", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list api groups status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -197,7 +197,7 @@ func TestReadAPI(t *testing.T) {
 	}
 	store.apis = []accessdomain.API{api}
 
-	rec := doJSON(t, e, http.MethodGet, "/api/apis/3", "", "42")
+	rec := doJSON(t, e, http.MethodGet, "/api/apis/3", "", 42)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -216,14 +216,14 @@ func newAccessEcho() (*echo.Echo, *accessStore, *operationRecorder) {
 	return e, store, recorder
 }
 
-func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, e *echo.Echo, method, path, body string, userID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	if body != "" {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	}
 	req = req.WithContext(requestctx.WithUserID(req.Context(), userID))
-	req = req.WithContext(requestctx.WithRoleID(req.Context(), "1"))
+	req = req.WithContext(requestctx.WithRoleID(req.Context(), 1))
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec

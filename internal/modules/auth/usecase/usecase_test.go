@@ -28,7 +28,7 @@ func TestLoginCreatesSessionAndReturnsCurrentUserGrants(t *testing.T) {
 	}
 	assertSuccessfulLogin(t, output, recorder, store)
 
-	ctx := requestctx.WithUserID(context.Background(), "1")
+	ctx := requestctx.WithUserID(context.Background(), 1)
 	current, err := uc.CurrentUser(ctx)
 	if err != nil {
 		t.Fatalf("CurrentUser() error = %v", err)
@@ -129,7 +129,7 @@ func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), store.lastSessionID)
+	ctx := withSession(requestctx.WithUserID(context.Background(), 1), store.lastSessionID)
 
 	output, err := uc.SwitchRole(ctx, authusecase.RoleSwitchInput{RoleID: 2})
 	if err != nil {
@@ -168,7 +168,7 @@ func TestLogoutRevokesCurrentLoginSession(t *testing.T) {
 		t.Fatalf("Login() error = %v", err)
 	}
 
-	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), store.lastSessionID)
+	ctx := withSession(requestctx.WithUserID(context.Background(), 1), store.lastSessionID)
 	if logoutErr := uc.Logout(ctx); logoutErr != nil {
 		t.Fatalf("Logout() error = %v", logoutErr)
 	}
@@ -180,7 +180,7 @@ func TestLogoutRevokesCurrentLoginSession(t *testing.T) {
 func TestLogoutRejectsMissingLoginSessionContext(t *testing.T) {
 	uc, _ := newUsecase(t)
 
-	ctx := requestctx.WithUserID(context.Background(), "1")
+	ctx := requestctx.WithUserID(context.Background(), 1)
 	if err := uc.Logout(ctx); err == nil {
 		t.Fatal("Logout(missing session) error = nil, want unauthorized")
 	}
@@ -200,7 +200,7 @@ func TestChangePasswordRotatesPasswordAndRevokesOtherSessions(t *testing.T) {
 		t.Fatalf("Login(second session) error = %v", err)
 	}
 	otherSessionID := store.lastSessionID
-	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), currentSessionID)
+	ctx := withSession(requestctx.WithUserID(context.Background(), 1), currentSessionID)
 
 	err = uc.ChangePassword(ctx, authusecase.ChangePasswordInput{
 		CurrentPassword: "123456",
@@ -232,7 +232,7 @@ func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	ctx := withSession(requestctx.WithUserID(context.Background(), "1"), store.lastSessionID)
+	ctx := withSession(requestctx.WithUserID(context.Background(), 1), store.lastSessionID)
 
 	err = uc.ChangePassword(ctx, authusecase.ChangePasswordInput{
 		CurrentPassword: "wrong-password",
@@ -420,7 +420,7 @@ func (r *loginRecorder) RecordLogin(_ context.Context, record authusecase.LoginR
 }
 
 func withSession(ctx context.Context, sessionID int64) context.Context {
-	return requestctx.WithLoginSessionID(ctx, strconv.FormatInt(sessionID, 10))
+	return requestctx.WithLoginSessionID(ctx, sessionID)
 }
 
 func contains(values []string, want string) bool {

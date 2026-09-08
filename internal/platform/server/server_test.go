@@ -484,7 +484,7 @@ type fakeStatusReporter struct {
 type fakeLoginSessionAuthenticator struct{}
 
 func (fakeLoginSessionAuthenticator) AuthenticateLoginSession(context.Context, string) (LoginSessionIdentity, error) {
-	return LoginSessionIdentity{SessionID: "session-1", UserID: "42", RoleID: "7"}, nil
+	return LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}, nil
 }
 
 func (f fakeStatusReporter) Status(context.Context) []CapabilityStatus {

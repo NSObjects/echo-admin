@@ -126,8 +126,8 @@ func scopedManagerUsecaseWithStore(t *testing.T) (*usecase.Usecase, context.Cont
 	uc := usecase.New(store, adminRoleReaderSpy{
 		state: usecase.AdminRoleState{RoleIDs: []int64{2}, ActiveRoleID: 2},
 	})
-	ctx := requestctx.WithUserID(context.Background(), "42")
-	return uc, requestctx.WithRoleID(ctx, "2"), store
+	ctx := requestctx.WithUserID(context.Background(), 42)
+	return uc, requestctx.WithRoleID(ctx, 2), store
 }
 
 func TestVisibleRoleIDsUsesDataAuthorityInsideDelegationScope(t *testing.T) {
@@ -151,7 +151,7 @@ func TestVisibleRoleIDsUsesDataAuthorityInsideDelegationScope(t *testing.T) {
 	uc := usecase.New(&storeSpy{roles: []accessdomain.Role{root, manager, operator, sibling}}, adminRoleReaderSpy{
 		state: usecase.AdminRoleState{RoleIDs: []int64{2}, ActiveRoleID: 2},
 	})
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "42"), "2")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 42), 2)
 
 	ids, err := uc.VisibleRoleIDs(ctx)
 	if err != nil {
@@ -352,8 +352,8 @@ func TestAPIGroupsReturnsSortedUniqueGroups(t *testing.T) {
 }
 
 func superAdminContext() context.Context {
-	ctx := requestctx.WithUserID(context.Background(), "42")
-	return requestctx.WithRoleID(ctx, "1")
+	ctx := requestctx.WithUserID(context.Background(), 42)
+	return requestctx.WithRoleID(ctx, 1)
 }
 
 type storeSpy struct {

@@ -22,7 +22,7 @@ func TestCreateTokenStoresHashAndReturnsSecretOnce(t *testing.T) {
 		usecase.WithClock(fixedTime),
 		usecase.WithSecretSource(func() (string, error) { return knownSecret, nil }),
 	)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "7"), "9")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 7), 9)
 
 	created, err := uc.CreateToken(ctx, usecase.TokenInput{Name: "Deploy Bot", Active: true, Days: 30})
 	if err != nil {
@@ -59,7 +59,7 @@ func TestCreateTokenAllowsSuperAdminTargetAdminRole(t *testing.T) {
 		usecase.WithClock(fixedTime),
 		usecase.WithSecretSource(func() (string, error) { return knownSecret, nil }),
 	)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "1")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 1), 1)
 
 	_, err := uc.CreateToken(ctx, usecase.TokenInput{AdminID: 22, RoleID: 5, Name: "Deploy Bot", Active: true, Days: 10})
 	if err != nil {
@@ -86,7 +86,7 @@ func TestCreateTokenRejectsNonSuperTargetAdminRole(t *testing.T) {
 		usecase.WithClock(fixedTime),
 		usecase.WithSecretSource(func() (string, error) { return knownSecret, nil }),
 	)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "7"), "9")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 7), 9)
 
 	_, err := uc.CreateToken(ctx, usecase.TokenInput{AdminID: 8, RoleID: 9, Name: "Deploy Bot", Active: true, Days: 30})
 	if err == nil {
@@ -107,7 +107,7 @@ func TestCreateTokenRejectsAdminMissingTargetRole(t *testing.T) {
 		usecase.WithClock(fixedTime),
 		usecase.WithSecretSource(func() (string, error) { return knownSecret, nil }),
 	)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "1")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 1), 1)
 
 	_, err := uc.CreateToken(ctx, usecase.TokenInput{AdminID: 22, RoleID: 5, Name: "Deploy Bot", Active: true, Days: 30})
 	if err == nil {
@@ -128,7 +128,7 @@ func TestListTokensScopesNonSuperToCurrentAdmin(t *testing.T) {
 		rolePolicy{},
 		usecase.WithClock(fixedTime),
 	)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "7"), "9")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 7), 9)
 
 	_, err := uc.ListTokens(ctx, usecase.ListInput{Page: 1, PageSize: 20, AdminID: 99, Active: &active})
 	if err != nil {
@@ -151,7 +151,7 @@ func TestDeleteTokenRejectsOtherAdminForNonSuper(t *testing.T) {
 		rolePolicy{},
 		usecase.WithClock(fixedTime),
 	)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "7"), "9")
+	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), 7), 9)
 
 	err := uc.DeleteToken(ctx, 12)
 	if err == nil {

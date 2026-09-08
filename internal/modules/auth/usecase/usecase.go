@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -133,11 +132,11 @@ func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSw
 	if err := u.ready(); err != nil {
 		return RoleSwitchOutput{}, err
 	}
-	sessionID, err := currentLoginSessionID(ctx)
+	sessionID, err := requestctx.RequireLoginSessionID(ctx)
 	if err != nil {
 		return RoleSwitchOutput{}, err
 	}
-	adminID, err := currentAdminID(ctx)
+	adminID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return RoleSwitchOutput{}, err
 	}
@@ -168,11 +167,11 @@ func (u *Usecase) ChangePassword(ctx context.Context, input ChangePasswordInput)
 	if err := u.ready(); err != nil {
 		return err
 	}
-	sessionID, err := currentLoginSessionID(ctx)
+	sessionID, err := requestctx.RequireLoginSessionID(ctx)
 	if err != nil {
 		return err
 	}
-	adminID, err := currentAdminID(ctx)
+	adminID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return err
 	}
@@ -205,7 +204,7 @@ func (u *Usecase) Logout(ctx context.Context) error {
 	if err := u.ready(); err != nil {
 		return err
 	}
-	sessionID, err := currentLoginSessionID(ctx)
+	sessionID, err := requestctx.RequireLoginSessionID(ctx)
 	if err != nil {
 		return err
 	}
@@ -217,11 +216,11 @@ func (u *Usecase) LogoutOthers(ctx context.Context) error {
 	if err := u.ready(); err != nil {
 		return err
 	}
-	sessionID, err := currentLoginSessionID(ctx)
+	sessionID, err := requestctx.RequireLoginSessionID(ctx)
 	if err != nil {
 		return err
 	}
-	adminID, err := currentAdminID(ctx)
+	adminID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return err
 	}
@@ -289,7 +288,7 @@ func (u *Usecase) ready() error {
 }
 
 func (u *Usecase) currentAdminAndRole(ctx context.Context) (identitydomain.Admin, int64, error) {
-	adminID, err := currentAdminID(ctx)
+	adminID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return identitydomain.Admin{}, 0, err
 	}
@@ -301,7 +300,7 @@ func (u *Usecase) currentAdminAndRole(ctx context.Context) (identitydomain.Admin
 		return identitydomain.Admin{}, 0, apperr.New(apperr.ErrAccountDisabled, "账号已停用，请联系管理员")
 	}
 	activeRoleID := admin.ActiveRoleID
-	if roleID, parseErr := currentRoleID(ctx); parseErr == nil && roleID > 0 {
+	if roleID, roleErr := requestctx.RequireRoleID(ctx); roleErr == nil && roleID > 0 {
 		activeRoleID = roleID
 	}
 	if !admin.HasRole(activeRoleID) {
@@ -405,36 +404,6 @@ func loginAttemptKey(username, ip string) string {
 	}
 	sum := sha256.Sum256([]byte(username + "\x00" + ip))
 	return hex.EncodeToString(sum[:])
-}
-
-func currentAdminID(ctx context.Context) (int64, error) {
-	raw := requestctx.GetUserID(ctx)
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
-}
-
-func currentRoleID(ctx context.Context) (int64, error) {
-	raw := requestctx.GetRoleID(ctx)
-	if raw == "" {
-		return 0, apperr.NewUnauthorized()
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
-}
-
-func currentLoginSessionID(ctx context.Context) (int64, error) {
-	raw := requestctx.GetLoginSessionID(ctx)
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
 }
 
 func loginRecordFromInput(adminID int64, username string, input LoginInput, success bool, reason string) LoginRecord {

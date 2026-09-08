@@ -28,7 +28,7 @@ import (
 func TestUploadFileStoresBytesMetadataAndOperation(t *testing.T) {
 	e, store, recorder, uploadDir := newFileEcho(t)
 
-	rec := doMultipart(t, e, "/api/files", "hello.txt", "hello", "7")
+	rec := doMultipart(t, e, "/api/files", "hello.txt", "hello", 7)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("upload status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -57,7 +57,7 @@ func TestUploadFileAssignsCategory(t *testing.T) {
 	e, store, _, _ := newFileEcho(t)
 	store.categories = []filedomain.FileCategory{mustCategory(t, 5, 0, "合同")}
 
-	rec := doMultipartWithFields(t, e, "/api/files", "hello.txt", "hello", "7", map[string]string{
+	rec := doMultipartWithFields(t, e, "/api/files", "hello.txt", "hello", 7, map[string]string{
 		"category_id": "5",
 	})
 	if rec.Code != http.StatusCreated {
@@ -71,7 +71,7 @@ func TestUploadFileAssignsCategory(t *testing.T) {
 func TestImportURLStoresMetadataAndOperation(t *testing.T) {
 	e, store, recorder, _ := newFileEcho(t)
 
-	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"https://cdn.example.com/manual.pdf?version=1"}`, "7")
+	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"https://cdn.example.com/manual.pdf?version=1"}`, 7)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("import url status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -98,7 +98,7 @@ func TestImportURLStoresMetadataAndOperation(t *testing.T) {
 func TestImportURLRejectsUnsafeURLBeforeStore(t *testing.T) {
 	e, store, recorder, _ := newFileEcho(t)
 
-	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"javascript:alert(1)"}`, "7")
+	rec := doJSON(t, e, http.MethodPost, "/api/files/import-url", `{"url":"javascript:alert(1)"}`, 7)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("import unsafe url status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
@@ -118,7 +118,7 @@ func TestListFilesPassesCategoryFilter(t *testing.T) {
 	e, store, _, _ := newFileEcho(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/files?category_id=5", nil)
-	req = req.WithContext(requestctx.WithUserID(req.Context(), "7"))
+	req = req.WithContext(requestctx.WithUserID(req.Context(), 7))
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
@@ -136,7 +136,7 @@ func TestServeUploadReturnsStoredFile(t *testing.T) {
 		t.Fatalf("write uploaded file fixture: %v", err)
 	}
 
-	rec := doJSON(t, e, http.MethodGet, "/api/uploads/stored.txt", "", "7")
+	rec := doJSON(t, e, http.MethodGet, "/api/uploads/stored.txt", "", 7)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -148,7 +148,7 @@ func TestServeUploadReturnsStoredFile(t *testing.T) {
 func TestServeUploadRejectsNestedPath(t *testing.T) {
 	e, _, _, _ := newFileEcho(t)
 
-	rec := doJSON(t, e, http.MethodGet, "/api/uploads/nested/stored.txt", "", "7")
+	rec := doJSON(t, e, http.MethodGet, "/api/uploads/nested/stored.txt", "", 7)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("serve upload status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
@@ -158,7 +158,7 @@ func TestRenameFileUpdatesMetadataAndRecordsOperation(t *testing.T) {
 	e, store, recorder, _ := newFileEcho(t)
 	store.file = mustFile(t, 9, "old.txt", "https://cdn.example.com/old.txt")
 
-	rec := doJSON(t, e, http.MethodPatch, "/api/files/9/name", `{"name":"new.txt"}`, "7")
+	rec := doJSON(t, e, http.MethodPatch, "/api/files/9/name", `{"name":"new.txt"}`, 7)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("rename file status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -179,7 +179,7 @@ func TestDeleteFileRemovesMetadataLocalUploadAndRecordsOperation(t *testing.T) {
 	}
 	store.file = mustFile(t, 9, "hello.txt", "/api/uploads/"+storedName)
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/files/9", "", "7")
+	rec := doJSON(t, e, http.MethodDelete, "/api/files/9", "", 7)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete file status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -197,7 +197,7 @@ func TestDeleteFileRemovesMetadataLocalUploadAndRecordsOperation(t *testing.T) {
 func TestCreateCategoryStoresMetadataAndRecordsOperation(t *testing.T) {
 	e, store, recorder, _ := newFileEcho(t)
 
-	rec := doJSON(t, e, http.MethodPost, "/api/file-categories", `{"name":"合同"}`, "7")
+	rec := doJSON(t, e, http.MethodPost, "/api/file-categories", `{"name":"合同"}`, 7)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create category status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -216,7 +216,7 @@ func TestDeleteCategoryRejectsParentWithChildren(t *testing.T) {
 		mustCategory(t, 2, 1, "采购合同"),
 	}
 
-	rec := doJSON(t, e, http.MethodDelete, "/api/file-categories/1", "", "7")
+	rec := doJSON(t, e, http.MethodDelete, "/api/file-categories/1", "", 7)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("delete category status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
@@ -247,12 +247,12 @@ func newFileEcho(t *testing.T) (*echo.Echo, *fileStore, *operationRecorder, stri
 	return e, store, recorder, uploadDir
 }
 
-func doMultipart(t *testing.T, e *echo.Echo, path, filename, body, userID string) *httptest.ResponseRecorder {
+func doMultipart(t *testing.T, e *echo.Echo, path, filename, body string, userID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	return doMultipartWithFields(t, e, path, filename, body, userID, nil)
 }
 
-func doMultipartWithFields(t *testing.T, e *echo.Echo, path, filename, body, userID string, fields map[string]string) *httptest.ResponseRecorder {
+func doMultipartWithFields(t *testing.T, e *echo.Echo, path, filename, body string, userID int64, fields map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var payload bytes.Buffer
 	writer := multipart.NewWriter(&payload)
@@ -280,7 +280,7 @@ func doMultipartWithFields(t *testing.T, e *echo.Echo, path, filename, body, use
 	return rec
 }
 
-func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID string) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, e *echo.Echo, method, path, body string, userID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)

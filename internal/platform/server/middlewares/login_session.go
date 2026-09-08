@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -29,11 +28,11 @@ const (
 )
 
 // LoginSessionIdentity is the request identity produced by a verified browser
-// login session.
+// login session. Fields are int64 database keys.
 type LoginSessionIdentity struct {
-	SessionID string
-	UserID    string
-	RoleID    string
+	SessionID int64
+	UserID    int64
+	RoleID    int64
 }
 
 // LoginSessionAuthenticator validates browser login session credentials.
@@ -75,7 +74,7 @@ func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
-			if requestctx.GetUserID(c.Request().Context()) != "" || routeExempt(c, config.Exemptions) {
+			if requestctx.GetUserID(c.Request().Context()) != 0 || routeExempt(c, config.Exemptions) {
 				return next(c)
 			}
 			cookie, err := c.Cookie(cookieName)
@@ -86,7 +85,7 @@ func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
 			if err != nil {
 				return err
 			}
-			if identity.UserID == "" || identity.RoleID == "" || identity.SessionID == "" {
+			if identity.UserID <= 0 || identity.RoleID <= 0 || identity.SessionID <= 0 {
 				return apperr.NewUnauthorized()
 			}
 			request := c.Request()
@@ -98,9 +97,9 @@ func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
 				identity.SessionID,
 			)
 			logger := logging.FromContext(ctx).With().
-				Str("user_id", identity.UserID).
-				Str("role_id", identity.RoleID).
-				Str("login_session_id", identity.SessionID).
+				Int64("user_id", identity.UserID).
+				Int64("role_id", identity.RoleID).
+				Int64("login_session_id", identity.SessionID).
 				Str("auth", "login_session").
 				Logger()
 			c.SetRequest(request.WithContext(logger.WithContext(ctx)))
@@ -115,7 +114,7 @@ func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
 func CSRFConfig(exemptions []RouteExemption, secureCookies bool) middleware.CSRFConfig {
 	return middleware.CSRFConfig{
 		Skipper: func(c *echo.Context) bool {
-			return requestctx.GetLoginSessionID(c.Request().Context()) == "" || routeExempt(c, exemptions)
+			return requestctx.GetLoginSessionID(c.Request().Context()) == 0 || routeExempt(c, exemptions)
 		},
 		TokenLookup:    "header:" + echo.HeaderXCSRFToken,
 		CookieName:     CSRFCookieName,
@@ -194,12 +193,4 @@ func clearCookie(c *echo.Context, name string, httpOnly, secure bool) {
 		HttpOnly: httpOnly,
 		SameSite: http.SameSiteLaxMode,
 	})
-}
-
-// FormatLoginSessionID converts positive numeric IDs to request metadata.
-func FormatLoginSessionID(id int64) string {
-	if id <= 0 {
-		return ""
-	}
-	return strconv.FormatInt(id, 10)
 }

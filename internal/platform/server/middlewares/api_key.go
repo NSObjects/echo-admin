@@ -16,9 +16,10 @@ import (
 const APIKeyHeader = "X-API-Token"
 
 // APIKeyIdentity is the request identity produced by a verified API token.
+// Fields are int64 database keys.
 type APIKeyIdentity struct {
-	UserID string
-	RoleID string
+	UserID int64
+	RoleID int64
 }
 
 // APIKeyVerifier validates a raw API token without exposing token storage to the server.
@@ -63,14 +64,14 @@ func APIKey(config *APIKeyConfig) (echo.MiddlewareFunc, error) {
 			if err != nil {
 				return err
 			}
-			if identity.UserID == "" || identity.RoleID == "" {
+			if identity.UserID <= 0 || identity.RoleID <= 0 {
 				return apperr.NewUnauthorized()
 			}
 			request := c.Request()
 			ctx := requestctx.WithRoleID(requestctx.WithUserID(request.Context(), identity.UserID), identity.RoleID)
 			logger := logging.FromContext(ctx).With().
-				Str("user_id", identity.UserID).
-				Str("role_id", identity.RoleID).
+				Int64("user_id", identity.UserID).
+				Int64("role_id", identity.RoleID).
 				Str("auth", "api_token").
 				Logger()
 			c.SetRequest(request.WithContext(logger.WithContext(ctx)))

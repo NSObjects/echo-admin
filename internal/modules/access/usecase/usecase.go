@@ -635,7 +635,7 @@ func (u *Usecase) ready() error {
 }
 
 func (u *Usecase) roleScope(ctx context.Context) (roleScope, error) {
-	adminID, err := currentAdminID(ctx)
+	adminID, err := requestctx.RequireUserID(ctx)
 	if err != nil {
 		return roleScope{}, err
 	}
@@ -644,7 +644,7 @@ func (u *Usecase) roleScope(ctx context.Context) (roleScope, error) {
 		return roleScope{}, err
 	}
 	activeRoleID := state.ActiveRoleID
-	if roleID, parseErr := currentRoleID(ctx); parseErr == nil && roleID > 0 {
+	if roleID, roleErr := requestctx.RequireRoleID(ctx); roleErr == nil && roleID > 0 {
 		activeRoleID = roleID
 	}
 	if !containsID(state.RoleIDs, activeRoleID) {
@@ -835,27 +835,6 @@ func coalesceStrings(next, fallback []string) []string {
 		return fallback
 	}
 	return next
-}
-
-func currentAdminID(ctx context.Context) (int64, error) {
-	raw := requestctx.GetUserID(ctx)
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
-}
-
-func currentRoleID(ctx context.Context) (int64, error) {
-	raw := requestctx.GetRoleID(ctx)
-	if raw == "" {
-		return 0, apperr.NewUnauthorized()
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, apperr.NewUnauthorized()
-	}
-	return id, nil
 }
 
 func mapDomainError(err error) error {

@@ -4,14 +4,19 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
 const (
 	requestIDForTest = "req-789"
 	traceIDForTest   = "trace-123"
-	userIDForTest    = "user-001"
-	roleIDForTest    = "role-001"
-	sessionIDForTest = "session-001"
+)
+
+const (
+	userIDForTest    = int64(42)
+	roleIDForTest    = int64(7)
+	sessionIDForTest = int64(1001)
 )
 
 func TestWithInfoStoresRequestMetadata(t *testing.T) {
@@ -38,13 +43,13 @@ func TestWithInfoStoresRequestMetadata(t *testing.T) {
 		t.Fatalf("RequestID = %q, want %s", info.RequestID, requestIDForTest)
 	}
 	if info.UserID != userIDForTest {
-		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+		t.Fatalf("UserID = %d, want %d", info.UserID, userIDForTest)
 	}
 	if info.RoleID != roleIDForTest {
-		t.Fatalf("RoleID = %q, want %s", info.RoleID, roleIDForTest)
+		t.Fatalf("RoleID = %d, want %d", info.RoleID, roleIDForTest)
 	}
 	if info.LoginSessionID != sessionIDForTest {
-		t.Fatalf("LoginSessionID = %q, want %s", info.LoginSessionID, sessionIDForTest)
+		t.Fatalf("LoginSessionID = %d, want %d", info.LoginSessionID, sessionIDForTest)
 	}
 }
 
@@ -75,10 +80,10 @@ func TestWithTraceSpanPreservesExistingMetadata(t *testing.T) {
 		t.Fatalf("RequestID = %q, want %s", info.RequestID, requestIDForTest)
 	}
 	if info.UserID != userIDForTest {
-		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+		t.Fatalf("UserID = %d, want %d", info.UserID, userIDForTest)
 	}
 	if info.LoginSessionID != sessionIDForTest {
-		t.Fatalf("LoginSessionID = %q, want %s", info.LoginSessionID, sessionIDForTest)
+		t.Fatalf("LoginSessionID = %d, want %d", info.LoginSessionID, sessionIDForTest)
 	}
 	if info.TraceID != traceIDForTest {
 		t.Fatalf("TraceID = %q, want %s", info.TraceID, traceIDForTest)
@@ -116,7 +121,7 @@ func TestWithUserIDAddsAuthenticatedIdentity(t *testing.T) {
 		RequestID: "req-789",
 	})
 
-	ctx = WithUserID(ctx, "user-001")
+	ctx = WithUserID(ctx, userIDForTest)
 
 	info, ok := FromContext(ctx)
 	if !ok {
@@ -125,8 +130,8 @@ func TestWithUserIDAddsAuthenticatedIdentity(t *testing.T) {
 	if info.TraceID != traceIDForTest {
 		t.Fatalf("TraceID = %q, want %s", info.TraceID, traceIDForTest)
 	}
-	if info.UserID != "user-001" {
-		t.Fatalf("UserID = %q, want user-001", info.UserID)
+	if info.UserID != userIDForTest {
+		t.Fatalf("UserID = %d, want %d", info.UserID, userIDForTest)
 	}
 }
 
@@ -144,13 +149,13 @@ func TestWithRoleIDAddsActiveAuthenticatedRole(t *testing.T) {
 		t.Fatal("FromContext() ok = false, want true")
 	}
 	if info.UserID != userIDForTest {
-		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+		t.Fatalf("UserID = %d, want %d", info.UserID, userIDForTest)
 	}
 	if info.RoleID != roleIDForTest {
-		t.Fatalf("RoleID = %q, want %s", info.RoleID, roleIDForTest)
+		t.Fatalf("RoleID = %d, want %d", info.RoleID, roleIDForTest)
 	}
 	if got := GetRoleID(ctx); got != roleIDForTest {
-		t.Fatalf("GetRoleID() = %q, want %s", got, roleIDForTest)
+		t.Fatalf("GetRoleID() = %d, want %d", got, roleIDForTest)
 	}
 }
 
@@ -163,10 +168,10 @@ func TestWithLoginSessionIDAddsSessionMetadata(t *testing.T) {
 		t.Fatal("FromContext() ok = false, want true")
 	}
 	if info.UserID != userIDForTest {
-		t.Fatalf("UserID = %q, want %s", info.UserID, userIDForTest)
+		t.Fatalf("UserID = %d, want %d", info.UserID, userIDForTest)
 	}
 	if got := GetLoginSessionID(ctx); got != sessionIDForTest {
-		t.Fatalf("GetLoginSessionID() = %q, want %s", got, sessionIDForTest)
+		t.Fatalf("GetLoginSessionID() = %d, want %d", got, sessionIDForTest)
 	}
 }
 
@@ -175,13 +180,72 @@ func TestContextAccessorsHandleNilContext(t *testing.T) {
 	if got := GetRequestID(ctx); got != "" {
 		t.Fatalf("GetRequestID(nil) = %q, want empty", got)
 	}
-	if got := GetUserID(ctx); got != "" {
-		t.Fatalf("GetUserID(nil) = %q, want empty", got)
+	if got := GetUserID(ctx); got != 0 {
+		t.Fatalf("GetUserID(nil) = %d, want 0", got)
 	}
-	if got := GetRoleID(ctx); got != "" {
-		t.Fatalf("GetRoleID(nil) = %q, want empty", got)
+	if got := GetRoleID(ctx); got != 0 {
+		t.Fatalf("GetRoleID(nil) = %d, want 0", got)
 	}
-	if got := GetLoginSessionID(ctx); got != "" {
-		t.Fatalf("GetLoginSessionID(nil) = %q, want empty", got)
+	if got := GetLoginSessionID(ctx); got != 0 {
+		t.Fatalf("GetLoginSessionID(nil) = %d, want 0", got)
+	}
+}
+
+func TestRequireIdentityRejectsInvalidValues(t *testing.T) {
+	validCtx := WithUserID(WithRoleID(WithLoginSessionID(context.Background(), sessionIDForTest), roleIDForTest), userIDForTest)
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		wantErr bool
+	}{
+		{name: "valid identity", ctx: validCtx},
+		{name: "missing identity", ctx: context.Background(), wantErr: true},
+		{name: "zero identity", ctx: WithUserID(context.Background(), 0), wantErr: true},
+		{name: "negative identity", ctx: WithUserID(context.Background(), -1), wantErr: true},
+	}
+
+	getters := []struct {
+		name     string
+		call     func(context.Context) (int64, error)
+		validGot int64
+	}{
+		{name: "user", call: RequireUserID, validGot: userIDForTest},
+		{name: "role", call: RequireRoleID, validGot: roleIDForTest},
+		{name: "login session", call: RequireLoginSessionID, validGot: sessionIDForTest},
+	}
+
+	for _, getter := range getters {
+		t.Run(getter.name, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					got, err := getter.call(tt.ctx)
+					if tt.wantErr {
+						if err == nil {
+							t.Fatalf("error = nil, want unauthorized")
+						}
+						if info := apperr.NewInfo(err); info.Kind != apperr.KindUnauthorized {
+							t.Fatalf("kind = %s, want %s", info.Kind, apperr.KindUnauthorized)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatalf("error = %v, want nil", err)
+					}
+					if got != getter.validGot {
+						t.Fatalf("got = %d, want %d", got, getter.validGot)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestRequireIdentityErrorsAreUnauthorized(t *testing.T) {
+	_, err := RequireUserID(context.Background())
+	if err == nil {
+		t.Fatal("RequireUserID() error = nil, want unauthorized")
+	}
+	if code := apperr.NewInfo(err).Code; code != apperr.ErrUnauthorized {
+		t.Fatalf("code = %d, want %d", code, apperr.ErrUnauthorized)
 	}
 }

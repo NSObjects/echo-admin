@@ -204,8 +204,8 @@ func requestLogger() echo.MiddlewareFunc {
 			if values.Error != nil {
 				event = event.Err(values.Error)
 			}
-			if info, ok := requestctx.FromContext(c.Request().Context()); ok && info.UserID != "" {
-				event = event.Str("user_id", info.UserID)
+			if info, ok := requestctx.FromContext(c.Request().Context()); ok && info.UserID != 0 {
+				event = event.Int64("user_id", info.UserID)
 			}
 
 			event.
@@ -233,8 +233,8 @@ func requestLoggerFromContext(ctx context.Context) zerolog.Logger {
 	if info.SpanID != "" {
 		builder = builder.Str("span_id", info.SpanID)
 	}
-	if info.UserID != "" {
-		builder = builder.Str("user_id", info.UserID)
+	if info.UserID != 0 {
+		builder = builder.Int64("user_id", info.UserID)
 	}
 	return builder.Logger()
 }

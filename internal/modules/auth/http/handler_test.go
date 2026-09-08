@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -336,9 +335,9 @@ func (a sessionAuthenticator) AuthenticateLoginSession(ctx context.Context, toke
 		return middlewares.LoginSessionIdentity{}, err
 	}
 	return middlewares.LoginSessionIdentity{
-		SessionID: strconv.FormatInt(identity.SessionID, 10),
-		UserID:    strconv.FormatInt(identity.AdminID, 10),
-		RoleID:    strconv.FormatInt(identity.RoleID, 10),
+		SessionID: identity.SessionID,
+		UserID:    identity.AdminID,
+		RoleID:    identity.RoleID,
 	}, nil
 }
 

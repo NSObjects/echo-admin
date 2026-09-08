@@ -25,7 +25,7 @@ import (
 func TestCreateTokenRecordsOperation(t *testing.T) {
 	e, store, recorder := newTokenEcho()
 
-	rec := doJSON(t, e, http.MethodPost, "/api/api-tokens", `{"name":"Deploy Bot","active":true,"days":30}`, "42", "7")
+	rec := doJSON(t, e, http.MethodPost, "/api/api-tokens", `{"name":"Deploy Bot","active":true,"days":30}`, 42, 7)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create token status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
@@ -66,7 +66,7 @@ func newTokenEcho() (*echo.Echo, *tokenStore, *operationRecorder) {
 	return e, store, recorder
 }
 
-func doJSON(t *testing.T, e *echo.Echo, method, path, body, userID, roleID string) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, e *echo.Echo, method, path, body string, userID, roleID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	if body != "" {
