@@ -10,19 +10,19 @@ import (
 	"time"
 	"unicode/utf8"
 
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 const (
-	defaultPageSize          = 20
-	maxPageSize              = 100
-	seedSiteNameConfigKey    = "site_name"
-	seedStatusDictionaryCode = "status"
-	dictionaryCodeProbeName  = "dictionary"
-	maxVersionCodeLength     = 80
-	maxVersionDescLength     = 4000
+	defaultPageSize         = 20
+	maxPageSize             = 100
+	seedSiteNameConfigKey   = "site_name"
+	dictionaryCodeProbeName = "dictionary"
+	maxVersionCodeLength    = 80
+	maxVersionDescLength    = 4000
 )
 
 // ListConfigs returns system configs.
@@ -294,7 +294,7 @@ func (u *Usecase) DeleteDictionary(ctx context.Context, code string) error {
 	if err != nil {
 		return err
 	}
-	if normalized == seedStatusDictionaryCode {
+	if normalized == domain.StatusDictionaryCode {
 		return apperr.NewBadRequest("seed dictionary cannot be deleted")
 	}
 	return u.store.DeleteDictionary(ctx, normalized)
@@ -471,7 +471,7 @@ func (u *Usecase) ExportVersion(ctx context.Context, input ExportVersionInput) (
 }
 
 type versionExportResources struct {
-	menus        []VersionMenu
+	menus        []accessusecase.MenuTreeInput
 	dictionaries []VersionDictionary
 }
 
@@ -484,7 +484,7 @@ func (u *Usecase) exportVersionResources(ctx context.Context, input ExportVersio
 	if catalogErr != nil {
 		return versionExportResources{}, catalogErr
 	}
-	menus := []VersionMenu{}
+	menus := []accessusecase.MenuTreeInput{}
 	if len(menuIDs) > 0 {
 		menus, err = u.catalog.ExportVersionMenus(ctx, menuIDs)
 		if err != nil {

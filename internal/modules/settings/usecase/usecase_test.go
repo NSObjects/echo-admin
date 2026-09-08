@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	settingsdomain "github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 	"github.com/NSObjects/echo-admin/internal/modules/settings/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -373,11 +375,13 @@ func newVersionExportFixture(t *testing.T) (*storeSpy, *versionCatalogSpy) {
 	}
 	store := &storeSpy{dictionaries: []settingsdomain.Dictionary{dictionary}}
 	catalog := &versionCatalogSpy{
-		menus: []usecase.VersionMenu{{
-			Name:      "角色权限",
-			Path:      "/roles",
-			Component: "./Roles",
-			Active:    true,
+		menus: []accessusecase.MenuTreeInput{{
+			MenuInput: accessusecase.MenuInput{
+				Name:      "角色权限",
+				Path:      "/roles",
+				Component: "./Roles",
+				Active:    true,
+			},
 		}},
 	}
 	return store, catalog
@@ -399,11 +403,13 @@ func TestImportVersionImportsMenusAndDictionaries(t *testing.T) {
 
 	_, err := uc.ImportVersion(context.Background(), usecase.VersionBundle{
 		Version: usecase.VersionInfo{Code: "v2.0.0", Name: "权限包", Description: "初始化权限"},
-		Menus: []usecase.VersionMenu{{
-			Name:      "角色权限",
-			Path:      "/roles",
-			Component: "./Roles",
-			Active:    true,
+		Menus: []accessusecase.MenuTreeInput{{
+			MenuInput: accessusecase.MenuInput{
+				Name:      "角色权限",
+				Path:      "/roles",
+				Component: "./Roles",
+				Active:    true,
+			},
 		}},
 		Dictionaries: []usecase.VersionDictionary{{
 			Code: statusDictionaryCode,
@@ -437,11 +443,13 @@ func TestImportVersionRejectsInvalidDictionaryBeforeWriting(t *testing.T) {
 
 	_, err := uc.ImportVersion(context.Background(), usecase.VersionBundle{
 		Version: usecase.VersionInfo{Code: "v2.0.0", Name: "权限包"},
-		Menus: []usecase.VersionMenu{{
-			Name:      "角色权限",
-			Path:      "/roles",
-			Component: "./Roles",
-			Active:    true,
+		Menus: []accessusecase.MenuTreeInput{{
+			MenuInput: accessusecase.MenuInput{
+				Name:      "角色权限",
+				Path:      "/roles",
+				Component: "./Roles",
+				Active:    true,
+			},
 		}},
 		Dictionaries: []usecase.VersionDictionary{{Code: "", Name: "状态"}},
 	})
@@ -469,7 +477,7 @@ func TestImportVersionRejectsInvalidDictionaryBeforeWriting(t *testing.T) {
 func TestImportVersionStopsOnFailure(t *testing.T) {
 	bundle := usecase.VersionBundle{
 		Version:      usecase.VersionInfo{Code: "v2.0.0", Name: "权限包"},
-		Menus:        []usecase.VersionMenu{{Name: "角色权限", Path: "/roles", Active: true}},
+		Menus:        []accessusecase.MenuTreeInput{{MenuInput: accessusecase.MenuInput{Name: "角色权限", Path: "/roles", Active: true}}},
 		Dictionaries: []usecase.VersionDictionary{{Code: statusDictionaryCode, Name: "状态"}},
 	}
 	tests := []struct {
@@ -683,11 +691,11 @@ func mustParamNoT(id int64, name, key, value, desc string) (settingsdomain.Syste
 }
 
 type versionCatalogSpy struct {
-	menus         []usecase.VersionMenu
+	menus         []accessusecase.MenuTreeInput
 	exportMenuIDs []int64
 }
 
-func (s *versionCatalogSpy) ExportVersionMenus(_ context.Context, ids []int64) ([]usecase.VersionMenu, error) {
+func (s *versionCatalogSpy) ExportVersionMenus(_ context.Context, ids []int64) ([]accessusecase.MenuTreeInput, error) {
 	s.exportMenuIDs = append([]int64(nil), ids...)
 	return s.menus, nil
 }
@@ -699,7 +707,7 @@ type importRunnerSpy struct {
 	failDictionaryCode string // empty means never fail; otherwise the code that fails
 	failOnVersion      bool
 
-	importedMenus           []usecase.VersionMenu
+	importedMenus           []accessusecase.MenuTreeInput
 	replacedDictionaryCodes []string
 	createdVersion          settingsdomain.SystemVersion
 }
@@ -708,8 +716,8 @@ func (s *importRunnerSpy) RunImport(ctx context.Context, fn func(context.Context
 	return fn(ctx, s)
 }
 
-func (s *importRunnerSpy) ImportMenus(_ context.Context, menus []usecase.VersionMenu) error {
-	s.importedMenus = append([]usecase.VersionMenu(nil), menus...)
+func (s *importRunnerSpy) ImportMenus(_ context.Context, menus []accessusecase.MenuTreeInput) error {
+	s.importedMenus = append([]accessusecase.MenuTreeInput(nil), menus...)
 	if s.failOnMenus {
 		return errors.New("menu import failed")
 	}
@@ -742,4 +750,67 @@ func sameInt64s(got, want []int64) bool {
 		}
 	}
 	return true
+}
+
+// TestVersionBundleMenuJSONContract locks the version-bundle file format for
+// menus: the exchange shape serializes the historical field names and never
+// leaks database identity (parent_id, button id).
+func contractVersionBundle() usecase.VersionBundle {
+	return usecase.VersionBundle{
+		Version: usecase.VersionInfo{Code: "v9.9.9", Name: "契约包"},
+		Menus: []accessusecase.MenuTreeInput{{
+			MenuInput: accessusecase.MenuInput{
+				ParentID:  123,
+				Name:      "角色权限",
+				Path:      "/roles",
+				Icon:      "safety",
+				Component: "./Roles",
+				Meta:      accessusecase.MenuMetaInput{KeepAlive: true},
+				Sort:      22,
+				Active:    true,
+				Buttons:   []accessusecase.MenuButtonInput{{ID: 77, Name: "create", Description: "新增角色"}},
+			},
+			Children: []accessusecase.MenuTreeInput{{
+				MenuInput: accessusecase.MenuInput{Name: "子菜单", Path: "/roles/child", Component: "./Child", Active: true},
+			}},
+		}},
+	}
+}
+
+func TestVersionBundleMenuJSONContract(t *testing.T) {
+	data, err := json.Marshal(contractVersionBundle())
+	if err != nil {
+		t.Fatalf("marshal bundle error = %v", err)
+	}
+	payload := string(data)
+	for _, want := range []string{
+		`"menus":[{`,
+		`"name":"角色权限"`,
+		`"path":"/roles"`,
+		`"icon":"safety"`,
+		`"component":"./Roles"`,
+		`"meta":{"active_name":"","keep_alive":true,"default_menu":false,"close_tab":false,"transition_type":""}`,
+		`"permission":""`,
+		`"sort":22`,
+		`"active":true`,
+		`"buttons":[{"name":"create","description":"新增角色"}]`,
+		`"children":[{"name":"子菜单"`,
+	} {
+		if !strings.Contains(payload, want) {
+			t.Fatalf("bundle JSON missing contract fragment %s in %s", want, payload)
+		}
+	}
+	for _, forbidden := range []string{`"parent_id"`, `"id":77`, `"ID"`} {
+		if strings.Contains(payload, forbidden) {
+			t.Fatalf("bundle JSON must not contain %s: %s", forbidden, payload)
+		}
+	}
+
+	decoded := decodeVersionBundle(t, string(data))
+	if len(decoded.Menus) != 1 || decoded.Menus[0].Path != "/roles" {
+		t.Fatalf("decoded menus = %+v, want one /roles entry", decoded.Menus)
+	}
+	if len(decoded.Menus[0].Children) != 1 || decoded.Menus[0].Children[0].Path != "/roles/child" {
+		t.Fatalf("decoded children = %+v, want nested /roles/child", decoded.Menus[0].Children)
+	}
 }

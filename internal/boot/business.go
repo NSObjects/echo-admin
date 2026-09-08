@@ -2,13 +2,11 @@ package boot
 
 import (
 	"context"
-	"time"
 
 	"github.com/samber/do/v2"
 	"gorm.io/gorm"
 
 	accessmysql "github.com/NSObjects/echo-admin/internal/modules/access/adapters/mysql"
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	accesshttp "github.com/NSObjects/echo-admin/internal/modules/access/http"
 	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	apitokenmysql "github.com/NSObjects/echo-admin/internal/modules/apitoken/adapters/mysql"
@@ -626,18 +624,7 @@ func (t setupTransaction) InstallRootAuthorization(ctx context.Context) (setupus
 }
 
 func (t setupTransaction) CreateFirstAdministrator(ctx context.Context, input setupusecase.FirstAdministrator) error {
-	admin, err := identitydomain.RestoreAdmin(
-		0,
-		input.Username,
-		input.DisplayName,
-		input.Email,
-		input.PasswordHash,
-		[]int64{input.RootRoleID},
-		input.RootRoleID,
-		true,
-		time.Time{},
-		time.Time{},
-	)
+	admin, err := identitydomain.NewFirstAdministrator(input.Username, input.DisplayName, input.Email, input.PasswordHash, input.RootRoleID)
 	if err != nil {
 		return err
 	}
@@ -682,12 +669,8 @@ type settingsVersionCatalog struct {
 
 // ExportVersionMenus implements settingsusecase.VersionCatalog for access menus.
 // The bridge only maps types; export rules live in the access usecase.
-func (c settingsVersionCatalog) ExportVersionMenus(ctx context.Context, ids []int64) ([]settingsusecase.VersionMenu, error) {
-	nodes, err := c.access.ExportMenuTree(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	return versionMenuNodes(nodes), nil
+func (c settingsVersionCatalog) ExportVersionMenus(ctx context.Context, ids []int64) ([]accessusecase.MenuTreeInput, error) {
+	return c.access.ExportMenuTree(ctx, ids)
 }
 
 // settingsImportRunner runs settings imports in one database transaction. Menu
@@ -720,8 +703,8 @@ type settingsImportTransaction struct {
 }
 
 // ImportMenus implements settingsusecase.ImportTransaction for access menus.
-func (t settingsImportTransaction) ImportMenus(ctx context.Context, menus []settingsusecase.VersionMenu) error {
-	return t.access.ImportMenuTree(ctx, menuTreeInputs(menus))
+func (t settingsImportTransaction) ImportMenus(ctx context.Context, menus []accessusecase.MenuTreeInput) error {
+	return t.access.ImportMenuTree(ctx, menus)
 }
 
 // ReplaceDictionary implements settingsusecase.ImportTransaction for dictionaries.
@@ -733,93 +716,6 @@ func (t settingsImportTransaction) ReplaceDictionary(ctx context.Context, dictio
 // CreateVersion implements settingsusecase.ImportTransaction for release records.
 func (t settingsImportTransaction) CreateVersion(ctx context.Context, version settingsdomain.SystemVersion) (settingsdomain.SystemVersion, error) {
 	return t.settings.CreateVersion(ctx, version)
-}
-
-func versionMenuNodes(nodes []accessusecase.MenuNode) []settingsusecase.VersionMenu {
-	out := make([]settingsusecase.VersionMenu, 0, len(nodes))
-	for _, node := range nodes {
-		item := versionMenuFromDomain(node.Menu)
-		item.Children = versionMenuNodes(node.Children)
-		out = append(out, item)
-	}
-	return out
-}
-
-func menuTreeInputs(menus []settingsusecase.VersionMenu) []accessusecase.MenuTreeInput {
-	out := make([]accessusecase.MenuTreeInput, 0, len(menus))
-	for _, menu := range menus {
-		out = append(out, accessusecase.MenuTreeInput{
-			Name:       menu.Name,
-			Path:       menu.Path,
-			Icon:       menu.Icon,
-			Hidden:     menu.Hidden,
-			Component:  menu.Component,
-			Meta:       accessMenuMetaInput(menu.Meta),
-			Permission: menu.Permission,
-			Sort:       menu.Sort,
-			Active:     menu.Active,
-			Buttons:    versionMenuButtons(menu.Buttons),
-			Children:   menuTreeInputs(menu.Children),
-		})
-	}
-	return out
-}
-
-func versionMenuFromDomain(menu accessdomain.Menu) settingsusecase.VersionMenu {
-	return settingsusecase.VersionMenu{
-		Name:       menu.Name,
-		Path:       menu.Path,
-		Icon:       menu.Icon,
-		Hidden:     menu.Hidden,
-		Component:  menu.Component,
-		Meta:       versionMenuMetaFromDomain(menu.Meta),
-		Permission: menu.Permission,
-		Sort:       menu.Sort,
-		Active:     menu.Active,
-		Buttons:    versionButtonsFromDomain(menu.Buttons),
-	}
-}
-
-func versionMenuMetaFromDomain(meta accessdomain.MenuMeta) settingsusecase.VersionMenuMeta {
-	return settingsusecase.VersionMenuMeta{
-		ActiveName:     meta.ActiveName,
-		KeepAlive:      meta.KeepAlive,
-		DefaultMenu:    meta.DefaultMenu,
-		CloseTab:       meta.CloseTab,
-		TransitionType: meta.TransitionType,
-	}
-}
-
-func accessMenuMetaInput(meta settingsusecase.VersionMenuMeta) accessusecase.MenuMetaInput {
-	return accessusecase.MenuMetaInput{
-		ActiveName:     meta.ActiveName,
-		KeepAlive:      meta.KeepAlive,
-		DefaultMenu:    meta.DefaultMenu,
-		CloseTab:       meta.CloseTab,
-		TransitionType: meta.TransitionType,
-	}
-}
-
-func versionButtonsFromDomain(buttons []accessdomain.MenuButton) []settingsusecase.VersionButton {
-	out := make([]settingsusecase.VersionButton, 0, len(buttons))
-	for _, button := range buttons {
-		out = append(out, settingsusecase.VersionButton{
-			Name:        button.Name,
-			Description: button.Description,
-		})
-	}
-	return out
-}
-
-func versionMenuButtons(buttons []settingsusecase.VersionButton) []accessusecase.MenuButtonInput {
-	out := make([]accessusecase.MenuButtonInput, 0, len(buttons))
-	for _, button := range buttons {
-		out = append(out, accessusecase.MenuButtonInput{
-			Name:        button.Name,
-			Description: button.Description,
-		})
-	}
-	return out
 }
 
 // RoleView implements apitokenusecase.RolePolicy for access roles. The bridge

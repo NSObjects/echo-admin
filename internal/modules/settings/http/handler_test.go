@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/audit/oprec"
 	auditusecase "github.com/NSObjects/echo-admin/internal/modules/audit/usecase"
 	settingsdomain "github.com/NSObjects/echo-admin/internal/modules/settings/domain"
@@ -279,7 +280,7 @@ type settingsImportTx struct {
 	store *settingsStore
 }
 
-func (t settingsImportTx) ImportMenus(context.Context, []settingsusecase.VersionMenu) error {
+func (t settingsImportTx) ImportMenus(context.Context, []accessusecase.MenuTreeInput) error {
 	return nil
 }
 

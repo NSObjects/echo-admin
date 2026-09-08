@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	accessusecase "github.com/NSObjects/echo-admin/internal/modules/access/usecase"
 	"github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 )
 
@@ -38,7 +39,7 @@ type Store interface {
 
 // VersionCatalog exports access-owned resources for version bundles.
 type VersionCatalog interface {
-	ExportVersionMenus(context.Context, []int64) ([]VersionMenu, error)
+	ExportVersionMenus(context.Context, []int64) ([]accessusecase.MenuTreeInput, error)
 }
 
 // ImportRunner executes version and dictionary imports inside one database
@@ -52,7 +53,7 @@ type ImportRunner interface {
 // transaction. Implementations must apply every write to the same
 // transaction-scoped storage.
 type ImportTransaction interface {
-	ImportMenus(context.Context, []VersionMenu) error
+	ImportMenus(context.Context, []accessusecase.MenuTreeInput) error
 	ReplaceDictionary(context.Context, domain.Dictionary) error
 	CreateVersion(context.Context, domain.SystemVersion) (domain.SystemVersion, error)
 }
@@ -174,9 +175,9 @@ type ExportVersionInput struct {
 
 // VersionBundle is the portable JSON shape for version export and import.
 type VersionBundle struct {
-	Version      VersionInfo         `json:"version"`
-	Menus        []VersionMenu       `json:"menus"`
-	Dictionaries []VersionDictionary `json:"dictionaries"`
+	Version      VersionInfo                   `json:"version"`
+	Menus        []accessusecase.MenuTreeInput `json:"menus"`
+	Dictionaries []VersionDictionary           `json:"dictionaries"`
 }
 
 // DictionaryBundle is the portable JSON shape for dictionary export and import.
@@ -191,36 +192,6 @@ type VersionInfo struct {
 	Code        string `json:"code"`
 	Description string `json:"description"`
 	ExportTime  string `json:"export_time"`
-}
-
-// VersionMenu is the menu shape stored in a version bundle.
-type VersionMenu struct {
-	Name       string          `json:"name"`
-	Path       string          `json:"path"`
-	Icon       string          `json:"icon"`
-	Hidden     bool            `json:"hidden"`
-	Component  string          `json:"component"`
-	Meta       VersionMenuMeta `json:"meta"`
-	Permission string          `json:"permission"`
-	Sort       int             `json:"sort"`
-	Active     bool            `json:"active"`
-	Buttons    []VersionButton `json:"buttons"`
-	Children   []VersionMenu   `json:"children,omitempty"`
-}
-
-// VersionMenuMeta stores router metadata in a version bundle.
-type VersionMenuMeta struct {
-	ActiveName     string `json:"active_name"`
-	KeepAlive      bool   `json:"keep_alive"`
-	DefaultMenu    bool   `json:"default_menu"`
-	CloseTab       bool   `json:"close_tab"`
-	TransitionType string `json:"transition_type"`
-}
-
-// VersionButton is a menu button stored in a version bundle.
-type VersionButton struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
 }
 
 // VersionDictionary is a dictionary stored in a version bundle.

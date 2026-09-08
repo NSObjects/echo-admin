@@ -409,9 +409,10 @@ func (s *Store) ensureAPI(ctx context.Context, definition domain.ManagedAPIRoute
 }
 
 func (s *Store) seedMenus(ctx context.Context) ([]int64, []int64, error) {
-	menuIDs := make([]int64, 0, len(defaultMenuSeeds))
-	buttonIDs := make([]int64, 0, len(defaultMenuSeeds)*3)
-	for _, seed := range defaultMenuSeeds {
+	catalog := domain.MenuCatalog()
+	menuIDs := make([]int64, 0, len(catalog))
+	buttonIDs := make([]int64, 0, len(catalog)*3)
+	for _, seed := range catalog {
 		id, ids, err := s.ensureMenu(ctx, seed)
 		if err != nil {
 			return nil, nil, err
@@ -422,38 +423,38 @@ func (s *Store) seedMenus(ctx context.Context) ([]int64, []int64, error) {
 	return menuIDs, buttonIDs, nil
 }
 
-func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, []int64, error) {
+func (s *Store) ensureMenu(ctx context.Context, seed domain.MenuSeed) (int64, []int64, error) {
 	parentID, err := s.seedMenuParentID(ctx, seed)
 	if err != nil {
 		return 0, nil, err
 	}
 	var existing menuModel
-	err = s.db.WithContext(ctx).Where("path = ?", seed.path).First(&existing).Error
+	err = s.db.WithContext(ctx).Where("path = ?", seed.Path).First(&existing).Error
 	if err == nil {
 		existing.ParentID = parentID
-		existing.Name = seed.name
-		existing.Icon = seed.icon
-		existing.Hidden = seed.hidden
-		existing.Component = seed.component
-		existing.ActiveName = seed.meta.ActiveName
-		existing.KeepAlive = seed.meta.KeepAlive
-		existing.DefaultMenu = seed.meta.DefaultMenu
-		existing.CloseTab = seed.meta.CloseTab
-		existing.TransitionType = seed.meta.TransitionType
-		existing.Permission = seed.permission
-		existing.Sort = seed.sort
+		existing.Name = seed.Name
+		existing.Icon = seed.Icon
+		existing.Hidden = seed.Hidden
+		existing.Component = seed.Component
+		existing.ActiveName = seed.Meta.ActiveName
+		existing.KeepAlive = seed.Meta.KeepAlive
+		existing.DefaultMenu = seed.Meta.DefaultMenu
+		existing.CloseTab = seed.Meta.CloseTab
+		existing.TransitionType = seed.Meta.TransitionType
+		existing.Permission = seed.Permission
+		existing.Sort = seed.Sort
 		existing.Active = true
 		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
 			return 0, nil, apperr.WrapDatabase(saveErr, "update seed menu")
 		}
-		buttonIDs, buttonErr := s.ensureSeedButtons(ctx, existing.ID, seed.buttons)
+		buttonIDs, buttonErr := s.ensureSeedButtons(ctx, existing.ID, seed.Buttons)
 		return existing.ID, buttonIDs, buttonErr
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, nil, apperr.WrapDatabase(err, "find seed menu")
 	}
 	now := time.Now().UTC()
-	menu, err := domain.RestoreMenu(0, parentID, seed.name, seed.path, seed.icon, seed.hidden, seed.component, seed.meta, seed.permission, seed.sort, true, nil, now, now)
+	menu, err := domain.RestoreMenu(0, parentID, seed.Name, seed.Path, seed.Icon, seed.Hidden, seed.Component, seed.Meta, seed.Permission, seed.Sort, true, nil, now, now)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -461,26 +462,26 @@ func (s *Store) ensureMenu(ctx context.Context, seed menuSeed) (int64, []int64, 
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
 		return 0, nil, apperr.WrapDatabase(err, "create seed menu")
 	}
-	buttonIDs, buttonErr := s.ensureSeedButtons(ctx, model.ID, seed.buttons)
+	buttonIDs, buttonErr := s.ensureSeedButtons(ctx, model.ID, seed.Buttons)
 	return model.ID, buttonIDs, buttonErr
 }
 
-func (s *Store) seedMenuParentID(ctx context.Context, seed menuSeed) (int64, error) {
-	if seed.parentPath == "" {
+func (s *Store) seedMenuParentID(ctx context.Context, seed domain.MenuSeed) (int64, error) {
+	if seed.ParentPath == "" {
 		return 0, nil
 	}
 	var parent menuModel
-	err := s.db.WithContext(ctx).Where("path = ?", seed.parentPath).First(&parent).Error
+	err := s.db.WithContext(ctx).Where("path = ?", seed.ParentPath).First(&parent).Error
 	if err == nil {
 		return parent.ID, nil
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, apperr.Newf(apperr.ErrInternalServer, "seed menu parent %s is missing", seed.parentPath)
+		return 0, apperr.Newf(apperr.ErrInternalServer, "seed menu parent %s is missing", seed.ParentPath)
 	}
 	return 0, apperr.WrapDatabase(err, "find seed menu parent")
 }
 
-func (s *Store) ensureSeedButtons(ctx context.Context, menuID int64, seeds []menuButtonSeed) ([]int64, error) {
+func (s *Store) ensureSeedButtons(ctx context.Context, menuID int64, seeds []domain.MenuButtonSeed) ([]int64, error) {
 	buttonIDs := make([]int64, 0, len(seeds))
 	for _, seed := range seeds {
 		id, err := s.ensureSeedButton(ctx, menuID, seed)
@@ -492,11 +493,11 @@ func (s *Store) ensureSeedButtons(ctx context.Context, menuID int64, seeds []men
 	return buttonIDs, nil
 }
 
-func (s *Store) ensureSeedButton(ctx context.Context, menuID int64, seed menuButtonSeed) (int64, error) {
+func (s *Store) ensureSeedButton(ctx context.Context, menuID int64, seed domain.MenuButtonSeed) (int64, error) {
 	var existing menuButtonModel
-	err := s.db.WithContext(ctx).Where("menu_id = ? AND name = ?", menuID, seed.name).First(&existing).Error
+	err := s.db.WithContext(ctx).Where("menu_id = ? AND name = ?", menuID, seed.Name).First(&existing).Error
 	if err == nil {
-		existing.Description = seed.description
+		existing.Description = seed.Description
 		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
 			return 0, apperr.WrapDatabase(saveErr, "update seed menu button")
 		}
@@ -506,7 +507,7 @@ func (s *Store) ensureSeedButton(ctx context.Context, menuID int64, seed menuBut
 		return 0, apperr.WrapDatabase(err, "find seed menu button")
 	}
 	now := time.Now().UTC()
-	button, err := domain.RestoreMenuButton(0, menuID, seed.name, seed.description, now, now)
+	button, err := domain.RestoreMenuButton(0, menuID, seed.Name, seed.Description, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -522,18 +523,24 @@ func (s *Store) seedSuperAdminRole(ctx context.Context, menuIDs, apiIDs, buttonI
 	if err != nil {
 		return err
 	}
+	// The Root Role shape is deployment-owned baseline data; this adapter only
+	// resolves the persisted ID sets and applies the domain baseline.
+	baseline, err := domain.NewRootRole(menuIDs, apiIDs, buttonIDs, roleIDs, time.Now().UTC())
+	if err != nil {
+		return err
+	}
 	var existing roleModel
 	err = s.db.WithContext(ctx).Where("code = ?", domain.RoleCodeSuperAdmin).First(&existing).Error
 	if err == nil {
-		existing.ParentID = 0
-		existing.Name = "超级管理员"
-		existing.Permissions = mysqljson.Strings(domain.PermissionCatalogTokens())
-		existing.MenuIDs = mysqljson.Int64s(menuIDs)
-		existing.APIIDs = mysqljson.Int64s(apiIDs)
-		existing.ButtonIDs = mysqljson.Int64s(buttonIDs)
-		existing.DataRoleIDs = mysqljson.Int64s(roleIDs)
-		existing.DefaultPath = domain.DefaultRolePath
-		existing.Active = true
+		existing.ParentID = baseline.ParentID
+		existing.Name = baseline.Name
+		existing.Permissions = mysqljson.Strings(baseline.Permissions)
+		existing.MenuIDs = mysqljson.Int64s(baseline.MenuIDs)
+		existing.APIIDs = mysqljson.Int64s(baseline.APIIDs)
+		existing.ButtonIDs = mysqljson.Int64s(baseline.ButtonIDs)
+		existing.DataRoleIDs = mysqljson.Int64s(baseline.DataRoleIDs)
+		existing.DefaultPath = baseline.DefaultPath
+		existing.Active = baseline.Active
 		if saveErr := s.db.WithContext(ctx).Save(&existing).Error; saveErr != nil {
 			return apperr.WrapDatabase(saveErr, "update seed role")
 		}
@@ -542,15 +549,12 @@ func (s *Store) seedSuperAdminRole(ctx context.Context, menuIDs, apiIDs, buttonI
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return apperr.WrapDatabase(err, "find seed role")
 	}
-	now := time.Now().UTC()
-	role, err := domain.RestoreRole(0, 0, domain.RoleCodeSuperAdmin, "超级管理员", domain.PermissionCatalogTokens(), menuIDs, apiIDs, buttonIDs, roleIDs, domain.DefaultRolePath, true, now, now)
-	if err != nil {
-		return err
-	}
-	model := roleModelFromDomain(role)
+	model := roleModelFromDomain(baseline)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
 		return apperr.WrapDatabase(err, "create seed role")
 	}
+	// The row's own ID joins its data-role grants only after persistence
+	// because the database assigns it.
 	model.DataRoleIDs = mysqljson.Int64s(append(roleIDs, model.ID))
 	if err := s.db.WithContext(ctx).Save(&model).Error; err != nil {
 		return apperr.WrapDatabase(err, "update seed role data authority")
@@ -564,102 +568,6 @@ func (s *Store) allRoleIDs(ctx context.Context) ([]int64, error) {
 		return nil, apperr.WrapDatabase(err, "list role ids")
 	}
 	return roleIDs, nil
-}
-
-type menuSeed struct {
-	name       string
-	path       string
-	parentPath string
-	icon       string
-	hidden     bool
-	component  string
-	meta       domain.MenuMeta
-	permission string
-	sort       int
-	buttons    []menuButtonSeed
-}
-
-const seedMenuGroupComponent = "Layout"
-
-type menuButtonSeed struct {
-	name        string
-	description string
-}
-
-// defaultMenuSeeds is the initial navigation and page-button catalog. Parent
-// group rows intentionally keep stable paths so later business modules can be
-// added under a small back-office information architecture instead of another
-// flat first-level menu.
-var defaultMenuSeeds = []menuSeed{
-	{name: "工作台", path: "/dashboard", icon: "dashboard", component: "./Dashboard", sort: 10},
-	{name: "组织权限", path: "/access", icon: "safety", component: seedMenuGroupComponent, sort: 20},
-	{name: "管理员管理", path: "/admins", parentPath: "/access", icon: "user", component: "./Admins", permission: domain.PermissionAdminRead, sort: 21, buttons: []menuButtonSeed{
-		{name: "create", description: "新增管理员"},
-		{name: "update", description: "编辑管理员"},
-		{name: "delete", description: "删除管理员"},
-	}},
-	{name: "角色权限", path: "/roles", parentPath: "/access", icon: "safety", component: "./Roles", permission: domain.PermissionRoleRead, sort: 22, buttons: []menuButtonSeed{
-		{name: "create", description: "新增角色"},
-		{name: "update", description: "编辑角色"},
-		{name: "delete", description: "删除角色"},
-		{name: "copy", description: "复制角色"},
-		{name: "members", description: "授权角色成员"},
-	}},
-	{name: "菜单管理", path: "/menus", parentPath: "/access", icon: "menu", component: "./Menus", permission: domain.PermissionMenuRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 23, buttons: []menuButtonSeed{
-		{name: "create", description: "新增菜单"},
-		{name: "update", description: "编辑菜单"},
-		{name: "delete", description: "删除菜单"},
-		{name: "roles", description: "授权菜单角色"},
-	}},
-	{name: "受管API路由目录", path: "/apis", parentPath: "/access", icon: "api", component: "./APIs", permission: domain.PermissionAPIRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 24, buttons: []menuButtonSeed{
-		{name: "grant", description: "授权API角色"},
-	}},
-	{name: "API Token", path: "/api-tokens", parentPath: "/access", icon: "key", component: "./APITokens", permission: domain.PermissionAPITokenRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 25, buttons: []menuButtonSeed{
-		{name: "create", description: "新增API Token"},
-		{name: "update", description: "编辑API Token"},
-		{name: "delete", description: "删除API Token"},
-	}},
-	{name: "系统管理", path: "/system", icon: "setting", component: seedMenuGroupComponent, sort: 30},
-	{name: "系统配置", path: "/configs", parentPath: "/system", icon: "setting", component: "./Configs", permission: domain.PermissionConfigRead, sort: 31, buttons: []menuButtonSeed{
-		{name: "update", description: "更新配置"},
-		{name: "delete", description: "删除配置"},
-	}},
-	{name: "系统参数", path: "/params", parentPath: "/system", icon: "control", component: "./Params", permission: domain.PermissionParamRead, meta: domain.MenuMeta{KeepAlive: true}, sort: 32, buttons: []menuButtonSeed{
-		{name: "create", description: "新增参数"},
-		{name: "update", description: "编辑参数"},
-		{name: "delete", description: "删除参数"},
-	}},
-	{name: "版本管理", path: "/versions", parentPath: "/system", icon: "server", component: "./Versions", permission: domain.PermissionVersionRead, sort: 33, buttons: []menuButtonSeed{
-		{name: "create", description: "新增版本记录"},
-		{name: "export", description: "导出版本包"},
-		{name: "import", description: "导入版本包"},
-		{name: "update", description: "编辑版本记录"},
-		{name: "delete", description: "删除版本记录"},
-	}},
-	{name: "数据字典", path: "/dictionaries", parentPath: "/system", icon: "profile", component: "./Dictionaries", permission: domain.PermissionDictRead, sort: 34, buttons: []menuButtonSeed{
-		{name: "create", description: "新增字典"},
-		{name: "export", description: "导出字典"},
-		{name: "import", description: "导入字典"},
-		{name: "update", description: "编辑字典"},
-		{name: "delete", description: "删除字典"},
-		{name: "item_create", description: "新增字典项"},
-		{name: "item_update", description: "编辑字典项"},
-		{name: "item_delete", description: "删除字典项"},
-	}},
-	{name: "资源管理", path: "/resources", icon: "folder", component: seedMenuGroupComponent, sort: 40},
-	{name: "文件上传", path: "/files", parentPath: "/resources", icon: "upload", component: "./Files", permission: domain.PermissionFileRead, sort: 41, buttons: []menuButtonSeed{
-		{name: "upload", description: "上传文件"},
-		{name: "update", description: "重命名文件"},
-		{name: "delete", description: "删除文件"},
-		{name: "category_create", description: "新增文件分类"},
-		{name: "category_update", description: "编辑文件分类"},
-		{name: "category_delete", description: "删除文件分类"},
-	}},
-	{name: "运维审计", path: "/audit", icon: "fileSearch", component: seedMenuGroupComponent, sort: 50},
-	{name: "审计日志", path: "/logs", parentPath: "/audit", icon: "fileSearch", component: "./Logs", permission: domain.PermissionLogRead, sort: 51, buttons: []menuButtonSeed{
-		{name: "resolve", description: "处理系统错误"},
-		{name: "delete", description: "删除日志"},
-	}},
 }
 
 type permissionModel struct {

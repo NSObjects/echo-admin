@@ -17,15 +17,16 @@ func TestUpdateMenuPreservesCreatedAt(t *testing.T) {
 	uc := usecase.New(store, adminRoleReaderSpy{})
 
 	_, err := uc.UpdateMenu(context.Background(), usecase.UpdateMenuInput{
-		ID:         1,
-		ParentID:   0,
-		Name:       "Updated Menu",
-		Path:       "/updated",
-		Icon:       "menu",
-		Component:  "./Updated",
-		Permission: accessdomain.PermissionLogRead,
-		Sort:       20,
-		Active:     true,
+		ID: 1,
+		MenuInput: usecase.MenuInput{
+			Name:       "Updated Menu",
+			Path:       "/updated",
+			Icon:       "menu",
+			Component:  "./Updated",
+			Permission: accessdomain.PermissionLogRead,
+			Sort:       20,
+			Active:     true,
+		},
 	})
 	if err != nil {
 		t.Fatalf("UpdateMenu() error = %v", err)
@@ -562,13 +563,13 @@ func findTreeMenu(t *testing.T, menus []accessdomain.Menu, path string) accessdo
 	return accessdomain.Menu{}
 }
 
-func menuNodeTreePath(nodes []usecase.MenuNode) string {
+func menuNodeTreePath(nodes []usecase.MenuTreeInput) string {
 	out := ""
 	for index, node := range nodes {
 		if index > 0 {
 			out += ","
 		}
-		out += node.Menu.Path
+		out += node.Path
 		if len(node.Children) > 0 {
 			out += ">" + menuNodeTreePath(node.Children)
 		}
@@ -624,12 +625,16 @@ func TestImportMenuTreeUpsertsByPathAndRebindsChildren(t *testing.T) {
 	uc := usecase.New(store, adminRoleReaderSpy{})
 
 	tree := usecase.MenuTreeInput{
-		Name: "新父", Path: "/new", Icon: "menu", Component: "./New",
-		Permission: accessdomain.PermissionLogRead, Sort: 10, Active: true,
+		MenuInput: usecase.MenuInput{
+			Name: "新父", Path: "/new", Icon: "menu", Component: "./New",
+			Permission: accessdomain.PermissionLogRead, Sort: 10, Active: true,
+		},
 		Children: []usecase.MenuTreeInput{
 			{
-				Name: "旧子", Path: "/old", Icon: "menu", Component: "./Old",
-				Permission: accessdomain.PermissionLogRead, Sort: 20, Active: true,
+				MenuInput: usecase.MenuInput{
+					Name: "旧子", Path: "/old", Icon: "menu", Component: "./Old",
+					Permission: accessdomain.PermissionLogRead, Sort: 20, Active: true,
+				},
 			},
 		},
 	}
@@ -662,7 +667,7 @@ func TestImportMenuTreeRejectsInvalidPermission(t *testing.T) {
 	uc := usecase.New(store, adminRoleReaderSpy{})
 
 	err := uc.ImportMenuTree(context.Background(), []usecase.MenuTreeInput{
-		{Name: "坏权限", Path: "/bad", Component: "./Bad", Permission: "bogus", Sort: 10, Active: true},
+		{MenuInput: usecase.MenuInput{Name: "坏权限", Path: "/bad", Component: "./Bad", Permission: "bogus", Sort: 10, Active: true}},
 	})
 	appErr, ok := apperr.Parse(err)
 	if !ok || appErr.Code() != apperr.ErrBadRequest {

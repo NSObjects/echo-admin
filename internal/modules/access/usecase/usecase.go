@@ -373,10 +373,10 @@ func (u *Usecase) UpdateMenu(ctx context.Context, input UpdateMenuInput) (Menu, 
 	return fromMenu(updated), nil
 }
 
-// ExportMenuTree returns the menus selected by ids as a tree. A selected
-// descendant appears even when its ancestors were not selected, and a missing
-// id fails the whole export.
-func (u *Usecase) ExportMenuTree(ctx context.Context, ids []int64) ([]MenuNode, error) {
+// ExportMenuTree returns the menus selected by ids as a tree of MenuTreeInput,
+// the version-bundle exchange shape. A selected descendant appears even when
+// its ancestors were not selected, and a missing id fails the whole export.
+func (u *Usecase) ExportMenuTree(ctx context.Context, ids []int64) ([]MenuTreeInput, error) {
 	if err := u.ready(); err != nil {
 		return nil, err
 	}
@@ -398,8 +398,8 @@ func (u *Usecase) ExportMenuTree(ctx context.Context, ids []int64) ([]MenuNode, 
 	return exportMenuTree(menus, selected, 0), nil
 }
 
-func exportMenuTree(menus []domain.Menu, selected map[int64]struct{}, parentID int64) []MenuNode {
-	out := make([]MenuNode, 0)
+func exportMenuTree(menus []domain.Menu, selected map[int64]struct{}, parentID int64) []MenuTreeInput {
+	out := make([]MenuTreeInput, 0)
 	for _, menu := range menus {
 		if menu.ParentID != parentID {
 			continue
@@ -408,7 +408,36 @@ func exportMenuTree(menus []domain.Menu, selected map[int64]struct{}, parentID i
 			out = append(out, exportMenuTree(menus, selected, menu.ID)...)
 			continue
 		}
-		out = append(out, MenuNode{Menu: menu, Children: exportMenuTree(menus, selected, menu.ID)})
+		out = append(out, MenuTreeInput{
+			MenuInput: menuExportInput(menu),
+			Children:  exportMenuTree(menus, selected, menu.ID),
+		})
+	}
+	return out
+}
+
+// menuExportInput projects one persisted menu onto the bundle exchange shape:
+// only the mutable, bundle-owned fields travel; database identity and
+// timestamps stay behind.
+func menuExportInput(menu domain.Menu) MenuInput {
+	return MenuInput{
+		Name:       menu.Name,
+		Path:       menu.Path,
+		Icon:       menu.Icon,
+		Hidden:     menu.Hidden,
+		Component:  menu.Component,
+		Meta:       MenuMetaInput(menu.Meta),
+		Permission: menu.Permission,
+		Sort:       menu.Sort,
+		Active:     menu.Active,
+		Buttons:    menuButtonInputs(menu.Buttons),
+	}
+}
+
+func menuButtonInputs(buttons []domain.MenuButton) []MenuButtonInput {
+	out := make([]MenuButtonInput, 0, len(buttons))
+	for _, button := range buttons {
+		out = append(out, MenuButtonInput{Name: button.Name, Description: button.Description})
 	}
 	return out
 }
@@ -432,36 +461,12 @@ func (u *Usecase) ImportMenuTree(ctx context.Context, trees []MenuTreeInput) err
 }
 
 func (u *Usecase) importMenuTree(ctx context.Context, tree MenuTreeInput, parentID int64, existing *[]domain.Menu) error {
-	input := MenuInput{
-		ParentID:   parentID,
-		Name:       tree.Name,
-		Path:       tree.Path,
-		Icon:       tree.Icon,
-		Hidden:     tree.Hidden,
-		Component:  tree.Component,
-		Meta:       tree.Meta,
-		Permission: tree.Permission,
-		Sort:       tree.Sort,
-		Active:     tree.Active,
-		Buttons:    tree.Buttons,
-	}
+	input := tree.MenuInput
+	input.ParentID = parentID
 	var saved Menu
 	var err error
 	if current, ok := findMenuByPath(*existing, tree.Path); ok {
-		saved, err = u.UpdateMenu(ctx, UpdateMenuInput{
-			ID:         current.ID,
-			ParentID:   input.ParentID,
-			Name:       input.Name,
-			Path:       input.Path,
-			Icon:       input.Icon,
-			Hidden:     input.Hidden,
-			Component:  input.Component,
-			Meta:       input.Meta,
-			Permission: input.Permission,
-			Sort:       input.Sort,
-			Active:     input.Active,
-			Buttons:    input.Buttons,
-		})
+		saved, err = u.UpdateMenu(ctx, UpdateMenuInput{ID: current.ID, MenuInput: input})
 	} else {
 		saved, err = u.CreateMenu(ctx, input)
 	}

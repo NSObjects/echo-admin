@@ -120,75 +120,57 @@ type CopyRoleInput struct {
 	Active      *bool
 }
 
-// MenuInput carries mutable menu fields.
+// MenuInput carries mutable menu fields. JSON tags shape the version-bundle
+// contract; ParentID is tree-derived on import and meaningless on export, so
+// it never serializes.
 type MenuInput struct {
-	ParentID   int64
-	Name       string
-	Path       string
-	Icon       string
-	Hidden     bool
-	Component  string
-	Meta       MenuMetaInput
-	Permission string
-	Sort       int
-	Active     bool
-	Buttons    []MenuButtonInput
+	ParentID   int64             `json:"-"`
+	Name       string            `json:"name"`
+	Path       string            `json:"path"`
+	Icon       string            `json:"icon"`
+	Hidden     bool              `json:"hidden"`
+	Component  string            `json:"component"`
+	Meta       MenuMetaInput     `json:"meta"`
+	Permission string            `json:"permission"`
+	Sort       int               `json:"sort"`
+	Active     bool              `json:"active"`
+	Buttons    []MenuButtonInput `json:"buttons"`
 }
 
 // MenuMetaInput carries router metadata for one menu.
 type MenuMetaInput struct {
-	ActiveName     string
-	KeepAlive      bool
-	DefaultMenu    bool
-	CloseTab       bool
-	TransitionType string
+	ActiveName     string `json:"active_name"`
+	KeepAlive      bool   `json:"keep_alive"`
+	DefaultMenu    bool   `json:"default_menu"`
+	CloseTab       bool   `json:"close_tab"`
+	TransitionType string `json:"transition_type"`
 }
 
 // MenuButtonInput carries one page-level operation key attached to a menu.
+// Button identity is path-derived during import (upsert by name), so the
+// database ID never travels through a version bundle.
 type MenuButtonInput struct {
-	ID          int64
-	Name        string
-	Description string
+	ID          int64  `json:"-"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
-// MenuNode is one exported menu with its descendants, used by version bundles.
-type MenuNode struct {
-	Menu     domain.Menu
-	Children []MenuNode
-}
-
-// MenuTreeInput is one imported menu with nested children. Parent links are
-// derived from the tree itself: roots attach to the top level and children
-// attach to their freshly saved parent, so stale parent references inside a
-// bundle never survive an import.
+// MenuTreeInput is the single menu exchange shape: version bundles serialize
+// it directly and imports consume it directly. Parent links are derived from
+// the tree itself: roots attach to the top level and children attach to their
+// freshly saved parent, so stale parent references inside a bundle never
+// survive an import.
 type MenuTreeInput struct {
-	Name       string
-	Path       string
-	Icon       string
-	Hidden     bool
-	Component  string
-	Meta       MenuMetaInput
-	Permission string
-	Sort       int
-	Active     bool
-	Buttons    []MenuButtonInput
-	Children   []MenuTreeInput
+	MenuInput
+	Children []MenuTreeInput `json:"children,omitempty"`
 }
 
-// UpdateMenuInput carries mutable menu updates.
+// UpdateMenuInput carries mutable menu updates: the target ID plus one
+// complete menu field set. ParentID lives on the embedded MenuInput so it has
+// exactly one meaning.
 type UpdateMenuInput struct {
-	ID         int64
-	ParentID   int64
-	Name       string
-	Path       string
-	Icon       string
-	Hidden     bool
-	Component  string
-	Meta       MenuMetaInput
-	Permission string
-	Sort       int
-	Active     bool
-	Buttons    []MenuButtonInput
+	ID int64
+	MenuInput
 }
 
 // ListInput carries pagination for role lists.

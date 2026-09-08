@@ -36,6 +36,17 @@ func NewAdmin(username, displayName, email string, passwordHash []byte, roleIDs 
 	return RestoreAdmin(0, username, displayName, email, passwordHash, roleIDs, activeRoleID, true, time.Time{}, time.Time{})
 }
 
+// NewFirstAdministrator builds the administrator created by System First
+// Initialization: a fresh active administrator whose only role is the Root
+// Role. Input normalization and password hashing belong to the caller; this
+// constructor owns the installation-time shape only.
+func NewFirstAdministrator(username, displayName, email string, passwordHash []byte, rootRoleID int64) (Admin, error) {
+	if rootRoleID <= 0 {
+		return Admin{}, ErrInvalidActiveRole
+	}
+	return RestoreAdmin(0, username, displayName, email, passwordHash, []int64{rootRoleID}, rootRoleID, true, time.Time{}, time.Time{})
+}
+
 // RestoreAdmin rebuilds an admin from a trusted store representation.
 func RestoreAdmin(id int64, username, displayName, email string, passwordHash []byte, roleIDs []int64, activeRoleID int64, active bool, createdAt, updatedAt time.Time) (Admin, error) {
 	username = normalizeToken(username)

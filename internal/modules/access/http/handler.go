@@ -375,26 +375,7 @@ func updateMenuInput(c *echo.Context) (usecase.UpdateMenuInput, error) {
 	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
 		return usecase.UpdateMenuInput{}, bindErr
 	}
-	return usecase.UpdateMenuInput{
-		ID:        id,
-		ParentID:  req.ParentID,
-		Name:      req.Name,
-		Path:      req.Path,
-		Icon:      req.Icon,
-		Hidden:    req.Hidden,
-		Component: req.Component,
-		Meta: usecase.MenuMetaInput{
-			ActiveName:     req.Meta.ActiveName,
-			KeepAlive:      req.Meta.KeepAlive,
-			DefaultMenu:    req.Meta.DefaultMenu,
-			CloseTab:       req.Meta.CloseTab,
-			TransitionType: req.Meta.TransitionType,
-		},
-		Permission: req.Permission,
-		Sort:       req.Sort,
-		Active:     req.Active,
-		Buttons:    buttonInputsFromRequest(req.Buttons),
-	}, nil
+	return usecase.UpdateMenuInput{ID: id, MenuInput: menuInputFromRequest(req)}, nil
 }
 
 func buttonInputsFromRequest(buttons []menuButtonRequest) []usecase.MenuButtonInput {

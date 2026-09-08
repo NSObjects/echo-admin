@@ -512,7 +512,7 @@ func (s *Store) InstallInitialSettings(ctx context.Context, siteName string) err
 
 func (s *Store) seedStatusDictionary(ctx context.Context) error {
 	var existing dictionaryModel
-	err := s.db.WithContext(ctx).Where("code = ?", "status").First(&existing).Error
+	err := s.db.WithContext(ctx).Where("code = ?", domain.StatusDictionaryCode).First(&existing).Error
 	if err == nil {
 		return nil
 	}
@@ -520,15 +520,7 @@ func (s *Store) seedStatusDictionary(ctx context.Context) error {
 		return apperr.WrapDatabase(err, "find seed dictionary")
 	}
 	now := time.Now().UTC()
-	enabled, err := domain.RestoreDictionaryItem(0, 0, "启用", "enabled", "", 10, true, 0, "", nil)
-	if err != nil {
-		return err
-	}
-	disabled, err := domain.RestoreDictionaryItem(0, 0, "禁用", "disabled", "", 20, true, 0, "", nil)
-	if err != nil {
-		return err
-	}
-	dictionary, err := domain.RestoreDictionary(0, "status", "状态", []domain.DictionaryItem{enabled, disabled}, now, now)
+	dictionary, err := domain.StatusDictionaryBaseline(now)
 	if err != nil {
 		return err
 	}
