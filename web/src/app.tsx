@@ -1,6 +1,7 @@
 import type { Settings as LayoutSettings } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link } from '@umijs/max';
+import { theme as antdTheme, ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import React from 'react';
@@ -14,15 +15,17 @@ import {
   Footer,
   LangDropdown,
   OfflineBanner,
+  ThemeToggle,
 } from '@/components';
+import type { CurrentUser, SetupState } from '@/services/admin';
 import {
   currentUser as queryCurrentUser,
   setupState as querySetupState,
 } from '@/services/admin';
-import type { CurrentUser, SetupState } from '@/services/admin';
-import { filterMenuDataByGrantedMenus } from './runtime/menu';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
+import { filterMenuDataByGrantedMenus } from './runtime/menu';
+import { themeStore } from './runtime/theme';
 
 const loginPath = '/user/login';
 const setupPath = '/setup';
@@ -66,6 +69,11 @@ export async function getInitialState(): Promise<{
 
   const { location } = history;
   const installation = await querySetupState();
+  // 暗色偏好持久化在 localStorage，与 themeStore 使用同一存储键。
+  const settings: Partial<LayoutSettings> = {
+    ...(defaultSettings as Partial<LayoutSettings>),
+    navTheme: themeStore.get(),
+  };
   if (!installation.initialized) {
     if (location.pathname !== setupPath) {
       history.replace(setupPath);
@@ -73,7 +81,7 @@ export async function getInitialState(): Promise<{
     return {
       fetchUserInfo,
       setupState: installation,
-      settings: defaultSettings as Partial<LayoutSettings>,
+      settings,
     };
   }
 
@@ -88,7 +96,7 @@ export async function getInitialState(): Promise<{
       fetchUserInfo,
       currentUser,
       setupState: installation,
-      settings: defaultSettings as Partial<LayoutSettings>,
+      settings,
     };
   }
   return {
@@ -121,7 +129,10 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
       // `locale` prop is a locale string, so narrow to the boolean toggle here.
       const localeEnabled =
         (initialState?.settings as { locale?: boolean })?.locale !== false;
-      return [localeEnabled && <LangDropdown key="lang" />].filter(Boolean);
+      return [
+        <ThemeToggle key="theme" />,
+        localeEnabled && <LangDropdown key="lang" />,
+      ].filter(Boolean);
     },
     avatarProps: {
       title: initialState?.currentUser?.display_name ?? 'Admin',
@@ -171,11 +182,40 @@ export const request: RequestConfig = {
   ...errorConfig,
 };
 
+/**
+ * 最外层主题包装：navTheme 为 realDark 时整个组件树（含 Modal/Drawer 等传送门
+ * 和头部操作按钮）都切换到 antd 暗色算法；ProLayout 自身的侧边栏与头部配色
+ * 由 initialState.settings.navTheme 驱动，两处由 ThemeToggle 同步更新。
+ */
+const RootTheme: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const navTheme = React.useSyncExternalStore(
+    themeStore.subscribe,
+    themeStore.get,
+    () => 'light' as const,
+  );
+  React.useEffect(() => {
+    document.body.dataset.theme = navTheme === 'realDark' ? 'dark' : 'light';
+  }, [navTheme]);
+  return (
+    <ConfigProvider
+      theme={{
+        algorithm:
+          navTheme === 'realDark'
+            ? antdTheme.darkAlgorithm
+            : antdTheme.defaultAlgorithm,
+        token: { fontFamily: 'AlibabaSans, sans-serif' },
+      }}
+    >
+      {children}
+    </ConfigProvider>
+  );
+};
+
 export function rootContainer(container: React.ReactNode) {
   return (
-    <>
+    <RootTheme>
       <OfflineBanner />
       <ErrorBoundary>{container}</ErrorBoundary>
-    </>
+    </RootTheme>
   );
 }

@@ -1,4 +1,4 @@
-// Package usecase coordinates role and menu access workflows.
+// Package usecase coordinates access management and runtime authorization.
 package usecase
 
 import (
@@ -13,7 +13,7 @@ const (
 	maxPageSize     = 100
 )
 
-// Store persists roles and menus for the access usecase.
+// Store persists access roles, menus, and managed API routes.
 type Store interface {
 	FindRoleByID(context.Context, int64) (domain.Role, error)
 	FindRoleByCode(context.Context, string) (domain.Role, error)
@@ -37,16 +37,35 @@ type AdminRoleReader interface {
 	RoleAssigned(context.Context, int64) (bool, error)
 }
 
-// AdminRoleState is the minimal identity snapshot needed for scoped role delegation.
+// AdminRoleState is the identity snapshot needed for role delegation and
+// runtime authorization.
 type AdminRoleState struct {
 	RoleIDs      []int64
 	ActiveRoleID int64
+	Active       bool
 }
 
-// Usecase coordinates role and menu rules.
+// Usecase coordinates access management and runtime authorization rules.
 type Usecase struct {
 	store  Store
 	admins AdminRoleReader
+}
+
+// AuthorizationSubject identifies the administrator and active role whose
+// current grants must be evaluated.
+type AuthorizationSubject struct {
+	AdminID      int64
+	ActiveRoleID int64
+}
+
+// AuthorizationView is the active Administration Authorization state used by
+// current-user responses.
+type AuthorizationView struct {
+	ActiveRole  Role
+	Roles       []Role
+	Permissions []string
+	Menus       []Menu
+	DefaultPath string
 }
 
 // New creates an access usecase.
@@ -154,18 +173,6 @@ type MenuTreeInput struct {
 	Active     bool
 	Buttons    []MenuButtonInput
 	Children   []MenuTreeInput
-}
-
-// MenuRolesInput carries the full role assignment for one menu.
-type MenuRolesInput struct {
-	MenuID  int64
-	RoleIDs []int64
-}
-
-// APIRolesInput carries the full role assignment for one API route.
-type APIRolesInput struct {
-	APIID   int64
-	RoleIDs []int64
 }
 
 // UpdateMenuInput carries mutable menu updates.

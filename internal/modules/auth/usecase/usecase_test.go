@@ -119,72 +119,6 @@ func TestLoginRejectsLockedAttemptBeforeCredentialLookup(t *testing.T) {
 	}
 }
 
-func TestAuthorizeRouteUsesAssignedAPIs(t *testing.T) {
-	uc, _ := newUsecase(t)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
-
-	if err := uc.AuthorizeRoute(ctx, "GET", "/api/roles"); err != nil {
-		t.Fatalf("AuthorizeRoute(assigned api) error = %v", err)
-	}
-	if err := uc.AuthorizeRoute(ctx, "GET", "/api/roles/:id"); err == nil {
-		t.Fatal("AuthorizeRoute(unassigned api) error = nil, want permission denied")
-	}
-	if err := uc.AuthorizeRoute(ctx, "GET", "/api/missing"); err == nil {
-		t.Fatal("AuthorizeRoute(missing api) error = nil, want permission denied")
-	}
-}
-
-func TestAuthorizeRouteRequiresRootRoleGrant(t *testing.T) {
-	uc, _ := newUsecase(t)
-	ctx := requestctx.WithUserID(context.Background(), "1")
-
-	if err := uc.AuthorizeRoute(ctx, "DELETE", "/api/admins/:id"); err == nil {
-		t.Fatal("AuthorizeRoute(root role api not granted) error = nil, want permission denied")
-	}
-}
-
-func TestAuthorizeRouteNormalizesMethodAndPath(t *testing.T) {
-	uc, _ := newUsecase(t)
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
-
-	if err := uc.AuthorizeRoute(ctx, " get ", " /api/roles "); err != nil {
-		t.Fatalf("AuthorizeRoute(normalized input) error = %v, want nil", err)
-	}
-}
-
-func TestAuthorizeRouteFailsClosedWhenActiveRoleUnavailable(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(store *authStore)
-	}{
-		{
-			name:   "deleted role",
-			mutate: func(store *authStore) { delete(store.roles, 2) },
-		},
-		{
-			name: "inactive role",
-			mutate: func(store *authStore) {
-				role := store.roles[2]
-				role.Active = false
-				store.roles[2] = role
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc, _, store := newUsecaseWithStore(t)
-			tt.mutate(store)
-			ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "1"), "2")
-
-			err := uc.AuthorizeRoute(ctx, "GET", "/api/roles")
-			appErr, ok := apperr.Parse(err)
-			if !ok || appErr.Code() != apperr.ErrPermissionDenied {
-				t.Fatalf("AuthorizeRoute(%s) error = %v, want permission denied", tt.name, err)
-			}
-		})
-	}
-}
-
 func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
 	uc, _, store := newUsecaseWithStore(t)
 	login, err := uc.Login(context.Background(), authusecase.LoginInput{
@@ -220,14 +154,6 @@ func TestSwitchRolePersistsActiveRoleAndScopesGrants(t *testing.T) {
 	}
 	if len(output.User.Menus[0].Buttons) != 1 || output.User.Menus[0].Buttons[0].Name != "update" {
 		t.Fatalf("switched menu buttons = %#v, want only update", output.User.Menus[0].Buttons)
-	}
-
-	switchedCtx := requestctx.WithRoleID(ctx, "2")
-	if err := uc.AuthorizeRoute(switchedCtx, "GET", "/api/roles"); err != nil {
-		t.Fatalf("AuthorizeRoute(switched allowed) error = %v", err)
-	}
-	if err := uc.AuthorizeRoute(switchedCtx, "GET", "/api/admins"); err == nil {
-		t.Fatal("AuthorizeRoute(old role api) error = nil, want permission denied")
 	}
 }
 
@@ -335,96 +261,46 @@ func newUsecaseWithStore(t *testing.T) (*authusecase.Usecase, *loginRecorder, *a
 	if err != nil {
 		t.Fatalf("RestoreAdmin() error = %v", err)
 	}
-	roles := authRoles(t, now)
-	menus := authMenus(t, now)
-	apis := authAPIs(t, now)
 	store := &authStore{
 		admin:         admin,
-		roles:         roles,
-		menus:         menus,
-		apis:          apis,
 		nextSessionID: 1,
 		sessions:      map[int64]authdomain.LoginSession{},
 		sessionByHash: map[string]int64{},
 	}
+	authorization := &authorizationReader{views: authorizationViews(now)}
 	recorder := &loginRecorder{}
-	uc := authusecase.New(store, store, store, store, store, store, recorder, authusecase.WithClock(func() time.Time {
+	uc := authusecase.New(store, authorization, store, store, recorder, authusecase.WithClock(func() time.Time {
 		return now
 	}))
 	return uc, recorder, store
 }
 
-func authRoles(t *testing.T, now time.Time) map[int64]accessdomain.Role {
-	t.Helper()
-	superRole, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", []string{accessdomain.PermissionAdminRead}, []int64{1}, []int64{1}, nil, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole() error = %v", err)
-	}
-	operatorRole, err := accessdomain.RestoreRole(2, 1, "operator", "运营", []string{accessdomain.PermissionRoleRead}, []int64{2}, []int64{2}, []int64{22}, []int64{2}, "/roles", true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(operator) error = %v", err)
-	}
-	return map[int64]accessdomain.Role{
-		1: superRole,
-		2: operatorRole,
+func authorizationViews(now time.Time) map[int64]authusecase.AuthorizationView {
+	rootRole := authusecase.Role{ID: 1, Code: accessdomain.RoleCodeSuperAdmin, Name: "超级管理员", Permissions: []string{accessdomain.PermissionAdminRead}, MenuIDs: []int64{1}, APIIDs: []int64{1}, DefaultPath: accessdomain.DefaultRolePath, Active: true, CreatedAt: now, UpdatedAt: now}
+	operatorRole := authusecase.Role{ID: 2, ParentID: 1, Code: "operator", Name: "运营", Permissions: []string{accessdomain.PermissionRoleRead}, MenuIDs: []int64{2}, APIIDs: []int64{2}, ButtonIDs: []int64{22}, DefaultPath: "/roles", Active: true, CreatedAt: now, UpdatedAt: now}
+	adminMenu := authusecase.Menu{ID: 1, Name: "管理员管理", Path: "/admins", Component: "./Admins", Permission: accessdomain.PermissionAdminRead, Active: true, Buttons: []authusecase.Button{{ID: 11, MenuID: 1, Name: "create"}, {ID: 12, MenuID: 1, Name: "delete"}}}
+	roleMenu := authusecase.Menu{ID: 2, Name: "角色权限", Path: "/roles", Component: "./Roles", Permission: accessdomain.PermissionRoleRead, Active: true, Buttons: []authusecase.Button{{ID: 22, MenuID: 2, Name: "update"}}}
+	roles := []authusecase.Role{rootRole, operatorRole}
+	return map[int64]authusecase.AuthorizationView{
+		1: {ActiveRole: rootRole, Roles: roles, Permissions: rootRole.Permissions, Menus: []authusecase.Menu{adminMenu}, DefaultPath: rootRole.DefaultPath},
+		2: {ActiveRole: operatorRole, Roles: roles, Permissions: operatorRole.Permissions, Menus: []authusecase.Menu{roleMenu}, DefaultPath: operatorRole.DefaultPath},
 	}
 }
 
-func authMenus(t *testing.T, now time.Time) []accessdomain.Menu {
-	t.Helper()
-	adminCreateButton, err := accessdomain.RestoreMenuButton(11, 1, "create", "新增管理员", now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenuButton(admin create) error = %v", err)
-	}
-	adminDeleteButton, err := accessdomain.RestoreMenuButton(12, 1, "delete", "删除管理员", now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenuButton(admin delete) error = %v", err)
-	}
-	adminMenu, err := accessdomain.RestoreMenu(1, 0, "管理员管理", "/admins", "user", false, "./Admins", accessdomain.MenuMeta{}, accessdomain.PermissionAdminRead, 10, true, []accessdomain.MenuButton{adminCreateButton, adminDeleteButton}, now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenu() error = %v", err)
-	}
-	roleCreateButton, err := accessdomain.RestoreMenuButton(21, 2, "create", "新增角色", now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenuButton(role create) error = %v", err)
-	}
-	roleUpdateButton, err := accessdomain.RestoreMenuButton(22, 2, "update", "编辑角色", now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenuButton(role update) error = %v", err)
-	}
-	roleMenu, err := accessdomain.RestoreMenu(2, 0, "角色权限", "/roles", "safety", false, "./Roles", accessdomain.MenuMeta{KeepAlive: true}, accessdomain.PermissionRoleRead, 20, true, []accessdomain.MenuButton{roleCreateButton, roleUpdateButton}, now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenu(role) error = %v", err)
-	}
-	return []accessdomain.Menu{adminMenu, roleMenu}
+type authorizationReader struct {
+	views map[int64]authusecase.AuthorizationView
 }
 
-func authAPIs(t *testing.T, now time.Time) []accessdomain.API {
-	t.Helper()
-	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员列表", "admin", accessdomain.PermissionAdminRead, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(admin) error = %v", err)
+func (r *authorizationReader) CurrentAuthorization(_ context.Context, subject authusecase.AuthorizationSubject) (authusecase.AuthorizationView, error) {
+	view, ok := r.views[subject.ActiveRoleID]
+	if !ok {
+		return authusecase.AuthorizationView{}, apperr.NewPermissionDenied("role", strconv.FormatInt(subject.ActiveRoleID, 10))
 	}
-	roleAPI, err := accessdomain.RestoreAPI(2, "GET", "/api/roles", "角色列表", "role", accessdomain.PermissionRoleRead, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(role) error = %v", err)
-	}
-	deleteAdminAPI, err := accessdomain.RestoreAPI(3, "DELETE", "/api/admins/:id", "删除管理员", "admin", accessdomain.PermissionAdminRead, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(delete admin) error = %v", err)
-	}
-	roleDetailAPI, err := accessdomain.RestoreAPI(4, "GET", "/api/roles/:id", "角色详情", "role", accessdomain.PermissionRoleRead, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(role detail) error = %v", err)
-	}
-	return []accessdomain.API{adminAPI, roleAPI, deleteAdminAPI, roleDetailAPI}
+	return view, nil
 }
 
 type authStore struct {
 	admin               identitydomain.Admin
-	roles               map[int64]accessdomain.Role
-	menus               []accessdomain.Menu
-	apis                []accessdomain.API
 	nextSessionID       int64
 	lastSessionID       int64
 	sessions            map[int64]authdomain.LoginSession
@@ -448,29 +324,6 @@ func (s *authStore) FindByID(context.Context, int64) (identitydomain.Admin, erro
 func (s *authStore) Update(_ context.Context, admin identitydomain.Admin) (identitydomain.Admin, error) {
 	s.admin = admin
 	return admin, nil
-}
-
-// FindRoleByID mirrors the mysql adapter: a missing role maps to an apperr
-// not-found error so authorization paths can treat it as fail-closed.
-func (s *authStore) FindRoleByID(_ context.Context, id int64) (accessdomain.Role, error) {
-	role, ok := s.roles[id]
-	if !ok {
-		return accessdomain.Role{}, apperr.NewNotFound("role")
-	}
-	return role, nil
-}
-
-func (s *authStore) ListMenus(context.Context) ([]accessdomain.Menu, error) {
-	return s.menus, nil
-}
-
-func (s *authStore) FindAPIByRoute(_ context.Context, method, path string) (accessdomain.API, error) {
-	for _, api := range s.apis {
-		if api.Method == method && api.Path == path {
-			return api, nil
-		}
-	}
-	return accessdomain.API{}, apperr.NewNotFound("api")
 }
 
 func (s *authStore) CreateLoginSession(_ context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {

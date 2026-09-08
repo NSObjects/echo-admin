@@ -8,16 +8,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/casbin/casbin/v3"
-	"github.com/casbin/casbin/v3/model"
 	"golang.org/x/crypto/bcrypt"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -36,26 +32,6 @@ const (
 	loginSessionRevokedPasswordChange = "password_changed"
 	loginSessionRevokedSecurityEvent  = "security_event"
 )
-
-// casbinRBACModel maps UI permission tokens to Casbin's {subject, object, action}
-// RBAC form. Users and roles are prefixed before insertion because Casbin treats
-// both as plain strings.
-const casbinRBACModel = `
-[request_definition]
-r = sub, obj, act
-
-[policy_definition]
-p = sub, obj, act
-
-[role_definition]
-g = _, _
-
-[policy_effect]
-e = some(where (p.eft == allow))
-
-[matchers]
-m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
-`
 
 // Login authenticates an administrator and creates a browser login session.
 func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, error) {
@@ -304,50 +280,8 @@ func (u *Usecase) RevokeLoginSessions(ctx context.Context, adminID int64) error 
 	return u.sessions.RevokeLoginSessions(ctx, adminID, loginSessionRevokedSecurityEvent, u.now())
 }
 
-// AuthorizeRoute verifies that the current active role may call the managed
-// API route. The path must be Echo's registered route pattern rather than the
-// raw URL, so IDs and other path parameters are authorized by one catalog row.
-// The check reads only the active role's API grants; Casbin snapshot
-// construction stays on the CurrentUser path and must not run per request here.
-func (u *Usecase) AuthorizeRoute(ctx context.Context, method, path string) error {
-	if err := u.ready(); err != nil {
-		return err
-	}
-	_, activeRoleID, err := u.currentAdminAndRole(ctx)
-	if err != nil {
-		return err
-	}
-	role, err := u.activeRouteRole(ctx, activeRoleID)
-	if err != nil {
-		return err
-	}
-	api, err := u.findRouteAPI(ctx, method, path)
-	if err != nil {
-		return err
-	}
-	return requireAssignedRouteAPI(role, api)
-}
-
-// activeRouteRole loads the active role for route authorization. A missing or
-// inactive role is an authorization failure (fail-closed), aligned with the
-// missing-catalog-row handling in findRouteAPI rather than leaking a raw
-// not-found error.
-func (u *Usecase) activeRouteRole(ctx context.Context, activeRoleID int64) (accessdomain.Role, error) {
-	role, err := u.roles.FindRoleByID(ctx, activeRoleID)
-	if err != nil {
-		if appErr, ok := apperr.Parse(err); ok && appErr.Code() == apperr.ErrNotFound {
-			return accessdomain.Role{}, permissionDeniedRole(activeRoleID)
-		}
-		return accessdomain.Role{}, err
-	}
-	if !role.Active {
-		return accessdomain.Role{}, permissionDeniedRole(activeRoleID)
-	}
-	return role, nil
-}
-
 func (u *Usecase) ready() error {
-	if u == nil || u.admins == nil || u.roles == nil || u.menus == nil || u.apis == nil || u.logins == nil || u.sessions == nil || u.loginLimiter == nil {
+	if u == nil || u.admins == nil || u.authorization == nil || u.logins == nil || u.sessions == nil || u.loginLimiter == nil {
 		return apperr.New(apperr.ErrInternalServer, "auth dependencies are not configured")
 	}
 	return nil
@@ -376,11 +310,10 @@ func (u *Usecase) currentAdminAndRole(ctx context.Context) (identitydomain.Admin
 }
 
 func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin, activeRoleID int64) (CurrentUser, error) {
-	snapshot, err := u.casbinSnapshot(ctx, admin, activeRoleID)
-	if err != nil {
-		return CurrentUser{}, err
-	}
-	menus, err := u.visibleMenus(ctx, snapshot)
+	authorization, err := u.authorization.CurrentAuthorization(ctx, AuthorizationSubject{
+		AdminID:      admin.ID,
+		ActiveRoleID: activeRoleID,
+	})
 	if err != nil {
 		return CurrentUser{}, err
 	}
@@ -389,136 +322,13 @@ func (u *Usecase) userSnapshot(ctx context.Context, admin identitydomain.Admin, 
 		Username:     admin.Username,
 		DisplayName:  admin.DisplayName,
 		Email:        admin.Email,
-		ActiveRoleID: snapshot.activeRole.ID,
-		ActiveRole:   snapshot.activeRole,
-		DefaultPath:  snapshot.activeRole.DefaultPath,
-		Roles:        snapshot.roles,
-		Permissions:  snapshot.permissions,
-		Menus:        menus,
+		ActiveRoleID: authorization.ActiveRole.ID,
+		ActiveRole:   authorization.ActiveRole,
+		DefaultPath:  authorization.DefaultPath,
+		Roles:        authorization.Roles,
+		Permissions:  authorization.Permissions,
+		Menus:        authorization.Menus,
 	}, nil
-}
-
-func (u *Usecase) casbinSnapshot(ctx context.Context, admin identitydomain.Admin, activeRoleID int64) (rbacSnapshot, error) {
-	roleIDs := admin.RoleIDs
-	roles := make([]Role, 0, len(roleIDs))
-	var menuIDSet map[int64]struct{}
-	var buttonIDSet map[int64]struct{}
-	enforcer, err := newCasbinEnforcer()
-	if err != nil {
-		return rbacSnapshot{}, err
-	}
-	user := userSubject(admin.ID)
-	var activeRole Role
-	activeFound := false
-	for _, roleID := range roleIDs {
-		role, findErr := u.roles.FindRoleByID(ctx, roleID)
-		if findErr != nil {
-			return rbacSnapshot{}, findErr
-		}
-		if !role.Active {
-			continue
-		}
-		dto := fromRole(role)
-		roles = append(roles, dto)
-		if role.ID != activeRoleID {
-			continue
-		}
-		activeFound = true
-		activeRole = dto
-		menuIDSet, buttonIDSet, err = addActiveRoleGrants(enforcer, user, role)
-		if err != nil {
-			return rbacSnapshot{}, err
-		}
-	}
-	if !activeFound {
-		return rbacSnapshot{}, permissionDeniedRole(activeRoleID)
-	}
-	permissions, err := implicitPermissions(enforcer, user)
-	if err != nil {
-		return rbacSnapshot{}, err
-	}
-	return rbacSnapshot{enforcer: enforcer, user: user, activeRole: activeRole, roles: roles, permissions: permissions, menuIDSet: menuIDSet, buttonIDSet: buttonIDSet}, nil
-}
-
-func addActiveRoleGrants(enforcer *casbin.Enforcer, user string, role accessdomain.Role) (map[int64]struct{}, map[int64]struct{}, error) {
-	roleName := roleSubject(role.Code)
-	if _, err := enforcer.AddRoleForUser(user, roleName); err != nil {
-		return nil, nil, fmt.Errorf("add casbin role: %w", err)
-	}
-	for _, permission := range role.Permissions {
-		obj, act, splitErr := splitPermission(permission)
-		if splitErr != nil {
-			return nil, nil, splitErr
-		}
-		if _, err := enforcer.AddPolicy(roleName, obj, act); err != nil {
-			return nil, nil, fmt.Errorf("add casbin policy: %w", err)
-		}
-	}
-	menuIDSet := make(map[int64]struct{}, len(role.MenuIDs))
-	for _, menuID := range role.MenuIDs {
-		menuIDSet[menuID] = struct{}{}
-	}
-	buttonIDSet := make(map[int64]struct{}, len(role.ButtonIDs))
-	for _, buttonID := range role.ButtonIDs {
-		buttonIDSet[buttonID] = struct{}{}
-	}
-	return menuIDSet, buttonIDSet, nil
-}
-
-func (u *Usecase) findRouteAPI(ctx context.Context, method, path string) (accessdomain.API, error) {
-	method = strings.ToUpper(strings.TrimSpace(method))
-	path = strings.TrimSpace(path)
-	if method == "" || path == "" {
-		return accessdomain.API{}, apperr.NewPermissionDenied("api", "route")
-	}
-	api, err := u.apis.FindAPIByRoute(ctx, method, path)
-	if err != nil {
-		if appErr, ok := apperr.Parse(err); ok && appErr.Code() == apperr.ErrNotFound {
-			return accessdomain.API{}, apperr.NewPermissionDenied("api", path)
-		}
-		return accessdomain.API{}, err
-	}
-	return api, nil
-}
-
-// permissionDeniedRole reports a missing or inactive active role as an
-// authorization failure instead of leaking role lookup state.
-func permissionDeniedRole(roleID int64) error {
-	return apperr.NewPermissionDenied("role", strconv.FormatInt(roleID, 10))
-}
-
-func requireAssignedRouteAPI(role accessdomain.Role, api accessdomain.API) error {
-	if role.HasAPI(api.ID) {
-		return nil
-	}
-	return apperr.NewPermissionDenied("api", api.Path)
-}
-
-func (u *Usecase) visibleMenus(ctx context.Context, snapshot rbacSnapshot) ([]Menu, error) {
-	menus, err := u.menus.ListMenus(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Menu, 0, len(menus))
-	for _, menu := range menus {
-		if !menu.Active {
-			continue
-		}
-		if _, ok := snapshot.menuIDSet[menu.ID]; !ok {
-			continue
-		}
-		if permission := menu.Permission; permission != "" {
-			allowed, err := enforcePermission(snapshot.enforcer, snapshot.user, permission)
-			if err != nil {
-				return nil, err
-			}
-			if !allowed {
-				continue
-			}
-		}
-		out = append(out, fromMenu(menu, visibleButtons(menu.Buttons, snapshot)))
-	}
-	return out, nil
 }
 
 func (u *Usecase) recordLogin(ctx context.Context, record LoginRecord) error {
@@ -630,86 +440,6 @@ func currentLoginSessionID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func fromRole(role accessdomain.Role) Role {
-	return Role{
-		ID:          role.ID,
-		ParentID:    role.ParentID,
-		Code:        role.Code,
-		Name:        role.Name,
-		Permissions: role.Permissions,
-		MenuIDs:     role.MenuIDs,
-		APIIDs:      role.APIIDs,
-		ButtonIDs:   role.ButtonIDs,
-		DataRoleIDs: role.DataRoleIDs,
-		DefaultPath: role.DefaultPath,
-		Active:      role.Active,
-		CreatedAt:   role.CreatedAt,
-		UpdatedAt:   role.UpdatedAt,
-	}
-}
-
-func fromMenu(menu accessdomain.Menu, buttons []accessdomain.MenuButton) Menu {
-	return Menu{
-		ID:        menu.ID,
-		ParentID:  menu.ParentID,
-		Name:      menu.Name,
-		Path:      menu.Path,
-		Icon:      menu.Icon,
-		Hidden:    menu.Hidden,
-		Component: menu.Component,
-		Meta: MenuMeta{
-			ActiveName:     menu.Meta.ActiveName,
-			KeepAlive:      menu.Meta.KeepAlive,
-			DefaultMenu:    menu.Meta.DefaultMenu,
-			CloseTab:       menu.Meta.CloseTab,
-			TransitionType: menu.Meta.TransitionType,
-		},
-		Permission: menu.Permission,
-		Sort:       menu.Sort,
-		Active:     menu.Active,
-		Buttons:    fromButtons(buttons),
-		CreatedAt:  menu.CreatedAt,
-		UpdatedAt:  menu.UpdatedAt,
-	}
-}
-
-func visibleButtons(buttons []accessdomain.MenuButton, snapshot rbacSnapshot) []accessdomain.MenuButton {
-	if snapshot.activeRole.Code == accessdomain.RoleCodeSuperAdmin {
-		return buttons
-	}
-	out := make([]accessdomain.MenuButton, 0, len(buttons))
-	for _, button := range buttons {
-		if _, ok := snapshot.buttonIDSet[button.ID]; ok {
-			out = append(out, button)
-		}
-	}
-	return out
-}
-
-func fromButtons(buttons []accessdomain.MenuButton) []Button {
-	out := make([]Button, 0, len(buttons))
-	for _, button := range buttons {
-		out = append(out, Button{
-			ID:          button.ID,
-			MenuID:      button.MenuID,
-			Name:        button.Name,
-			Description: button.Description,
-			CreatedAt:   button.CreatedAt,
-			UpdatedAt:   button.UpdatedAt,
-		})
-	}
-	return out
-}
-
-func sortedKeys(set map[string]struct{}) []string {
-	out := make([]string, 0, len(set))
-	for key := range set {
-		out = append(out, key)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func loginRecordFromInput(adminID int64, username string, input LoginInput, success bool, reason string) LoginRecord {
 	if username == "" {
 		username = "unknown"
@@ -722,70 +452,4 @@ func loginRecordFromInput(adminID int64, username string, input LoginInput, succ
 		Success:   success,
 		Reason:    reason,
 	}
-}
-
-type rbacSnapshot struct {
-	enforcer    *casbin.Enforcer
-	user        string
-	activeRole  Role
-	roles       []Role
-	permissions []string
-	menuIDSet   map[int64]struct{}
-	buttonIDSet map[int64]struct{}
-}
-
-func newCasbinEnforcer() (*casbin.Enforcer, error) {
-	rbacModel, err := model.NewModelFromString(casbinRBACModel)
-	if err != nil {
-		return nil, fmt.Errorf("create casbin model: %w", err)
-	}
-	enforcer, err := casbin.NewEnforcer(rbacModel)
-	if err != nil {
-		return nil, fmt.Errorf("create casbin enforcer: %w", err)
-	}
-	enforcer.EnableAutoSave(false)
-	return enforcer, nil
-}
-
-func implicitPermissions(enforcer *casbin.Enforcer, user string) ([]string, error) {
-	policies, err := enforcer.GetImplicitPermissionsForUser(user)
-	if err != nil {
-		return nil, fmt.Errorf("get casbin permissions: %w", err)
-	}
-	set := make(map[string]struct{}, len(policies))
-	for _, policy := range policies {
-		if len(policy) < 3 {
-			continue
-		}
-		set[policy[1]+":"+policy[2]] = struct{}{}
-	}
-	return sortedKeys(set), nil
-}
-
-func enforcePermission(enforcer *casbin.Enforcer, user, permission string) (bool, error) {
-	obj, act, err := splitPermission(permission)
-	if err != nil {
-		return false, err
-	}
-	allowed, err := enforcer.Enforce(user, obj, act)
-	if err != nil {
-		return false, fmt.Errorf("enforce casbin permission: %w", err)
-	}
-	return allowed, nil
-}
-
-func splitPermission(permission string) (string, string, error) {
-	parts := strings.Split(strings.ToLower(strings.TrimSpace(permission)), ":")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", apperr.NewBadRequest("invalid permission")
-	}
-	return parts[0], parts[1], nil
-}
-
-func userSubject(adminID int64) string {
-	return "user:" + strconv.FormatInt(adminID, 10)
-}
-
-func roleSubject(code string) string {
-	return "role:" + code
 }

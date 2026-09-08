@@ -1,11 +1,10 @@
-// Package usecase coordinates authentication and authorization workflows.
+// Package usecase coordinates administrator authentication workflows.
 package usecase
 
 import (
 	"context"
 	"time"
 
-	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 )
@@ -17,19 +16,9 @@ type AdminReader interface {
 	Update(context.Context, identitydomain.Admin) (identitydomain.Admin, error)
 }
 
-// RoleReader reads roles needed to build authorization grants.
-type RoleReader interface {
-	FindRoleByID(context.Context, int64) (accessdomain.Role, error)
-}
-
-// MenuReader reads menus needed to build the current-user navigation tree.
-type MenuReader interface {
-	ListMenus(context.Context) ([]accessdomain.Menu, error)
-}
-
-// APIReader reads managed backend routes needed for API-level authorization.
-type APIReader interface {
-	FindAPIByRoute(context.Context, string, string) (accessdomain.API, error)
+// AuthorizationReader reads current Administration Authorization state.
+type AuthorizationReader interface {
+	CurrentAuthorization(context.Context, AuthorizationSubject) (AuthorizationView, error)
 }
 
 // LoginRecorder stores sign-in attempts without exposing audit storage details.
@@ -58,16 +47,14 @@ type LoginAttemptLimiter interface {
 	ResetLoginAttempts(context.Context, string) error
 }
 
-// Usecase coordinates sign-in, current user, and permission checks.
+// Usecase coordinates sign-in, login sessions, and current-user workflows.
 type Usecase struct {
-	admins       AdminReader
-	roles        RoleReader
-	menus        MenuReader
-	apis         APIReader
-	logins       LoginRecorder
-	sessions     LoginSessionStore
-	loginLimiter LoginAttemptLimiter
-	now          func() time.Time
+	admins        AdminReader
+	authorization AuthorizationReader
+	logins        LoginRecorder
+	sessions      LoginSessionStore
+	loginLimiter  LoginAttemptLimiter
+	now           func() time.Time
 }
 
 // Option customizes the auth usecase.
@@ -84,16 +71,14 @@ func WithClock(now func() time.Time) Option {
 
 // New creates an auth usecase with its required readers and login-session
 // store.
-func New(admins AdminReader, roles RoleReader, menus MenuReader, apis APIReader, sessions LoginSessionStore, loginLimiter LoginAttemptLimiter, logins LoginRecorder, opts ...Option) *Usecase {
+func New(admins AdminReader, authorization AuthorizationReader, sessions LoginSessionStore, loginLimiter LoginAttemptLimiter, logins LoginRecorder, opts ...Option) *Usecase {
 	u := &Usecase{
-		admins:       admins,
-		roles:        roles,
-		menus:        menus,
-		apis:         apis,
-		logins:       logins,
-		sessions:     sessions,
-		loginLimiter: loginLimiter,
-		now:          func() time.Time { return time.Now().UTC() },
+		admins:        admins,
+		authorization: authorization,
+		logins:        logins,
+		sessions:      sessions,
+		loginLimiter:  loginLimiter,
+		now:           func() time.Time { return time.Now().UTC() },
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -148,6 +133,22 @@ type LoginRecord struct {
 	UserAgent string
 	Success   bool
 	Reason    string
+}
+
+// AuthorizationSubject identifies the administrator and active role whose
+// current grants are returned.
+type AuthorizationSubject struct {
+	AdminID      int64
+	ActiveRoleID int64
+}
+
+// AuthorizationView is the current active-role authorization snapshot.
+type AuthorizationView struct {
+	ActiveRole  Role
+	Roles       []Role
+	Permissions []string
+	Menus       []Menu
+	DefaultPath string
 }
 
 // LoginSessionIdentity is the authenticated browser login identity stored on

@@ -69,6 +69,7 @@ func accessModule() Module {
 	return NewModule("access",
 		Provide(newAccessStore),
 		Provide(newAccessUsecase),
+		Provide(newRouteAuthorizer),
 		Provide(newAccessHandler),
 		Route(accesshttp.Register),
 	)
@@ -351,7 +352,7 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	accessStore, err := do.Invoke[*accessmysql.Store](i)
+	authorization, err := do.Invoke[*accessusecase.Usecase](i)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +360,7 @@ func newAuthUsecase(i do.Injector) (*authusecase.Usecase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return authusecase.New(identityStore, accessStore, accessStore, accessStore, authStore, authStore, authLoginRecorder{audit: audit}), nil
+	return authusecase.New(identityStore, authAuthorizationReader{access: authorization}, authStore, authStore, authLoginRecorder{audit: audit}), nil
 }
 
 func newAuthStore(i do.Injector) (*authmysql.Store, error) {
@@ -844,6 +845,7 @@ func (r accessAdminRoleReader) AdminRoleState(ctx context.Context, adminID int64
 	return accessusecase.AdminRoleState{
 		RoleIDs:      admin.RoleIDs,
 		ActiveRoleID: admin.ActiveRoleID,
+		Active:       admin.Active,
 	}, nil
 }
 

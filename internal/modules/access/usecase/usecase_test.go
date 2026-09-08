@@ -325,67 +325,6 @@ func TestDeleteMenuDeletesUnassignedLeafMenu(t *testing.T) {
 	}
 }
 
-func TestSetMenuRolesUpdatesRoleGrants(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1}, []int64{1}, []int64{1, 2}, accessdomain.DefaultRolePath, true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(root) error = %v", err)
-	}
-	operator, err := accessdomain.RestoreRole(2, 1, "operator", "运营", []string{accessdomain.PermissionAdminRead}, []int64{1}, []int64{1}, []int64{1}, []int64{2}, "/admins", true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(operator) error = %v", err)
-	}
-	menu, err := accessdomain.RestoreMenu(2, 0, "菜单管理", "/menus", "menu", false, "./Menus", accessdomain.MenuMeta{}, accessdomain.PermissionMenuRead, 20, true, nil, now, now)
-	if err != nil {
-		t.Fatalf("RestoreMenu(menu) error = %v", err)
-	}
-	store := &storeSpy{roles: []accessdomain.Role{root, operator}, menus: []accessdomain.Menu{menu}}
-	uc := usecase.New(store, adminRoleReaderSpy{})
-
-	roleIDs, err := uc.SetMenuRoles(superAdminContext(), usecase.MenuRolesInput{MenuID: 2, RoleIDs: []int64{2}})
-	if err != nil {
-		t.Fatalf("SetMenuRoles() error = %v", err)
-	}
-	if !sameInt64s(roleIDs, []int64{2}) {
-		t.Fatalf("SetMenuRoles() = %v, want [2]", roleIDs)
-	}
-	updated, ok := findRoleForTest(store.roles, 2)
-	if !ok || !containsIDForTest(updated.MenuIDs, 2) {
-		t.Fatalf("updated operator menu ids = %v, want to include 2", updated.MenuIDs)
-	}
-}
-
-func TestSetAPIRolesRejectsAPIOutsideActiveGrantScope(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0).UTC()
-	root, err := accessdomain.RestoreRole(1, 0, accessdomain.RoleCodeSuperAdmin, "超级管理员", accessdomain.PermissionCatalogTokens(), []int64{1}, []int64{1, 2}, []int64{1}, []int64{1, 2, 3}, accessdomain.DefaultRolePath, true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(root) error = %v", err)
-	}
-	manager, err := accessdomain.RestoreRole(2, 1, "manager", "经理", []string{accessdomain.PermissionAPIGrant}, []int64{1}, []int64{1}, []int64{1}, []int64{3}, "/admins", true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(manager) error = %v", err)
-	}
-	operator, err := accessdomain.RestoreRole(3, 2, "operator", "运营", []string{accessdomain.PermissionAdminRead}, []int64{1}, []int64{1}, []int64{1}, []int64{3}, "/admins", true, now, now)
-	if err != nil {
-		t.Fatalf("RestoreRole(operator) error = %v", err)
-	}
-	api, err := accessdomain.RestoreAPI(2, "GET", "/api/secret", "Secret", "system", accessdomain.PermissionAPIRead, now, now)
-	if err != nil {
-		t.Fatalf("RestoreAPI(api) error = %v", err)
-	}
-	store := &storeSpy{roles: []accessdomain.Role{root, manager, operator}, apis: []accessdomain.API{api}}
-	uc := usecase.New(store, adminRoleReaderSpy{state: usecase.AdminRoleState{RoleIDs: []int64{2}, ActiveRoleID: 2}})
-	ctx := requestctx.WithRoleID(requestctx.WithUserID(context.Background(), "42"), "2")
-
-	_, err = uc.SetAPIRoles(ctx, usecase.APIRolesInput{APIID: 2, RoleIDs: []int64{3}})
-	if err == nil {
-		t.Fatal("SetAPIRoles() error = nil, want permission denied")
-	}
-	if len(store.updatedRoles) != 0 {
-		t.Fatalf("updatedRoles = %d, want 0", len(store.updatedRoles))
-	}
-}
-
 func TestAPIGroupsReturnsSortedUniqueGroups(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	adminAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/admins", "管理员", "admin", accessdomain.PermissionAdminRead, now, now)
@@ -520,13 +459,17 @@ func (s *storeSpy) DeleteMenu(_ context.Context, id int64) error {
 type adminRoleReaderSpy struct {
 	state         usecase.AdminRoleState
 	assignedRoles map[int64]bool
+	err           error
 }
 
 func (s adminRoleReaderSpy) AdminRoleState(context.Context, int64) (usecase.AdminRoleState, error) {
+	if s.err != nil {
+		return usecase.AdminRoleState{}, s.err
+	}
 	if len(s.state.RoleIDs) > 0 {
 		return s.state, nil
 	}
-	return usecase.AdminRoleState{RoleIDs: []int64{1}, ActiveRoleID: 1}, nil
+	return usecase.AdminRoleState{RoleIDs: []int64{1}, ActiveRoleID: 1, Active: true}, nil
 }
 
 func (s adminRoleReaderSpy) RoleAssigned(_ context.Context, roleID int64) (bool, error) {

@@ -541,54 +541,6 @@ func (u *Usecase) DeleteMenu(ctx context.Context, id int64) error {
 	return u.store.DeleteMenu(ctx, existing.ID)
 }
 
-// MenuRoleIDs returns visible role ids currently granted one menu.
-func (u *Usecase) MenuRoleIDs(ctx context.Context, menuID int64) ([]int64, error) {
-	if err := u.ready(); err != nil {
-		return nil, err
-	}
-	if _, err := u.store.FindMenuByID(ctx, menuID); err != nil {
-		return nil, err
-	}
-	scope, err := u.roleScope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := scope.ensureMenuGrantReadable(menuID); err != nil {
-		return nil, err
-	}
-	return roleIDsWithMenu(scope.visibleRoles(), menuID), nil
-}
-
-// SetMenuRoles replaces role grants for one menu within the active role scope.
-// The flow is intentionally parallel to SetAPIRoles: the resource-specific
-// steps stay inline and only the shared grant-rewrite loop is extracted.
-func (u *Usecase) SetMenuRoles(ctx context.Context, input MenuRolesInput) ([]int64, error) { //nolint:dupl // menu and api grant flows are intentionally parallel
-	if err := u.ready(); err != nil {
-		return nil, err
-	}
-	if _, err := u.store.FindMenuByID(ctx, input.MenuID); err != nil {
-		return nil, err
-	}
-	roleIDs, err := normalizeRequestedRoleIDs(input.RoleIDs)
-	if err != nil {
-		return nil, err
-	}
-	scope, err := u.roleScope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err = scope.ensureMenuGrantReadable(input.MenuID); err != nil {
-		return nil, err
-	}
-	scope, err = u.applyRoleGrants(ctx, scope, roleIDs, func(role domain.Role, assigned bool) (domain.Role, bool, error) {
-		return roleWithMenuGrant(role, input.MenuID, assigned)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return roleIDsWithMenu(scope.visibleRoles(), input.MenuID), nil
-}
-
 // ListAPIs returns paginated API route metadata.
 func (u *Usecase) ListAPIs(ctx context.Context, input ListInput) (APIListOutput, error) {
 	if err := u.ready(); err != nil {
@@ -645,54 +597,6 @@ func (u *Usecase) APIGroups(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
-}
-
-// APIRoleIDs returns visible role ids currently granted one API route.
-func (u *Usecase) APIRoleIDs(ctx context.Context, apiID int64) ([]int64, error) {
-	if err := u.ready(); err != nil {
-		return nil, err
-	}
-	if _, err := u.store.FindAPIByID(ctx, apiID); err != nil {
-		return nil, err
-	}
-	scope, err := u.roleScope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := scope.ensureAPIGrantReadable(apiID); err != nil {
-		return nil, err
-	}
-	return roleIDsWithAPI(scope.visibleRoles(), apiID), nil
-}
-
-// SetAPIRoles replaces role grants for one API route within the active role scope.
-// The flow is intentionally parallel to SetMenuRoles: the resource-specific
-// steps stay inline and only the shared grant-rewrite loop is extracted.
-func (u *Usecase) SetAPIRoles(ctx context.Context, input APIRolesInput) ([]int64, error) { //nolint:dupl // menu and api grant flows are intentionally parallel
-	if err := u.ready(); err != nil {
-		return nil, err
-	}
-	if _, err := u.store.FindAPIByID(ctx, input.APIID); err != nil {
-		return nil, err
-	}
-	roleIDs, err := normalizeRequestedRoleIDs(input.RoleIDs)
-	if err != nil {
-		return nil, err
-	}
-	scope, err := u.roleScope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err = scope.ensureAPIGrantReadable(input.APIID); err != nil {
-		return nil, err
-	}
-	scope, err = u.applyRoleGrants(ctx, scope, roleIDs, func(role domain.Role, assigned bool) (domain.Role, bool, error) {
-		return roleWithAPIGrant(role, input.APIID, assigned)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return roleIDsWithAPI(scope.visibleRoles(), input.APIID), nil
 }
 
 // applyRoleGrants rewrites one resource grant on every in-scope editable role

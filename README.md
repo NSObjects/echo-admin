@@ -18,7 +18,7 @@
 ├── cmd/                         # CLI 入口，默认读取 configs/config.toml
 ├── configs/                     # 静态配置示例和配置说明
 ├── internal/boot/               # composition root，负责装配资源、模块和路由
-├── internal/modules/auth/       # 登录会话、当前用户和授权判断
+├── internal/modules/auth/       # 登录会话、当前用户和认证流程
 ├── internal/modules/identity/   # 管理员管理
 ├── internal/modules/access/     # 角色权限和菜单管理
 ├── internal/modules/apitoken/    # API Token 管理和 token 认证
@@ -137,11 +137,11 @@ internal/modules/audit/          # 操作日志、登录日志和系统错误日
 
 运行期只使用 MySQL adapter。各模块的 usecase 定义自己的 store interface，`internal/boot` 从已配置的 `*gorm.DB` 创建 concrete store，并负责跨模块装配，例如 auth 通过自己的小接口读取 identity/access，并通过 boot bridge 写入 audit。
 
-授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。当前生效角色决定本次请求的权限集合，已分配但未激活的其他角色不会参与授权。
+`access` 中的授权判断基于 Casbin RBAC：管理员映射为 `user:<id>`，角色映射为 `role:<code>`，权限 token 必须是 `resource:action`，并在授权时映射为 Casbin 的 `{subject, object, action}`。当前生效角色决定本次请求的权限集合，已分配但未激活的其他角色不会参与授权。
 
-`auth` 模块提供登录、当前用户、当前用户资料更新、角色切换、当前用户改密码、服务端退出登录和权限判断。浏览器登录态是 MySQL 持久化的 Login Session；cookie 中只保存 opaque token，表中只保存 token 哈希、当前角色、idle 过期时间、绝对过期时间和撤销信息。登录会话校验发生在 server middleware：过期、撤销、管理员不可用或角色不可用都会按未授权处理。当前用户改密码只撤销其他会话并保留当前会话；管理员被禁用、删除或被重置密码会撤销该管理员全部会话。API Token 是独立的机器客户端认证路径，不复用浏览器 cookie。
+`auth` 模块提供登录、当前用户、当前用户资料更新、角色切换、当前用户改密码和服务端退出登录，并通过消费方定义的小 interface 读取 `access` 生成的当前授权视图。浏览器登录态是 MySQL 持久化的 Login Session；cookie 中只保存 opaque token，表中只保存 token 哈希、当前角色、idle 过期时间、绝对过期时间和撤销信息。登录会话校验发生在 server middleware：过期、撤销、管理员不可用或角色不可用都会按未授权处理。当前用户改密码只撤销其他会话并保留当前会话；管理员被禁用、删除或被重置密码会撤销该管理员全部会话。API Token 是独立的机器客户端认证路径，不复用浏览器 cookie。
 
-`access` 模块提供权限目录、Managed API Route Catalog、角色树、数据权限、菜单管理和菜单按钮管理。Managed API Route 的 method、Echo 注册 pattern 和元数据由 `access` 代码目录唯一维护，System API Route 与 Bootstrap API Route 不进入该目录；System First Initialization 把目录持久化到 MySQL，运行期按当前角色的 `api_ids` 授权。后台只能查看目录并管理角色 grant，不能创建、编辑、删除或通过版本包导入路由定义。boot 在全部路由挂载后从 Echo route table 生成 manifest：System/Bootstrap 通过精确 method+pattern 豁免，其他 `/api` route 都是 Managed；存在 Managed route 却没有 Route Authorization 时 assembly 直接失败。默认部署测试要求 manifest 与代码目录双向完全一致。根角色同样必须显式持有完整目录 grant，不存在 `Public` 或 Root 绕过。角色通过 `parent_id` 形成委派树：根角色可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限、菜单、API、菜单按钮或数据角色。`data_role_ids` 是当前角色可见的管理员数据范围。菜单记录保存 `hidden`、`component`、`keep_alive`、`default_menu`、`close_tab`、`active_name` 和 `transition_type` 等路由元信息。
+`access` 模块提供当前授权视图、精确路由授权、权限目录、Managed API Route Catalog、角色树、数据权限、菜单管理和菜单按钮管理。每次授权都会读取当前管理员及角色状态；当前授权视图在模块内部用 Casbin 计算权限并过滤菜单和按钮，精确路由授权只检查当前角色的显式 `api_ids` grant。Managed API Route 的 method、Echo 注册 pattern 和元数据由 `access` 代码目录唯一维护，System API Route 与 Bootstrap API Route 不进入该目录；System First Initialization 把目录持久化到 MySQL。后台对目录只读，不能创建、编辑、删除或通过版本包导入路由定义；角色对路由的放行在角色编辑时由功能权限派生，不再提供按路由或按菜单的手工授权端点。boot 在全部路由挂载后从 Echo route table 生成 manifest：System/Bootstrap 通过精确 method+pattern 豁免，其他 `/api` route 都是 Managed；存在 Managed route 却没有 Route Authorization 时 assembly 直接失败。默认部署测试要求 manifest 与代码目录双向完全一致。根角色同样必须显式持有完整目录 grant，不存在 `Public` 或 Root 绕过。角色通过 `parent_id` 形成委派树：根角色可以管理全部角色；普通角色只能查看自己和下级角色，只能把自己的下级角色分配给管理员，并且不能授予自己没有的权限、菜单、API、菜单按钮或数据角色。`data_role_ids` 是当前角色可见的管理员数据范围。菜单记录保存 `hidden`、`component`、`keep_alive`、`default_menu`、`close_tab`、`active_name` 和 `transition_type` 等路由元信息。
 
 `settings` 模块提供系统配置、系统参数、数据字典和版本管理。系统配置支持创建、更新、删除，启动种子配置 `site_name` 不允许从后台删除。系统参数提供可分页参数表，支持名称/键筛选、按 ID 或 key 查询、创建、更新、单条删除和批量删除。数据字典支持字典项树形父子关系、扩展值、层级路径、防循环父级调整和父项删除保护。版本管理保存可审计的发布记录，支持选择菜单和字典导出版本包，以及导入版本包恢复菜单和字典；版本包明确拒绝 Managed API Route 内容，避免绕过 deployment-owned catalog。
 
@@ -190,8 +190,6 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | `GET` | `/api/apis` | API 列表 |
 | `GET` | `/api/apis/groups` | API 分组 |
 | `GET` | `/api/apis/:id` | API 详情 |
-| `GET` | `/api/apis/:id/roles` | API 授权角色 |
-| `PUT` | `/api/apis/:id/roles` | 覆盖 API 授权角色 |
 | `GET` | `/api/api-tokens` | API Token 列表 |
 | `POST` | `/api/api-tokens` | 创建 API Token |
 | `PATCH` | `/api/api-tokens/:id` | 更新 API Token |
@@ -201,8 +199,6 @@ HTTP adapter 只做请求解析、validator 校验、DTO 转换、调用 usecase
 | `GET` | `/api/menus/:id` | 菜单详情 |
 | `PATCH` | `/api/menus/:id` | 更新菜单 |
 | `DELETE` | `/api/menus/:id` | 删除菜单 |
-| `GET` | `/api/menus/:id/roles` | 菜单授权角色 |
-| `PUT` | `/api/menus/:id/roles` | 覆盖菜单授权角色 |
 | `GET` | `/api/system/configs` | 系统配置列表 |
 | `PUT` | `/api/system/configs/:key` | 创建或更新系统配置 |
 | `DELETE` | `/api/system/configs/:key` | 删除系统配置 |

@@ -195,10 +195,6 @@ export type APITokenCreateResult = {
   secret: string;
 };
 
-export type RoleIDsResult = {
-  role_ids: number[];
-};
-
 export type AdminIDsResult = {
   admin_ids: number[];
 };
@@ -672,24 +668,6 @@ export async function readAPI(id: number): Promise<APIResource> {
   return response.data;
 }
 
-export async function listAPIRoles(id: number): Promise<number[]> {
-  const response = await request<Envelope<RoleIDsResult>>(
-    `/api/apis/${id}/roles`,
-  );
-  return response.data.role_ids;
-}
-
-export async function setAPIRoles(
-  id: number,
-  roleIDs: number[],
-): Promise<number[]> {
-  const response = await request<Envelope<RoleIDsResult>>(
-    `/api/apis/${id}/roles`,
-    { method: 'PUT', data: { role_ids: roleIDs } },
-  );
-  return response.data.role_ids;
-}
-
 export async function listAPITokens(
   params?: ListParams,
 ): Promise<Envelope<APIToken[]>> {
@@ -737,24 +715,6 @@ export async function updateMenu(id: number, body: MenuInput): Promise<void> {
 
 export async function deleteMenu(id: number): Promise<void> {
   await request(`/api/menus/${id}`, { method: 'DELETE' });
-}
-
-export async function listMenuRoles(id: number): Promise<number[]> {
-  const response = await request<Envelope<RoleIDsResult>>(
-    `/api/menus/${id}/roles`,
-  );
-  return response.data.role_ids;
-}
-
-export async function setMenuRoles(
-  id: number,
-  roleIDs: number[],
-): Promise<number[]> {
-  const response = await request<Envelope<RoleIDsResult>>(
-    `/api/menus/${id}/roles`,
-    { method: 'PUT', data: { role_ids: roleIDs } },
-  );
-  return response.data.role_ids;
 }
 
 export async function listConfigs(): Promise<SystemConfig[]> {

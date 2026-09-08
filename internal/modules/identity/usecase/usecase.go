@@ -327,7 +327,7 @@ func rejectSelfDisable(ctx context.Context, adminID int64, active *bool) error {
 		return err
 	}
 	if currentID == adminID {
-		return apperr.NewBadRequest("cannot disable current admin")
+		return apperr.NewBadRequest("不能停用当前登录的管理员")
 	}
 	return nil
 }
@@ -340,7 +340,7 @@ func rejectSelfDelete(ctx context.Context, adminID int64) error {
 		return err
 	}
 	if currentID == adminID {
-		return apperr.NewBadRequest("cannot delete current admin")
+		return apperr.NewBadRequest("不能删除当前登录的管理员")
 	}
 	return nil
 }

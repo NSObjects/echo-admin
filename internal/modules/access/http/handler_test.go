@@ -153,30 +153,6 @@ func TestDeleteMenuRecordsOperation(t *testing.T) {
 	}
 }
 
-func TestSetMenuRolesRecordsOperation(t *testing.T) {
-	e, store, recorder := newAccessEcho()
-	store.roles = twoRoles(t)
-	menu, err := accessdomain.RestoreMenu(2, 0, "菜单管理", "/menus", "menu", false, "./Menus", accessdomain.MenuMeta{}, accessdomain.PermissionMenuRead, 20, true, nil, fixedTime(), fixedTime())
-	if err != nil {
-		t.Fatalf("RestoreMenu() error = %v", err)
-	}
-	store.menus = []accessdomain.Menu{menu}
-
-	rec := doJSON(t, e, http.MethodPut, "/api/menus/2/roles", `{"role_ids":[2]}`, "42")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("set menu roles status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(store.updatedRoles) != 1 || store.updatedRoles[0].ID != 2 {
-		t.Fatalf("updatedRoles = %#v, want role 2 update", store.updatedRoles)
-	}
-	if len(recorder.records) != 1 {
-		t.Fatalf("operation records = %d, want 1", len(recorder.records))
-	}
-	if got := recorder.records[0].Action; got != "set_roles" {
-		t.Fatalf("operation action = %q, want set_roles", got)
-	}
-}
-
 func TestListAPIGroups(t *testing.T) {
 	e, store, _ := newAccessEcho()
 	firstAPI, err := accessdomain.RestoreAPI(1, "GET", "/api/a", "A", "admin", accessdomain.PermissionAdminRead, fixedTime(), fixedTime())
@@ -224,21 +200,6 @@ func TestReadAPI(t *testing.T) {
 	rec := doJSON(t, e, http.MethodGet, "/api/apis/3", "", "42")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get api status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-}
-
-func TestReadAPIRoles(t *testing.T) {
-	e, store, _ := newAccessEcho()
-	api, err := accessdomain.RestoreAPI(3, "GET", "/api/example", "示例API", "example", accessdomain.PermissionLogRead, fixedTime(), fixedTime())
-	if err != nil {
-		t.Fatalf("RestoreAPI() error = %v", err)
-	}
-	store.apis = []accessdomain.API{api}
-	store.roles = twoRoles(t)
-
-	rec := doJSON(t, e, http.MethodGet, "/api/apis/3/roles", "", "42")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("get api roles status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 }
 
@@ -420,7 +381,7 @@ func (r *operationRecorder) RecordOperation(_ context.Context, input auditusecas
 type accessAdminRoleReader struct{}
 
 func (accessAdminRoleReader) AdminRoleState(context.Context, int64) (accessusecase.AdminRoleState, error) {
-	return accessusecase.AdminRoleState{RoleIDs: []int64{1}, ActiveRoleID: 1}, nil
+	return accessusecase.AdminRoleState{RoleIDs: []int64{1}, ActiveRoleID: 1, Active: true}, nil
 }
 
 func (accessAdminRoleReader) RoleAssigned(context.Context, int64) (bool, error) {

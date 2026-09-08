@@ -17,6 +17,7 @@ import {
 import { useAccess } from '@umijs/max';
 import {
   Button,
+  Collapse,
   Drawer,
   Form,
   InputNumber,
@@ -29,15 +30,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   createMenu,
   deleteMenu,
-  listMenuRoles,
   listMenus,
   listPermissions,
-  listRoles,
   type Menu,
   type PermissionDefinition,
-  type Role,
   readMenu,
-  setMenuRoles,
   updateMenu,
 } from '@/services/admin';
 import {
@@ -70,80 +67,61 @@ type MenuFormValues = {
   }[];
 };
 
-type RoleGrantTarget = {
-  menu: Menu;
-  role_ids: number[];
-};
-
 const Menus: React.FC = () => {
   const access = useAccess();
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Menu>();
   // 新增子菜单时预置的上级菜单 id；undefined 表示从工具栏新增顶级菜单。
   const [createParentID, setCreateParentID] = useState<number>();
   const [detail, setDetail] = useState<Menu>();
-  const [roleTarget, setRoleTarget] = useState<RoleGrantTarget>();
 
   useEffect(() => {
-    void Promise.all([
-      listPermissions(),
-      access.canRoleRead
-        ? listRoles({ page_size: 100 })
-        : Promise.resolve({ data: [] }),
-    ]).then(([permissionResponse, roleResponse]) => {
-      setPermissions(permissionResponse);
-      setRoles(roleResponse.data);
-    });
-  }, [access]);
+    void listPermissions().then(setPermissions);
+  }, []);
 
   const menuName = (menuID: number) =>
     menus.find((menu) => menu.id === menuID)?.name ?? `#${menuID}`;
 
   const columns: ProColumns<MenuNode>[] = [
-    { title: '名称', dataIndex: 'name', width: 220 },
-    { title: '路径', dataIndex: 'path' },
-    { title: '组件', dataIndex: 'component', ellipsis: true },
+    { title: '名称', dataIndex: 'name', width: 200 },
+    { title: '路径', dataIndex: 'path', ellipsis: true },
     {
-      title: '权限',
+      title: '绑定权限',
       dataIndex: 'permission',
+      width: 140,
+      ellipsis: true,
       render: (_, record) => record.permission || '-',
     },
-    { title: '排序', dataIndex: 'sort', width: 72 },
+    { title: '排序', dataIndex: 'sort', width: 64 },
     {
       title: '按钮',
       dataIndex: 'buttons',
-      width: 72,
+      width: 64,
       render: (_, record) =>
         record.buttons.length > 0 ? `${record.buttons.length} 个` : '-',
     },
     {
-      title: '隐藏',
-      dataIndex: 'hidden',
-      width: 72,
-      render: (_, record) => (
-        <Tag color={record.hidden ? 'default' : 'blue'}>
-          {record.hidden ? '隐藏' : '显示'}
-        </Tag>
-      ),
-    },
-    {
       title: '状态',
       dataIndex: 'active',
-      width: 72,
+      width: 120,
       render: (_, record) => (
-        <Tag color={record.active ? 'green' : 'default'}>
-          {record.active ? '启用' : '停用'}
-        </Tag>
+        <>
+          <Tag color={record.hidden ? 'default' : 'blue'}>
+            {record.hidden ? '隐藏' : '显示'}
+          </Tag>
+          <Tag color={record.active ? 'green' : 'default'}>
+            {record.active ? '启用' : '停用'}
+          </Tag>
+        </>
       ),
     },
     {
       title: '操作',
       valueType: 'option',
-      width: 260,
+      width: 200,
       render: (_, record) => {
         const actions: React.ReactNode[] = [];
         if (access.canMenuCreate) {
@@ -183,20 +161,6 @@ const Menus: React.FC = () => {
             </a>,
           );
         }
-        if (access.canMenuUpdate && access.canRoleRead) {
-          actions.push(
-            <a
-              key="grant"
-              onClick={() => {
-                void listMenuRoles(record.id).then((roleIDs) => {
-                  setRoleTarget({ menu: record, role_ids: roleIDs });
-                });
-              }}
-            >
-              授权角色
-            </a>,
-          );
-        }
         if (access.canMenuDelete) {
           actions.push(
             <Popconfirm
@@ -228,7 +192,10 @@ const Menus: React.FC = () => {
   }));
 
   return (
-    <PageContainer title="菜单管理">
+    <PageContainer
+      title="菜单管理"
+      subTitle="菜单的可见性由角色的功能权限自动派生：绑定权限后，拥有该权限的角色即可看到此菜单"
+    >
       <ProTable<MenuNode>
         headerTitle="菜单树"
         rowKey="id"
@@ -375,6 +342,16 @@ const Menus: React.FC = () => {
             }}
           />
         </ProForm.Group>
+        <ProForm.Group title="权限绑定" grid>
+          <ProFormSelect
+            name="permission"
+            label="绑定权限"
+            colProps={{ span: 24 }}
+            tooltip="角色勾选该权限后自动看到此菜单；容器菜单无需绑定"
+            options={permissionOptions}
+            fieldProps={{ allowClear: true, showSearch: true }}
+          />
+        </ProForm.Group>
         <ProForm.Group title="显示行为" grid>
           <ProFormSwitch
             name="hidden"
@@ -402,33 +379,37 @@ const Menus: React.FC = () => {
             colProps={{ xs: 12, md: 8 }}
           />
         </ProForm.Group>
-        <ProForm.Group title="高级" grid>
-          <ProFormText
-            name="icon"
-            label="图标"
-            colProps={{ xs: 24, sm: 12 }}
-            fieldProps={{ maxLength: 80 }}
-          />
-          <ProFormSelect
-            name="permission"
-            label="权限"
-            colProps={{ xs: 24, sm: 12 }}
-            options={permissionOptions}
-            fieldProps={{ allowClear: true, showSearch: true }}
-          />
-          <ProFormText
-            name={['meta', 'active_name']}
-            label="激活菜单名"
-            colProps={{ xs: 24, sm: 12 }}
-            fieldProps={{ maxLength: 160 }}
-          />
-          <ProFormText
-            name={['meta', 'transition_type']}
-            label="切换动画"
-            colProps={{ xs: 24, sm: 12 }}
-            fieldProps={{ maxLength: 80 }}
-          />
-        </ProForm.Group>
+        <Collapse
+          ghost
+          items={[
+            {
+              key: 'advanced',
+              label: '高级设置（图标 / 激活菜单名 / 切换动画）',
+              children: (
+                <ProForm.Group grid>
+                  <ProFormText
+                    name="icon"
+                    label="图标"
+                    colProps={{ xs: 24, sm: 12 }}
+                    fieldProps={{ maxLength: 80 }}
+                  />
+                  <ProFormText
+                    name={['meta', 'active_name']}
+                    label="激活菜单名"
+                    colProps={{ xs: 24, sm: 12 }}
+                    fieldProps={{ maxLength: 160 }}
+                  />
+                  <ProFormText
+                    name={['meta', 'transition_type']}
+                    label="切换动画"
+                    colProps={{ xs: 24, sm: 12 }}
+                    fieldProps={{ maxLength: 80 }}
+                  />
+                </ProForm.Group>
+              ),
+            },
+          ]}
+        />
         <ProFormList
           name="buttons"
           label="菜单按钮"
@@ -479,45 +460,36 @@ const Menus: React.FC = () => {
                     : menuName(entity.parent_id),
               },
               {
-                title: '图标',
-                dataIndex: 'icon',
-                render: (_, entity) => entity.icon || '-',
-              },
-              {
-                title: '权限',
+                title: '绑定权限',
                 dataIndex: 'permission',
                 render: (_, entity) => entity.permission || '-',
               },
-              {
-                title: '隐藏',
-                dataIndex: 'hidden',
-                render: (_, entity) => (entity.hidden ? '是' : '否'),
-              },
-              {
-                title: '启用',
-                dataIndex: 'active',
-                render: (_, entity) => (entity.active ? '是' : '否'),
-              },
               { title: '排序', dataIndex: 'sort' },
               {
-                title: 'KeepAlive',
+                title: '状态',
+                dataIndex: 'active',
+                render: (_, entity) => (
+                  <>
+                    <Tag color={entity.hidden ? 'default' : 'blue'}>
+                      {entity.hidden ? '隐藏' : '显示'}
+                    </Tag>
+                    <Tag color={entity.active ? 'green' : 'default'}>
+                      {entity.active ? '启用' : '停用'}
+                    </Tag>
+                  </>
+                ),
+              },
+              {
+                title: '高级设置',
                 dataIndex: ['meta', 'keep_alive'],
-                render: (_, entity) => (entity.meta.keep_alive ? '是' : '否'),
-              },
-              {
-                title: '默认菜单',
-                dataIndex: ['meta', 'default_menu'],
-                render: (_, entity) => (entity.meta.default_menu ? '是' : '否'),
-              },
-              {
-                title: '关闭标签',
-                dataIndex: ['meta', 'close_tab'],
-                render: (_, entity) => (entity.meta.close_tab ? '是' : '否'),
-              },
-              {
-                title: '过渡',
-                dataIndex: ['meta', 'transition_type'],
-                render: (_, entity) => entity.meta.transition_type || '-',
+                render: (_, entity) =>
+                  `缓存 ${entity.meta.keep_alive ? '开' : '关'} · 默认菜单 ${
+                    entity.meta.default_menu ? '是' : '否'
+                  } · 允许关闭 ${entity.meta.close_tab ? '是' : '否'}${
+                    entity.meta.transition_type
+                      ? ` · 过渡 ${entity.meta.transition_type}`
+                      : ''
+                  }${entity.icon ? ` · 图标 ${entity.icon}` : ''}`,
               },
               {
                 title: '按钮',
@@ -525,42 +497,12 @@ const Menus: React.FC = () => {
                 render: (_, entity) =>
                   entity.buttons
                     .map((button) => button.description || button.name)
-                    .join(', ') || '-',
+                    .join('、') || '-',
               },
             ]}
           />
         )}
       </Drawer>
-      <DrawerForm<{ role_ids: number[] }>
-        key={roleTarget?.menu.id ?? 'idle'}
-        title={roleTarget ? `授权角色 - ${roleTarget.menu.name}` : '授权角色'}
-        open={Boolean(roleTarget)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRoleTarget(undefined);
-          }
-        }}
-        drawerProps={{ destroyOnHidden: true }}
-        initialValues={{ role_ids: roleTarget?.role_ids ?? [] }}
-        onFinish={async (values) => {
-          if (!roleTarget) {
-            return true;
-          }
-          await setMenuRoles(roleTarget.menu.id, values.role_ids ?? []);
-          message.success('菜单授权角色已更新');
-          return true;
-        }}
-      >
-        <ProFormSelect
-          name="role_ids"
-          label="角色"
-          mode="multiple"
-          options={roles.map((role) => ({
-            value: role.id,
-            label: role.name,
-          }))}
-        />
-      </DrawerForm>
     </PageContainer>
   );
 };

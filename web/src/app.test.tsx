@@ -78,7 +78,11 @@ describe('app getInitialState', () => {
     expect(mockQueryCurrentUser).toHaveBeenCalled();
     expect(state.currentUser).toEqual(user);
     expect(state.setupState).toEqual({ initialized: true });
-    expect(state.settings).toEqual({ title: 'Echo Admin', locale: false });
+    expect(state.settings).toEqual({
+      title: 'Echo Admin',
+      locale: false,
+      navTheme: 'light',
+    });
   });
 
   it('redirects to setup before loading current administrator when uninitialized', async () => {

@@ -1,16 +1,17 @@
 import { PlusOutlined } from '@ant-design/icons';
 import {
   type ActionType,
-  ModalForm,
+  DrawerForm,
   PageContainer,
   type ProColumns,
+  ProForm,
   ProFormDependency,
   ProFormSelect,
   ProFormSwitch,
   ProFormText,
   ProTable,
 } from '@ant-design/pro-components';
-import { useAccess } from '@umijs/max';
+import { useAccess, useModel } from '@umijs/max';
 import { Button, message, Popconfirm, Space, Tag } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -41,9 +42,11 @@ const formatDate = (value?: string) =>
 
 const Admins: React.FC = () => {
   const access = useAccess();
+  const { initialState } = useModel('@@initialState');
+  const currentAdminID = initialState?.currentUser?.id;
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser>();
 
   useEffect(() => {
@@ -61,34 +64,35 @@ const Admins: React.FC = () => {
   }));
 
   const columns: ProColumns<AdminUser>[] = [
-    { title: '用户名', dataIndex: 'username' },
-    { title: '显示名', dataIndex: 'display_name' },
+    { title: '用户名', dataIndex: 'username', width: 140 },
+    { title: '显示名', dataIndex: 'display_name', width: 140 },
     {
       title: '邮箱',
       dataIndex: 'email',
+      ellipsis: true,
       render: (_, record) => record.email || '-',
     },
     {
       title: '角色',
       dataIndex: 'role_ids',
       render: (_, record) => (
-        <Space wrap>
-          {record.role_ids.map((roleID) => (
-            <Tag key={roleID}>{roleName(roleID)}</Tag>
-          ))}
+        <Space wrap size={[4, 4]}>
+          {record.role_ids.map((roleID) =>
+            roleID === record.active_role_id ? (
+              <Tag key={roleID} color="blue">
+                {roleName(roleID)}
+              </Tag>
+            ) : (
+              <Tag key={roleID}>{roleName(roleID)}</Tag>
+            ),
+          )}
         </Space>
-      ),
-    },
-    {
-      title: '当前角色',
-      dataIndex: 'active_role_id',
-      render: (_, record) => (
-        <Tag color="blue">{roleName(record.active_role_id)}</Tag>
       ),
     },
     {
       title: '状态',
       dataIndex: 'active',
+      width: 80,
       render: (_, record) => (
         <Tag color={record.active ? 'green' : 'default'}>
           {record.active ? '启用' : '停用'}
@@ -98,27 +102,30 @@ const Admins: React.FC = () => {
     {
       title: '更新时间',
       dataIndex: 'updated_at',
+      width: 170,
       render: (_, record) => formatDate(record.updated_at),
     },
     {
       title: '操作',
       valueType: 'option',
+      width: 120,
       render: (_, record) => {
         const actions: React.ReactNode[] = [];
+        const isSelf = record.id === currentAdminID;
         if (access.canAdminUpdate) {
           actions.push(
             <a
               key="edit"
               onClick={() => {
                 setEditing(record);
-                setModalOpen(true);
+                setDrawerOpen(true);
               }}
             >
               编辑
             </a>,
           );
         }
-        if (access.canAdminDelete) {
+        if (access.canAdminDelete && !isSelf) {
           actions.push(
             <Popconfirm
               key="delete"
@@ -154,32 +161,32 @@ const Admins: React.FC = () => {
         request={async (params) =>
           toTableResult(await listAdmins(pageParams(params)))
         }
-        toolBarRender={() => {
-          const buttons: React.ReactNode[] = [];
-          if (access.canAdminCreate) {
-            buttons.push(
-              <Button
-                key="create"
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  setEditing(undefined);
-                  setModalOpen(true);
-                }}
-              >
-                新增管理员
-              </Button>,
-            );
-          }
-          return buttons;
-        }}
+        toolBarRender={() =>
+          access.canAdminCreate
+            ? [
+                <Button
+                  key="create"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    setEditing(undefined);
+                    setDrawerOpen(true);
+                  }}
+                >
+                  新增管理员
+                </Button>,
+              ]
+            : []
+        }
       />
-      <ModalForm<AdminFormValues>
+      <DrawerForm<AdminFormValues>
         key={editing?.id ?? 'create'}
         title={editing ? '编辑管理员' : '新增管理员'}
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        modalProps={{ destroyOnHidden: true }}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        width="min(720px, 100%)"
+        grid
+        drawerProps={{ destroyOnHidden: true }}
         initialValues={
           editing
             ? {
@@ -220,53 +227,71 @@ const Admins: React.FC = () => {
           return true;
         }}
       >
-        <ProFormText
-          name="username"
-          label="用户名"
-          disabled={Boolean(editing)}
-          fieldProps={{ maxLength: 64 }}
-          rules={editing ? [] : [{ required: true, message: '请输入用户名' }]}
-        />
-        <ProFormText
-          name="display_name"
-          label="显示名"
-          fieldProps={{ maxLength: 80 }}
-          rules={[{ required: true, message: '请输入显示名' }]}
-        />
-        <ProFormText
-          name="email"
-          label="邮箱"
-          fieldProps={{ maxLength: 160 }}
-          rules={[{ type: 'email', message: '请输入有效邮箱' }]}
-        />
-        <ProFormText.Password
-          name="password"
-          label={editing ? '新密码' : '密码'}
-          fieldProps={{ maxLength: 72 }}
-          rules={[{ required: !editing, min: 8, message: '密码至少 8 位' }]}
-        />
-        <ProFormSelect
-          name="role_ids"
-          label="角色"
-          mode="multiple"
-          options={roleOptions}
-          rules={[{ required: true, message: '请选择角色' }]}
-        />
-        <ProFormDependency name={['role_ids']}>
-          {({ role_ids }) => (
-            <ProFormSelect
-              name="active_role_id"
-              label="当前角色"
-              options={roleOptions.filter((option) =>
-                role_ids?.includes(option.value),
-              )}
-              disabled={(role_ids ?? []).length === 0}
-              rules={[{ required: true, message: '请选择当前角色' }]}
-            />
-          )}
-        </ProFormDependency>
-        <ProFormSwitch name="active" label="启用" />
-      </ModalForm>
+        <ProForm.Group title="基本信息" grid>
+          <ProFormText
+            name="username"
+            label="用户名"
+            colProps={{ xs: 24, md: 12 }}
+            disabled={Boolean(editing)}
+            fieldProps={{ maxLength: 64 }}
+            rules={editing ? [] : [{ required: true, message: '请输入用户名' }]}
+          />
+          <ProFormText
+            name="display_name"
+            label="显示名"
+            colProps={{ xs: 24, md: 12 }}
+            fieldProps={{ maxLength: 80 }}
+            rules={[{ required: true, message: '请输入显示名' }]}
+          />
+          <ProFormText
+            name="email"
+            label="邮箱"
+            colProps={{ xs: 24, md: 12 }}
+            fieldProps={{ maxLength: 160 }}
+            rules={[{ type: 'email', message: '请输入有效邮箱' }]}
+          />
+          <ProFormText.Password
+            name="password"
+            label={editing ? '新密码' : '密码'}
+            colProps={{ xs: 24, md: 12 }}
+            fieldProps={{ maxLength: 72 }}
+            rules={[{ required: !editing, min: 8, message: '密码至少 8 位' }]}
+          />
+          <ProFormSwitch
+            name="active"
+            label="启用"
+            colProps={{ xs: 24, md: 12 }}
+            // 编辑自己时禁止停用：当前会话需要可用的账号所有者。
+            disabled={editing?.id === currentAdminID}
+          />
+        </ProForm.Group>
+        <ProForm.Group title="角色分配" grid>
+          <ProFormSelect
+            name="role_ids"
+            label="角色"
+            colProps={{ span: 24 }}
+            mode="multiple"
+            options={roleOptions}
+            fieldProps={{ maxTagCount: 'responsive' }}
+            rules={[{ required: true, message: '请选择角色' }]}
+          />
+          <ProFormDependency name={['role_ids']}>
+            {({ role_ids }) => (
+              <ProFormSelect
+                name="active_role_id"
+                label="登录后生效的当前角色"
+                colProps={{ span: 24 }}
+                tooltip="管理员可持有多个角色，登录会话使用当前角色进行授权"
+                options={roleOptions.filter((option) =>
+                  role_ids?.includes(option.value),
+                )}
+                disabled={(role_ids ?? []).length === 0}
+                rules={[{ required: true, message: '请选择当前角色' }]}
+              />
+            )}
+          </ProFormDependency>
+        </ProForm.Group>
+      </DrawerForm>
     </PageContainer>
   );
 };

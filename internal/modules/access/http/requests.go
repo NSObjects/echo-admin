@@ -60,7 +60,3 @@ type menuButtonRequest struct {
 	Name        string `json:"name" validate:"required,max=80"`
 	Description string `json:"description" validate:"omitempty,max=120"`
 }
-
-type roleIDsRequest struct {
-	RoleIDs []int64 `json:"role_ids" validate:"omitempty,dive,gt=0"`
-}

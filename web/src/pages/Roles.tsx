@@ -5,11 +5,9 @@ import {
   ProCard,
   ProDescriptions,
   ProForm,
-  ProFormDependency,
   ProFormSelect,
   ProFormSwitch,
   ProFormText,
-  ProFormTreeSelect,
   ProList,
   StatisticCard,
 } from '@ant-design/pro-components';
@@ -18,7 +16,6 @@ import {
   Avatar,
   Button,
   Checkbox,
-  Collapse,
   Empty,
   Form,
   Input,
@@ -51,10 +48,11 @@ import {
   updateRole,
 } from '@/services/admin';
 import {
-  toAntdTreeData,
-  toMenuTreeNodes,
-  withMenuAncestors,
-} from '@/utils/menu-tree';
+  deriveAPIIDs,
+  deriveButtonIDs,
+  deriveMenuIDs,
+} from '@/utils/grant-derivation';
+import { toAntdTreeData } from '@/utils/menu-tree';
 
 type RoleFormValues = {
   parent_id: number;
@@ -97,40 +95,6 @@ const methodColor: Record<string, string> = {
   DELETE: 'red',
 };
 
-// 把权限定义按 resource 归组，避免几十个 token 平铺在一个下拉里。
-const permissionOptionGroups = (permissions: PermissionDefinition[]) => {
-  const groups = new Map<string, { label: string; value: string }[]>();
-  for (const permission of permissions) {
-    const options = groups.get(permission.resource) ?? [];
-    options.push({
-      label: `${permission.name} (${permission.token})`,
-      value: permission.token,
-    });
-    groups.set(permission.resource, options);
-  }
-  return [...groups.entries()].map(([resource, options]) => ({
-    label: resource,
-    options,
-  }));
-};
-
-// 受管 API 按业务分组归组，下拉里能按模块快速定位。
-const apiOptionGroups = (apis: APIResource[]) => {
-  const groups = new Map<string, { label: string; value: number }[]>();
-  for (const api of apis) {
-    const options = groups.get(api.group) ?? [];
-    options.push({
-      label: `${api.description ?? api.path} (${api.method} ${api.path})`,
-      value: api.id,
-    });
-    groups.set(api.group, options);
-  }
-  return [...groups.entries()].map(([group, options]) => ({
-    label: group,
-    options,
-  }));
-};
-
 // 详情页签里分组 Tag 列表。
 const groupTags = (
   groups: Map<string, { label: string; sub?: string }[]>,
@@ -153,54 +117,39 @@ const groupTags = (
     </Space>
   ));
 
-// 授权分区折叠面板标题：名称 + 已选数量，收起时也能看清授权规模。
-const grantPanelLabel = (
-  title: string,
-  count: string,
-  required = false,
-): React.ReactNode => (
-  <Space size={8}>
-    {required ? <span style={{ color: '#ff4d4f' }}>*</span> : null}
-    <span>{title}</span>
-    <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
-      {count}
-    </Typography.Text>
-  </Space>
-);
-
-// 按钮权限字段：按菜单分组的卡片式勾选，替代几十个复选框平铺的墙。
-// 作为受控组件接入 antd Form（由 Form.Item 注入 value/onChange）。
-const ButtonGroupsField = ({
+// 功能权限字段：按资源分组的卡片式勾选，是角色授权的单一控制面。
+// 菜单可见性、按钮显示、API 放行均由此派生，卡片底部实时预览派生结果。
+const PermissionGroupsField = ({
   value = [],
   onChange,
+  permissions,
+  apis,
   menus,
-  menuIds,
 }: {
-  value?: number[];
-  onChange?: (value: number[]) => void;
+  value?: string[];
+  onChange?: (value: string[]) => void;
+  permissions: PermissionDefinition[];
+  apis: APIResource[];
   menus: Menu[];
-  menuIds: number[];
 }) => {
-  const selectedMenus = menus.filter(
-    (menu) => menu.buttons.length > 0 && menuIds.includes(menu.id),
-  );
-  if (selectedMenus.length === 0) {
-    return (
-      <Typography.Text type="secondary">
-        先在上方选择菜单，再勾选对应按钮。
-      </Typography.Text>
-    );
+  const groups = new Map<string, PermissionDefinition[]>();
+  for (const permission of permissions) {
+    const list = groups.get(permission.resource) ?? [];
+    list.push(permission);
+    groups.set(permission.resource, list);
   }
+  const menuCount = deriveMenuIDs(value, menus).length;
+  const apiCount = deriveAPIIDs(value, apis).length;
   return (
     <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-      {selectedMenus.map((menu) => {
-        const menuButtonIds = menu.buttons.map((button) => button.id);
-        const checkedCount = menuButtonIds.filter((id) =>
-          value.includes(id),
+      {[...groups.entries()].map(([resource, items]) => {
+        const tokens = items.map((item) => item.token);
+        const checkedCount = tokens.filter((token) =>
+          value.includes(token),
         ).length;
         return (
           <div
-            key={menu.id}
+            key={resource}
             style={{
               border: '1px solid #f0f0f0',
               borderRadius: 8,
@@ -216,17 +165,21 @@ const ButtonGroupsField = ({
               }}
             >
               <Typography.Text strong style={{ fontSize: 13 }}>
-                {menu.name}
+                {resource}
+                <Typography.Text
+                  type="secondary"
+                  style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
+                >
+                  {items.length} 项
+                </Typography.Text>
               </Typography.Text>
               <Checkbox
-                checked={checkedCount === menuButtonIds.length}
-                indeterminate={
-                  checkedCount > 0 && checkedCount < menuButtonIds.length
-                }
+                checked={checkedCount === tokens.length}
+                indeterminate={checkedCount > 0 && checkedCount < tokens.length}
                 onChange={(event) => {
                   const next = event.target.checked
-                    ? [...new Set([...value, ...menuButtonIds])]
-                    : value.filter((id) => !menuButtonIds.includes(id));
+                    ? [...new Set([...value, ...tokens])]
+                    : value.filter((token) => !tokens.includes(token));
                   onChange?.(next);
                 }}
               >
@@ -235,21 +188,22 @@ const ButtonGroupsField = ({
             </div>
             <Checkbox.Group
               style={{ display: 'flex', flexWrap: 'wrap', columnGap: 16 }}
-              value={value.filter((id) => menuButtonIds.includes(id))}
-              options={menu.buttons.map((button) => ({
-                label: button.description || button.name,
-                value: button.id,
+              value={value.filter((token) => tokens.includes(token))}
+              options={items.map((item) => ({
+                label: item.name,
+                value: item.token,
               }))}
               onChange={(next) => {
-                const others = value.filter(
-                  (id) => !menuButtonIds.includes(id),
-                );
+                const others = value.filter((token) => !tokens.includes(token));
                 onChange?.([...others, ...next]);
               }}
             />
           </div>
         );
       })}
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        当前选择将自动授权 {menuCount} 个菜单、{apiCount} 条受管 API。
+      </Typography.Text>
     </Space>
   );
 };
@@ -269,10 +223,6 @@ const Roles: React.FC = () => {
   const [editing, setEditing] = useState<Role>();
   const [copying, setCopying] = useState<Role>();
   const [memberTarget, setMemberTarget] = useState<MemberTarget>();
-  // 授权分区折叠面板的展开状态；默认全部收起，保证抽屉在矮窗口内不用滚动。
-  const [openPanels, setOpenPanels] = useState<string[]>([]);
-  // 表单值的镜像，用于在折叠面板标题上实时显示已选数量。
-  const [liveValues, setLiveValues] = useState<Partial<RoleFormValues>>({});
 
   const loadRoles = async (preferID?: number) => {
     setRolesLoading(true);
@@ -387,7 +337,6 @@ const Roles: React.FC = () => {
   }, [selectedRole, apiByID]);
 
   const menuTreeData = useMemo(() => toAntdTreeData(menus), [menus]);
-  const menuSelectNodes = toMenuTreeNodes(menus);
   const parentRoleOptions = [
     { label: '顶级角色', value: 0 },
     ...roles
@@ -435,16 +384,6 @@ const Roles: React.FC = () => {
           data_role_ids: [],
           default_path: '/dashboard',
         };
-
-  // 抽屉每次打开时同步计数镜像并收起全部分区。
-  useEffect(() => {
-    if (drawerOpen) {
-      setLiveValues(formInitialValues);
-      setOpenPanels([]);
-    }
-    // biome 忽略：formInitialValues 随 editing/copying 变化，即为目标依赖。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawerOpen, editing, copying]);
 
   const headerActions = selectedRole ? (
     <Space>
@@ -689,7 +628,7 @@ const Roles: React.FC = () => {
                       defaultExpandAll
                     />
                     <Typography.Text type="secondary">
-                      勾选状态为该角色可见的菜单，点击「编辑」调整授权。
+                      菜单授权由功能权限自动派生，点击「编辑」调整功能权限。
                     </Typography.Text>
                   </Space>
                 ) : (
@@ -802,37 +741,20 @@ const Roles: React.FC = () => {
         grid
         drawerProps={{ destroyOnHidden: true }}
         initialValues={formInitialValues}
-        onValuesChange={(_, values) => setLiveValues(values)}
-        onFinishFailed={(errorInfo) => {
-          // 报错字段可能位于收起的折叠面板里，展开对应分区并滚动到错误处。
-          const fields = errorInfo.errorFields.map((field) => field.name?.[0]);
-          if (fields.includes('permissions')) {
-            setOpenPanels((previous) =>
-              previous.includes('func') ? previous : [...previous, 'func'],
-            );
-          }
-          if (fields.includes('menu_ids') || fields.includes('button_ids')) {
-            setOpenPanels((previous) =>
-              previous.includes('menus') ? previous : [...previous, 'menus'],
-            );
-          }
-          setTimeout(() => {
-            document
-              .querySelector('.ant-drawer-body .ant-form-item-explain-error')
-              ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          }, 300);
-        }}
         onFinish={async (values) => {
-          // 菜单授权做祖先闭包：只勾子菜单时自动带上父级，保证侧边栏完整。
-          const menu_ids = withMenuAncestors(values.menu_ids ?? [], menus);
+          // 功能权限是单一控制面：菜单/按钮/API 授权全部由 token 派生，
+          // 勾一处即同时决定菜单可见、按钮显示和后端路由放行。
+          const menu_ids = deriveMenuIDs(values.permissions, menus);
+          const api_ids = deriveAPIIDs(values.permissions, apis);
+          const button_ids = deriveButtonIDs(menu_ids, menus);
           if (editing) {
             await updateRole(editing.id, {
               parent_id: values.parent_id,
               name: values.name,
               permissions: values.permissions,
               menu_ids,
-              api_ids: values.api_ids,
-              button_ids: values.button_ids,
+              api_ids,
+              button_ids,
               data_role_ids: values.data_role_ids,
               default_path: values.default_path,
               active: values.active,
@@ -856,8 +778,8 @@ const Roles: React.FC = () => {
               name: values.name,
               permissions: values.permissions,
               menu_ids,
-              api_ids: values.api_ids,
-              button_ids: values.button_ids,
+              api_ids,
+              button_ids,
               data_role_ids: values.data_role_ids,
               default_path: values.default_path,
               active: values.active,
@@ -907,128 +829,35 @@ const Roles: React.FC = () => {
         </ProForm.Group>
         {copying ? (
           <Typography.Text type="secondary">
-            权限、菜单、API、按钮和数据角色授权将从源角色「{copying.name}
+            功能权限、菜单、API、按钮和数据角色授权将从源角色「{copying.name}
             」复制。
           </Typography.Text>
         ) : (
-          <Collapse
-            ghost
-            activeKey={openPanels}
-            onChange={(keys) =>
-              setOpenPanels(Array.isArray(keys) ? keys : [keys])
-            }
-            items={[
-              {
-                key: 'menus',
-                label: grantPanelLabel(
-                  '菜单与按钮权限',
-                  `${(liveValues.menu_ids ?? []).length} 菜单 · ${(liveValues.button_ids ?? []).length} 按钮`,
-                ),
-                children: (
-                  <>
-                    <ProFormTreeSelect
-                      name="menu_ids"
-                      label="可见菜单"
-                      colProps={{ span: 24 }}
-                      fieldProps={{
-                        treeData: menuSelectNodes,
-                        treeCheckable: true,
-                        treeDefaultExpandAll: true,
-                        showSearch: true,
-                        treeNodeFilterProp: 'title',
-                        maxTagCount: 'responsive',
-                      }}
-                    />
-                    <ProFormDependency name={['menu_ids']}>
-                      {({ menu_ids }) => {
-                        // 按钮权限只展示已选菜单下的按钮，避免全量按钮无处下手。
-                        const hasButtons = menus.some(
-                          (menu) =>
-                            menu.buttons.length > 0 &&
-                            menu_ids?.includes(menu.id),
-                        );
-                        if (!hasButtons) {
-                          return null;
-                        }
-                        return (
-                          <Form.Item name="button_ids" label="按钮权限">
-                            <ButtonGroupsField
-                              menus={menus}
-                              menuIds={menu_ids ?? []}
-                            />
-                          </Form.Item>
-                        );
-                      }}
-                    </ProFormDependency>
-                  </>
-                ),
-              },
-              {
-                key: 'func',
-                label: grantPanelLabel(
-                  '功能权限',
-                  `${(liveValues.permissions ?? []).length} 项`,
-                  true,
-                ),
-                children: (
-                  <ProFormSelect
-                    name="permissions"
-                    label="权限"
-                    mode="multiple"
-                    colProps={{ span: 24 }}
-                    options={permissionOptionGroups(permissions)}
-                    fieldProps={{
-                      showSearch: true,
-                      optionFilterProp: 'label',
-                      maxTagCount: 'responsive',
-                    }}
-                    rules={[{ required: true, message: '请选择权限' }]}
-                  />
-                ),
-              },
-              {
-                key: 'api',
-                label: grantPanelLabel(
-                  'API 权限',
-                  `${(liveValues.api_ids ?? []).length} 条`,
-                ),
-                children: (
-                  <ProFormSelect
-                    name="api_ids"
-                    label="受管路由"
-                    mode="multiple"
-                    colProps={{ span: 24 }}
-                    options={apiOptionGroups(apis)}
-                    fieldProps={{
-                      showSearch: true,
-                      optionFilterProp: 'label',
-                      maxTagCount: 'responsive',
-                    }}
-                  />
-                ),
-              },
-              {
-                key: 'data',
-                label: grantPanelLabel(
-                  '数据权限',
-                  `${(liveValues.data_role_ids ?? []).length} 个角色`,
-                ),
-                children: (
-                  <ProFormSelect
-                    name="data_role_ids"
-                    label="数据角色"
-                    mode="multiple"
-                    colProps={{ span: 24 }}
-                    options={roles.map((role) => ({
-                      label: role.name,
-                      value: role.id,
-                    }))}
-                    fieldProps={{ maxTagCount: 'responsive' }}
-                  />
-                ),
-              },
-            ]}
-          />
+          <>
+            <Form.Item
+              name="permissions"
+              label="功能权限"
+              required
+              tooltip="勾选后自动派生菜单可见性、按钮显示和 API 放行，无需分别配置"
+            >
+              <PermissionGroupsField
+                permissions={permissions}
+                apis={apis}
+                menus={menus}
+              />
+            </Form.Item>
+            <ProFormSelect
+              name="data_role_ids"
+              label="数据权限（可见的管理员数据范围）"
+              mode="multiple"
+              colProps={{ span: 24 }}
+              options={roles.map((role) => ({
+                label: role.name,
+                value: role.id,
+              }))}
+              fieldProps={{ maxTagCount: 'responsive' }}
+            />
+          </>
         )}
       </DrawerForm>
       <DrawerForm<{ admin_ids: number[] }>

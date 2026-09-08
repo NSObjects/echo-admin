@@ -20,7 +20,6 @@ import (
 	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
 	authusecase "github.com/NSObjects/echo-admin/internal/modules/auth/usecase"
 	identitydomain "github.com/NSObjects/echo-admin/internal/modules/identity/domain"
-	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
@@ -142,7 +141,7 @@ func TestUpdateProfileReturnsCurrentUser(t *testing.T) {
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
 	store := newAuthStore(t)
-	uc := authusecase.New(store, store, store, store, store, store, &loginRecorder{})
+	uc := authusecase.New(store, store, store, store, &loginRecorder{})
 	handler := authhttp.New(uc, false)
 
 	e := echo.New()
@@ -216,16 +215,32 @@ func (s *authStore) Update(_ context.Context, admin identitydomain.Admin) (ident
 	return admin, nil
 }
 
-func (s *authStore) FindRoleByID(context.Context, int64) (accessdomain.Role, error) {
-	return s.role, nil
-}
-
-func (s *authStore) ListMenus(context.Context) ([]accessdomain.Menu, error) {
-	return []accessdomain.Menu{s.menu}, nil
-}
-
-func (s *authStore) FindAPIByRoute(context.Context, string, string) (accessdomain.API, error) {
-	return accessdomain.API{}, apperr.NewNotFound("api")
+func (s *authStore) CurrentAuthorization(context.Context, authusecase.AuthorizationSubject) (authusecase.AuthorizationView, error) {
+	role := authusecase.Role{
+		ID:          s.role.ID,
+		Code:        s.role.Code,
+		Name:        s.role.Name,
+		Permissions: s.role.Permissions,
+		MenuIDs:     s.role.MenuIDs,
+		APIIDs:      s.role.APIIDs,
+		DefaultPath: s.role.DefaultPath,
+		Active:      s.role.Active,
+	}
+	menu := authusecase.Menu{
+		ID:         s.menu.ID,
+		Name:       s.menu.Name,
+		Path:       s.menu.Path,
+		Component:  s.menu.Component,
+		Permission: s.menu.Permission,
+		Active:     s.menu.Active,
+	}
+	return authusecase.AuthorizationView{
+		ActiveRole:  role,
+		Roles:       []authusecase.Role{role},
+		Permissions: role.Permissions,
+		Menus:       []authusecase.Menu{menu},
+		DefaultPath: role.DefaultPath,
+	}, nil
 }
 
 func (s *authStore) CreateLoginSession(_ context.Context, session authdomain.LoginSession) (authdomain.LoginSession, error) {

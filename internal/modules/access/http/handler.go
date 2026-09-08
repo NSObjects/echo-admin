@@ -2,7 +2,6 @@
 package accesshttp
 
 import (
-	"context"
 	"strconv"
 
 	"github.com/labstack/echo/v5"
@@ -38,15 +37,11 @@ func Register(group *echo.Group, handler *Handler) {
 	group.GET("/apis", handler.ListAPIs)
 	group.GET("/apis/groups", handler.ListAPIGroups)
 	group.GET("/apis/:id", handler.ReadAPI)
-	group.GET("/apis/:id/roles", handler.ReadAPIRoles)
-	group.PUT("/apis/:id/roles", handler.SetAPIRoles)
 	group.GET("/menus", handler.ListMenus)
 	group.POST("/menus", handler.CreateMenu)
 	group.GET("/menus/:id", handler.ReadMenu)
 	group.PATCH("/menus/:id", handler.UpdateMenu)
 	group.DELETE("/menus/:id", handler.DeleteMenu)
-	group.GET("/menus/:id/roles", handler.ReadMenuRoles)
-	group.PUT("/menus/:id/roles", handler.SetMenuRoles)
 }
 
 // ListPermissions returns grant metadata.
@@ -211,29 +206,6 @@ func (h *Handler) ReadAPI(c *echo.Context) error {
 	return httpresp.OK(c, api)
 }
 
-// ReadAPIRoles returns role ids assigned to an API route.
-func (h *Handler) ReadAPIRoles(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	id, err := httpreq.PathID(c, "id", "api")
-	if err != nil {
-		return err
-	}
-	roleIDs, err := h.usecase.APIRoleIDs(c.Request().Context(), id)
-	if err != nil {
-		return err
-	}
-	return httpresp.OK(c, roleIDsResponse{RoleIDs: roleIDs})
-}
-
-// SetAPIRoles replaces role assignments for an API route.
-func (h *Handler) SetAPIRoles(c *echo.Context) error {
-	return h.setRoleAssignments(c, "api", "updated api roles", func(ctx context.Context, id int64, roleIDs []int64) ([]int64, error) {
-		return h.usecase.SetAPIRoles(ctx, usecase.APIRolesInput{APIID: id, RoleIDs: roleIDs})
-	})
-}
-
 // ListMenus returns menus.
 func (h *Handler) ListMenus(c *echo.Context) error {
 	if err := h.ready(); err != nil {
@@ -317,56 +289,6 @@ func (h *Handler) DeleteMenu(c *echo.Context) error {
 		return opErr
 	}
 	return httpresp.OK(c, deletedResponse{ID: id})
-}
-
-// ReadMenuRoles returns role ids assigned to a menu.
-func (h *Handler) ReadMenuRoles(c *echo.Context) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	id, err := httpreq.PathID(c, "id", "menu")
-	if err != nil {
-		return err
-	}
-	roleIDs, err := h.usecase.MenuRoleIDs(c.Request().Context(), id)
-	if err != nil {
-		return err
-	}
-	return httpresp.OK(c, roleIDsResponse{RoleIDs: roleIDs})
-}
-
-// SetMenuRoles replaces role assignments for a menu.
-func (h *Handler) SetMenuRoles(c *echo.Context) error {
-	return h.setRoleAssignments(c, "menu", "updated menu roles", func(ctx context.Context, id int64, roleIDs []int64) ([]int64, error) {
-		return h.usecase.SetMenuRoles(ctx, usecase.MenuRolesInput{MenuID: id, RoleIDs: roleIDs})
-	})
-}
-
-func (h *Handler) setRoleAssignments(
-	c *echo.Context,
-	resource string,
-	message string,
-	assign func(context.Context, int64, []int64) ([]int64, error),
-) error {
-	if err := h.ready(); err != nil {
-		return err
-	}
-	id, err := httpreq.PathID(c, "id", resource)
-	if err != nil {
-		return err
-	}
-	var req roleIDsRequest
-	if bindErr := httpreq.BindAndValidate(c, &req); bindErr != nil {
-		return bindErr
-	}
-	roleIDs, opErr := assign(c.Request().Context(), id, req.RoleIDs)
-	if err := h.audit.Record(c, "set_roles", resource, strconv.FormatInt(id, 10), message, opErr); err != nil {
-		return err
-	}
-	if opErr != nil {
-		return opErr
-	}
-	return httpresp.OK(c, roleIDsResponse{RoleIDs: roleIDs})
 }
 
 func (h *Handler) ready() error {
@@ -501,8 +423,4 @@ type deletedResponse struct {
 
 type apiGroupsResponse struct {
 	Groups []string `json:"groups"`
-}
-
-type roleIDsResponse struct {
-	RoleIDs []int64 `json:"role_ids"`
 }
