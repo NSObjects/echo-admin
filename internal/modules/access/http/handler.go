@@ -12,8 +12,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
-const defaultPageSize = 20
-
 // Handler adapts role and menu HTTP requests to the access usecase.
 type Handler struct {
 	usecase *usecase.Usecase
@@ -249,7 +247,7 @@ func (h *Handler) DeleteMenu(c *echo.Context) error {
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
-	page, pageSize, err := httpreq.Pagination(c, defaultPageSize)
+	page, pageSize, err := httpreq.Pagination(c)
 	if err != nil {
 		return usecase.ListInput{}, err
 	}

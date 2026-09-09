@@ -155,14 +155,11 @@ func normalizeListInput(input ListInput) (ListFilter, error) {
 	if input.CategoryID < 0 {
 		return ListFilter{}, apperr.NewBadRequest("invalid category id")
 	}
-	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.Options{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	})
+	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.DefaultOptions)
 	if err != nil {
 		return ListFilter{}, apperr.NewBadRequest("invalid pagination")
 	}
-	return ListFilter{Offset: window.Offset, Limit: window.Limit, Page: window.Page, PageSize: window.PageSize, CategoryID: input.CategoryID}, nil
+	return ListFilter{Window: window, CategoryID: input.CategoryID}, nil
 }
 
 func mapFiles(files []domain.FileObject) []FileObject {

@@ -48,7 +48,10 @@ func (u *Usecase) ListRoles(ctx context.Context, input ListInput) (RoleListOutpu
 		return RoleListOutput{}, err
 	}
 	roles := scope.visibleRoles()
-	pageRoles := paginateRoles(roles, filter)
+	pageRoles, err := paginateRoles(roles, filter.Window)
+	if err != nil {
+		return RoleListOutput{}, err
+	}
 	return RoleListOutput{
 		Items:    mapRoles(pageRoles),
 		Page:     filter.Page,
@@ -559,7 +562,10 @@ func (u *Usecase) ListAPIs(ctx context.Context, input ListInput) (APIListOutput,
 	if err != nil {
 		return APIListOutput{}, err
 	}
-	pageAPIs := paginateAPIs(apis, filter)
+	pageAPIs, err := paginateAPIs(apis, filter.Window)
+	if err != nil {
+		return APIListOutput{}, err
+	}
 	return APIListOutput{
 		Items:    mapAPIs(pageAPIs),
 		Page:     filter.Page,
@@ -688,36 +694,33 @@ func (u *Usecase) roleScope(ctx context.Context) (roleScope, error) {
 }
 
 func normalizeListInput(input ListInput) (ListFilter, error) {
-	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.Options{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	})
+	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.DefaultOptions)
 	if err != nil {
 		return ListFilter{}, apperr.NewBadRequest("invalid pagination")
 	}
-	return ListFilter{Offset: window.Offset, Limit: window.Limit, Page: window.Page, PageSize: window.PageSize}, nil
+	return ListFilter{Window: window}, nil
 }
 
-func paginateRoles(roles []domain.Role, filter ListFilter) []domain.Role {
-	if filter.Offset >= len(roles) {
-		return []domain.Role{}
+func paginateRoles(roles []domain.Role, window pagination.Window) ([]domain.Role, error) {
+	start, end, ok, err := pagination.Bounds(len(roles), window.Offset, window.Limit)
+	if err != nil {
+		return nil, err
 	}
-	end := filter.Offset + filter.Limit
-	if end > len(roles) {
-		end = len(roles)
+	if !ok {
+		return []domain.Role{}, nil
 	}
-	return roles[filter.Offset:end]
+	return roles[start:end], nil
 }
 
-func paginateAPIs(apis []domain.API, filter ListFilter) []domain.API {
-	if filter.Offset >= len(apis) {
-		return []domain.API{}
+func paginateAPIs(apis []domain.API, window pagination.Window) ([]domain.API, error) {
+	start, end, ok, err := pagination.Bounds(len(apis), window.Offset, window.Limit)
+	if err != nil {
+		return nil, err
 	}
-	end := filter.Offset + filter.Limit
-	if end > len(apis) {
-		end = len(apis)
+	if !ok {
+		return []domain.API{}, nil
 	}
-	return apis[filter.Offset:end]
+	return apis[start:end], nil
 }
 
 func mapRoles(roles []domain.Role) []Role {

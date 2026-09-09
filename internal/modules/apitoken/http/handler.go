@@ -12,8 +12,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
-const defaultPageSize = 20
-
 // Handler adapts API token HTTP requests to the token usecase.
 type Handler struct {
 	usecase *usecase.Usecase
@@ -43,11 +41,7 @@ func (h *Handler) ListTokens(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	page, err := httpresp.NewPageMeta(output.Page, output.PageSize, output.Total)
-	if err != nil {
-		return err
-	}
-	return httpresp.List(c, output.Items, page)
+	return httpresp.Paginated(c, output.Items, output.Page, output.PageSize, output.Total)
 }
 
 // CreateToken creates an API token and returns the raw secret once.
@@ -103,7 +97,7 @@ func (h *Handler) DeleteToken(c *echo.Context) error {
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
-	page, pageSize, err := httpreq.Pagination(c, defaultPageSize)
+	page, pageSize, err := httpreq.Pagination(c)
 	if err != nil {
 		return usecase.ListInput{}, err
 	}

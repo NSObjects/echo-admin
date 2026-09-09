@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	defaultPageSize = 20
-	maxUploadBytes  = 10 << 20
+	maxUploadBytes = 10 << 20
 )
 
 // Handler adapts file HTTP requests to the file usecase.
@@ -241,7 +240,7 @@ type singleFileFS struct{ file fs.File }
 func (f singleFileFS) Open(name string) (fs.File, error) { return f.file, nil }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
-	page, pageSize, err := httpreq.Pagination(c, defaultPageSize)
+	page, pageSize, err := httpreq.Pagination(c)
 	if err != nil {
 		return usecase.ListInput{}, err
 	}

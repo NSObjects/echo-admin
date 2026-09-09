@@ -263,14 +263,11 @@ func (u *Usecase) ready() error {
 }
 
 func normalizeListInput(input ListInput) (ListFilter, error) {
-	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.Options{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	})
+	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.DefaultOptions)
 	if err != nil {
 		return ListFilter{}, apperr.NewBadRequest("invalid pagination")
 	}
-	return ListFilter{Offset: window.Offset, Limit: window.Limit, Page: window.Page, PageSize: window.PageSize}, nil
+	return ListFilter{Window: window}, nil
 }
 
 func normalizeLogID(id int64) error {

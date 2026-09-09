@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/domain"
+	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 const (
-	defaultPageSize = 20
-	maxPageSize     = 100
-	maxTokenDays    = 365
+	maxTokenDays = 365
 )
 
 // Store persists API tokens and supports hashed-secret lookup.
@@ -128,12 +127,9 @@ type ListInput struct {
 
 // ListFilter is the validated store-facing pagination window.
 type ListFilter struct {
-	Offset   int
-	Limit    int
-	Page     int
-	PageSize int
-	AdminID  int64
-	Active   *bool
+	pagination.Window
+	AdminID int64
+	Active  *bool
 }
 
 // TokenListOutput is a paginated API token result.

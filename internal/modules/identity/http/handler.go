@@ -12,8 +12,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
-const defaultPageSize = 20
-
 // Handler adapts administrator HTTP requests to the identity usecase.
 type Handler struct {
 	usecase *usecase.Usecase
@@ -145,7 +143,7 @@ func (h *Handler) SetRoleAdmins(c *echo.Context) error {
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
-	page, pageSize, err := httpreq.Pagination(c, defaultPageSize)
+	page, pageSize, err := httpreq.Pagination(c)
 	if err != nil {
 		return usecase.ListInput{}, err
 	}

@@ -17,8 +17,6 @@ import (
 )
 
 const (
-	defaultPageSize         = 20
-	maxPageSize             = 100
 	seedSiteNameConfigKey   = "site_name"
 	dictionaryCodeProbeName = "dictionary"
 	maxVersionCodeLength    = 80
@@ -779,21 +777,15 @@ func normalizePositiveIDs(ids []int64, emptyMessage, invalidMessage string) ([]i
 }
 
 type paramListFilter struct {
-	Page     int
-	PageSize int
-	Offset   int
-	Limit    int
+	pagination.Window
 }
 
 func normalizeParamListInput(input ParamListInput) (paramListFilter, error) {
-	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.Options{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	})
+	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.DefaultOptions)
 	if err != nil {
 		return paramListFilter{}, apperr.NewBadRequest("invalid pagination")
 	}
-	return paramListFilter{Page: window.Page, PageSize: window.PageSize, Offset: window.Offset, Limit: window.Limit}, nil
+	return paramListFilter{Window: window}, nil
 }
 
 func filterParams(params []domain.SystemParam, name, key string) []domain.SystemParam {

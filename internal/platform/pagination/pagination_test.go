@@ -1,32 +1,33 @@
 package pagination
 
 import (
-	"errors"
 	"math"
 	"testing"
+
+	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 )
 
 func TestNormalizeAppliesDefaults(t *testing.T) {
-	got, err := Normalize(0, 0, Options{DefaultPageSize: 20, MaxPageSize: 100})
+	got, err := Normalize(0, 0, DefaultOptions)
 	if err != nil {
 		t.Fatalf("Normalize() error = %v", err)
 	}
-	if got.Page != 1 || got.PageSize != 20 || got.Offset != 0 || got.Limit != 20 {
+	if got.Page != 1 || got.PageSize != DefaultPageSize || got.Offset != 0 || got.Limit != DefaultPageSize {
 		t.Fatalf("Normalize() = %#v, want first page with default size", got)
 	}
 }
 
 func TestNormalizeRejectsOverflowingOffset(t *testing.T) {
-	_, err := Normalize(math.MaxInt, 100, Options{DefaultPageSize: 20, MaxPageSize: 100})
-	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("Normalize() error = %v, want ErrInvalid", err)
+	_, err := Normalize(math.MaxInt, MaxPageSize, DefaultOptions)
+	if want := apperr.NewBadRequest("invalid pagination"); err.Error() != want.Error() {
+		t.Fatalf("Normalize() error = %v, want bad request invalid pagination", err)
 	}
 }
 
 func TestNormalizeRejectsInvalidPolicy(t *testing.T) {
-	_, err := Normalize(1, 0, Options{DefaultPageSize: 0, MaxPageSize: 100})
-	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("Normalize() error = %v, want ErrInvalid", err)
+	_, err := Normalize(1, 0, Options{DefaultPageSize: 0, MaxPageSize: MaxPageSize})
+	if want := apperr.NewBadRequest("invalid pagination"); err.Error() != want.Error() {
+		t.Fatalf("Normalize() error = %v, want bad request invalid pagination", err)
 	}
 }
 
@@ -42,7 +43,7 @@ func TestBoundsClampsOverflowingLimit(t *testing.T) {
 
 func TestBoundsRejectsInvalidInput(t *testing.T) {
 	_, _, _, err := Bounds(5, -1, 10)
-	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("Bounds() error = %v, want ErrInvalid", err)
+	if want := apperr.NewBadRequest("invalid pagination"); err.Error() != want.Error() {
+		t.Fatalf("Bounds() error = %v, want bad request invalid pagination", err)
 	}
 }

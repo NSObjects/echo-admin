@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/modules/fileasset/domain"
+	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 const (
-	defaultPageSize = 20
-	maxPageSize     = 100
 
 	// defaultMaxUploadBytes bounds one uploaded file's byte size.
 	defaultMaxUploadBytes = 10 << 20
@@ -114,10 +113,7 @@ type ListInput struct {
 
 // ListFilter is the validated store-facing pagination window.
 type ListFilter struct {
-	Offset     int
-	Limit      int
-	Page       int
-	PageSize   int
+	pagination.Window
 	CategoryID int64
 }
 

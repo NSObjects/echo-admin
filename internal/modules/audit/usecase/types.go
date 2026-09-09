@@ -6,11 +6,7 @@ import (
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/modules/audit/domain"
-)
-
-const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 // Store persists operation and login logs.
@@ -92,10 +88,7 @@ type ListInput struct {
 
 // ListFilter is the validated store-facing pagination window.
 type ListFilter struct {
-	Offset   int
-	Limit    int
-	Page     int
-	PageSize int
+	pagination.Window
 }
 
 // OperationListOutput is a paginated operation log result.

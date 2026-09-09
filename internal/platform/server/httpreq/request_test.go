@@ -40,7 +40,7 @@ func TestPaginationRejectsInvalidPage(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	_, _, err := Pagination(c, 20)
+	_, _, err := Pagination(c)
 	if err == nil {
 		t.Fatal("Pagination() error = nil, want invalid page error")
 	}

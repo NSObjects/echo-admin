@@ -111,13 +111,8 @@ func TestOKResponseIncludesStandardEnvelope(t *testing.T) {
 
 func TestListResponseIncludesPaginationMetadata(t *testing.T) {
 	c, rec := GetContext()
-	meta, err := NewPageMeta(2, 10, 25)
-	if err != nil {
-		t.Fatalf("NewPageMeta() error = %v", err)
-	}
-
-	if err := List(c, []string{"a", "b"}, meta); err != nil {
-		t.Fatalf("List() error = %v", err)
+	if err := list(c, []string{"a", "b"}, pageMeta(2, 10, 25)); err != nil {
+		t.Fatalf("list() error = %v", err)
 	}
 
 	var got map[string]any
@@ -139,20 +134,6 @@ func TestListResponseIncludesPaginationMetadata(t *testing.T) {
 	}
 	if page["has_next"] != true {
 		t.Fatalf("page.has_next = %v, want true", page["has_next"])
-	}
-}
-
-func TestNewPageMetaRejectsInvalidPage(t *testing.T) {
-	_, err := NewPageMeta(0, 10, 25)
-	if err == nil {
-		t.Fatal("NewPageMeta() error = nil, want invalid pagination error")
-	}
-	appErr, ok := apperr.Parse(err)
-	if !ok {
-		t.Fatal("NewPageMeta() did not return application error")
-	}
-	if appErr.Code() != apperr.ErrBadRequest {
-		t.Fatalf("Code = %d, want %d", appErr.Code(), apperr.ErrBadRequest)
 	}
 }
 
@@ -279,14 +260,6 @@ func TestPaginatedRendersListEnvelope(t *testing.T) {
 	}
 	if page["has_next"] != false {
 		t.Fatalf("page.has_next = %v, want false", page["has_next"])
-	}
-}
-
-func TestPaginatedRejectsInvalidPagination(t *testing.T) {
-	c, _ := GetContext()
-
-	if err := Paginated(c, nil, 0, 20, 1); err == nil {
-		t.Fatal("Paginated() error = nil, want invalid pagination error")
 	}
 }
 

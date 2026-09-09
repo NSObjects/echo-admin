@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 // BindAndValidate binds a JSON request body and runs the server validator.
@@ -26,13 +27,14 @@ func PathID(c *echo.Context, name, label string) (int64, error) {
 	return id, nil
 }
 
-// Pagination parses standard page and page_size query parameters.
-func Pagination(c *echo.Context, defaultPageSize int) (int, int, error) {
+// Pagination parses standard page and page_size query parameters, applying
+// the platform default page size when page_size is omitted.
+func Pagination(c *echo.Context) (int, int, error) {
 	page, err := QueryInt(c, "page", 1)
 	if err != nil {
 		return 0, 0, err
 	}
-	pageSize, err := QueryInt(c, "page_size", defaultPageSize)
+	pageSize, err := QueryInt(c, "page_size", pagination.DefaultPageSize)
 	if err != nil {
 		return 0, 0, err
 	}

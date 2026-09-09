@@ -34,7 +34,10 @@ func (u *Usecase) List(ctx context.Context, input ListInput) (ListOutput, error)
 		return ListOutput{}, err
 	}
 	scoped := filterAdminsByRoles(admins, visibleRoleIDs)
-	pageAdmins := paginateAdmins(scoped, filter)
+	pageAdmins, err := paginateAdmins(scoped, filter.Window)
+	if err != nil {
+		return ListOutput{}, err
+	}
 	return ListOutput{
 		Items:    mapAdmins(pageAdmins),
 		Page:     filter.Page,
@@ -357,25 +360,22 @@ func hashPassword(password string) ([]byte, error) {
 }
 
 func normalizeListInput(input ListInput) (ListFilter, error) {
-	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.Options{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	})
+	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.DefaultOptions)
 	if err != nil {
 		return ListFilter{}, apperr.NewBadRequest("invalid pagination")
 	}
-	return ListFilter{Offset: window.Offset, Limit: window.Limit, Page: window.Page, PageSize: window.PageSize}, nil
+	return ListFilter{Window: window}, nil
 }
 
-func paginateAdmins(admins []domain.Admin, filter ListFilter) []domain.Admin {
-	if filter.Offset >= len(admins) {
-		return []domain.Admin{}
+func paginateAdmins(admins []domain.Admin, window pagination.Window) ([]domain.Admin, error) {
+	start, end, ok, err := pagination.Bounds(len(admins), window.Offset, window.Limit)
+	if err != nil {
+		return nil, err
 	}
-	end := filter.Offset + filter.Limit
-	if end > len(admins) {
-		end = len(admins)
+	if !ok {
+		return []domain.Admin{}, nil
 	}
-	return admins[filter.Offset:end]
+	return admins[start:end], nil
 }
 
 func filterAdminsByRoles(admins []domain.Admin, allowed map[int64]struct{}) []domain.Admin {

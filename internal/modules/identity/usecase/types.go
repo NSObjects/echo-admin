@@ -6,11 +6,7 @@ import (
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/modules/identity/domain"
-)
-
-const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 // Store persists administrators for the identity usecase.
@@ -84,10 +80,7 @@ type ListInput struct {
 
 // ListFilter is the validated store-facing pagination window.
 type ListFilter struct {
-	Offset   int
-	Limit    int
-	Page     int
-	PageSize int
+	pagination.Window
 }
 
 // ListOutput is a paginated administrator result.

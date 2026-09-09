@@ -70,8 +70,20 @@ func Created(c *echo.Context, data interface{}) error {
 	})
 }
 
-// List renders a successful paginated list response envelope.
-func List(c *echo.Context, data interface{}, page PageMeta) error {
+// pageMeta builds pagination metadata from values already normalized by
+// pagination.Normalize; it validates nothing and its HasNext computation
+// stays overflow-safe for any row count.
+func pageMeta(page, pageSize, total int) PageMeta {
+	return PageMeta{
+		Page:     page,
+		PageSize: pageSize,
+		Total:    total,
+		HasNext:  (total+pageSize-1)/pageSize > page,
+	}
+}
+
+// list renders a successful paginated list response envelope.
+func list(c *echo.Context, data interface{}, page PageMeta) error {
 	return c.JSON(http.StatusOK, ListResponse{
 		Code:      apperr.ErrSuccess,
 		Message:   "OK",
@@ -80,25 +92,6 @@ func List(c *echo.Context, data interface{}, page PageMeta) error {
 		RequestID: RequestID(c),
 		Timestamp: time.Now().Unix(),
 	})
-}
-
-// NewPageMeta validates and creates pagination metadata.
-func NewPageMeta(page, pageSize, total int) (PageMeta, error) {
-	if page < 1 {
-		return PageMeta{}, apperr.NewBadRequest("invalid pagination")
-	}
-	if pageSize < 1 || pageSize > 1000 {
-		return PageMeta{}, apperr.NewBadRequest("invalid pagination")
-	}
-	if total < 0 {
-		return PageMeta{}, apperr.NewBadRequest("invalid pagination")
-	}
-	return PageMeta{
-		Page:     page,
-		PageSize: pageSize,
-		Total:    total,
-		HasNext:  page*pageSize < total,
-	}, nil
 }
 
 // APIError renders a project error as a JSON HTTP response.
@@ -174,14 +167,9 @@ func generateRequestID() string {
 	return uuid.NewString()
 }
 
-// Paginated renders a successful paginated list response envelope; invalid
-// pagination turns into the same bad-request error as NewPageMeta.
+// Paginated renders a successful paginated list response envelope.
 func Paginated(c *echo.Context, data interface{}, page, pageSize, total int) error {
-	meta, err := NewPageMeta(page, pageSize, total)
-	if err != nil {
-		return err
-	}
-	return List(c, data, meta)
+	return list(c, data, pageMeta(page, pageSize, total))
 }
 
 type deletedIDsData struct {

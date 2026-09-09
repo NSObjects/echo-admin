@@ -320,14 +320,11 @@ func containsID(ids []int64, want int64) bool {
 }
 
 func normalizeListInput(input ListInput) (ListFilter, error) {
-	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.Options{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	})
+	window, err := pagination.Normalize(input.Page, input.PageSize, pagination.DefaultOptions)
 	if err != nil {
 		return ListFilter{}, apperr.NewBadRequest("invalid pagination")
 	}
-	return ListFilter{Offset: window.Offset, Limit: window.Limit, Page: window.Page, PageSize: window.PageSize, AdminID: input.AdminID, Active: input.Active}, nil
+	return ListFilter{Window: window, AdminID: input.AdminID, Active: input.Active}, nil
 }
 
 func tokenExpired(token domain.APIToken, now time.Time) bool {

@@ -6,11 +6,7 @@ import (
 	"time"
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/domain"
-)
-
-const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	"github.com/NSObjects/echo-admin/internal/platform/pagination"
 )
 
 // Store persists access roles, menus, and managed API routes.
@@ -181,10 +177,7 @@ type ListInput struct {
 
 // ListFilter is the validated store-facing pagination window.
 type ListFilter struct {
-	Offset   int
-	Limit    int
-	Page     int
-	PageSize int
+	pagination.Window
 }
 
 // RoleListOutput is a paginated role result.

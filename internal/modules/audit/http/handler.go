@@ -10,8 +10,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
 )
 
-const defaultPageSize = 20
-
 // Handler adapts audit HTTP requests to the audit usecase.
 type Handler struct {
 	usecase *usecase.Usecase
@@ -237,7 +235,7 @@ func deleteIDs(c *echo.Context) ([]int64, error) {
 }
 
 func listInput(c *echo.Context) (usecase.ListInput, error) {
-	page, pageSize, err := httpreq.Pagination(c, defaultPageSize)
+	page, pageSize, err := httpreq.Pagination(c)
 	if err != nil {
 		return usecase.ListInput{}, err
 	}
