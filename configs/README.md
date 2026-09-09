@@ -6,7 +6,9 @@
 cfg, err := configs.Load("configs/config.toml")
 ```
 
-配置文件支持 TOML、YAML、JSON，格式由文件后缀识别。无后缀时按 TOML 解析，未知后缀会在启动时失败。未知配置字段也会在启动时失败。环境变量只覆盖显式绑定的运行时项和 secret。
+配置文件支持 TOML、YAML、JSON，格式由文件后缀识别。无后缀时按 TOML 解析，未知后缀会在启动时失败。未知配置字段也会在启动时失败。`configs.Load` 是规范化与校验的唯一入口：返回的 Config 即最终结果，server、logging 和各 infrastructure 资源直接信任它，不再重复校验。
+
+环境变量可覆盖除 MySQL 拓扑外的全部配置项。覆盖键集由 `internal/platform/configs/config.go` 中 Config 各字段的 `mapstructure` tag 自动推导，没有需要手工登记的键表；新增配置字段即自动获得环境变量覆盖能力。MySQL 的 `host`、`port`、`database`、`username` 刻意保持仅限配置文件（见 `decode.go` 的 `envExcluded`），只有密码走环境变量。
 
 ## 当前配置项
 
@@ -77,7 +79,7 @@ HTTP middleware、MySQL、Redis、MongoDB、Jaeger tracing 和 admin upload dire
 
 ## 环境变量覆盖
 
-配置文件是主配置入口。数据库 host、port、database、username、连接池等非敏感拓扑配置应写在配置文件中；MySQL 密码可以用环境变量覆盖，便于接入 Docker Compose、Kubernetes Secret 或 CI/CD secret。首次管理员密码不在静态配置中维护，由浏览器 `/setup` 初始化页提交。
+配置文件是主配置入口。数据库 host、port、database、username、连接池等非敏感拓扑配置应写在配置文件中；MySQL 密码可以用环境变量覆盖，便于接入 Docker Compose、Kubernetes Secret 或 CI/CD secret。`env.example` 是面向运维的示例文档（混有 Docker Compose 的 `.env` 替换变量），不与推导键集一一对应；覆盖键的真理性来源是 Config 的 `mapstructure` tag。首次管理员密码不在静态配置中维护，由浏览器 `/setup` 初始化页提交。
 
 ```bash
 export ECHO_ADMIN_APP_NAME=echo-admin

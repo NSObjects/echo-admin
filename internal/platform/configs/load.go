@@ -8,7 +8,9 @@ import (
 )
 
 // Load reads a static application config file and applies supported environment
-// variable overrides.
+// variable overrides. It is the single owner of normalization and validation:
+// the returned Config is final for every downstream consumer, which must not
+// re-normalize or re-validate it.
 func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

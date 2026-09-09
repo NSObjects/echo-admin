@@ -16,17 +16,8 @@ const (
 	// DefaultAppName is returned by /api/info when config omits app.name.
 	DefaultAppName = "echo-admin"
 
-	// EnvPrefix is the environment variable prefix used for config overrides.
-	EnvPrefix = "ECHO_ADMIN"
-
-	// DefaultAppVersion is returned by /api/info when config omits app.version.
-	DefaultAppVersion = "dev"
-
 	// DefaultPort is the HTTP port used when config omits system.port.
 	DefaultPort = ":9322"
-
-	// DefaultUploadDir stores local back-office uploads for development.
-	DefaultUploadDir = "uploads"
 
 	// LogFormatConsole writes human-readable zerolog console output.
 	LogFormatConsole = "console"
@@ -39,31 +30,23 @@ const (
 
 	// LogOutputStderr writes logs to standard error.
 	LogOutputStderr = "stderr"
+)
 
-	// DefaultCapabilityTimeoutSeconds is the default health-check timeout for
-	// external resources.
-	DefaultCapabilityTimeoutSeconds = 3
+// envPrefix is the environment variable prefix used for config overrides.
+const envPrefix = "ECHO_ADMIN"
 
-	// DefaultMySQLMaxOpenConns is the default upper bound for the MySQL pool.
-	DefaultMySQLMaxOpenConns = 25
+const (
+	defaultAppVersion        = "dev"
+	defaultUploadDir         = "uploads"
+	defaultCapabilityTimeout = 3
 
-	// DefaultMySQLMaxIdleConns is the default idle connection count for MySQL.
-	DefaultMySQLMaxIdleConns = 5
+	defaultMySQLMaxOpenConns           = 25
+	defaultMySQLMaxIdleConns           = 5
+	defaultMySQLConnMaxLifetimeSeconds = 300
+	defaultMySQLPort                   = 3306
 
-	// DefaultMySQLConnMaxLifetimeSeconds controls how long MySQL connections can be reused.
-	DefaultMySQLConnMaxLifetimeSeconds = 300
-
-	// DefaultMySQLPort is the conventional TCP port used by MySQL.
-	DefaultMySQLPort = 3306
-
-	// DefaultRedisDB is the default logical Redis database.
-	DefaultRedisDB = 0
-
-	// DefaultTracingProtocol is the OTLP transport used by default.
-	DefaultTracingProtocol = "grpc"
-
-	// DefaultTracingShutdownTimeoutSeconds bounds provider flush during shutdown.
-	DefaultTracingShutdownTimeoutSeconds = 5
+	defaultTracingProtocol               = "grpc"
+	defaultTracingShutdownTimeoutSeconds = 5
 )
 
 // Config is the complete application configuration loaded at startup.

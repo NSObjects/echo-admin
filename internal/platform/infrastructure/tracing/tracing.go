@@ -28,17 +28,14 @@ type Runtime struct {
 	shutdownTimeout time.Duration
 }
 
-// Start creates the configured tracing runtime. Disabled tracing requires no exporter.
+// Start creates the configured tracing runtime. cfg must come from an
+// already-normalized configs.Load result; disabled tracing requires no exporter.
 func Start(ctx context.Context, cfg configs.TracingConfig, serviceName string) (*Runtime, error) {
 	if ctx == nil {
 		return nil, resources.NewCapabilityError(resources.CapabilityTracing, "start", errors.New("nil context"))
 	}
-	cfg = configs.Normalize(configs.Config{Tracing: cfg}).Tracing
 	if !cfg.Enabled {
 		return &Runtime{}, nil
-	}
-	if err := configs.Validate(configs.Config{Tracing: cfg}); err != nil {
-		return nil, resources.NewCapabilityError(resources.CapabilityTracing, "configure", err)
 	}
 	if serviceName == "" {
 		serviceName = configs.DefaultAppName

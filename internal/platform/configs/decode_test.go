@@ -203,23 +203,23 @@ func TestDecodeConfigWithEnvAppliesListOverrides(t *testing.T) {
 }
 
 func TestValidateRejectsEnabledCORSWithoutOrigins(t *testing.T) {
-	err := Validate(Config{
+	err := validate(normalize(Config{
 		HTTP: HTTPConfig{
 			CORS: CORSConfig{
 				Enabled: true,
 			},
 		},
-	})
+	}))
 	if err == nil {
-		t.Fatal("Validate() error = nil, want CORS config error")
+		t.Fatal("validate() error = nil, want CORS config error")
 	}
 	if !strings.Contains(err.Error(), "cors") {
-		t.Fatalf("Validate() error = %q, want cors identified", err)
+		t.Fatalf("validate() error = %q, want cors identified", err)
 	}
 }
 
 func TestValidateRejectsWildcardCORSOriginWithCredentials(t *testing.T) {
-	err := Validate(Config{
+	err := validate(normalize(Config{
 		HTTP: HTTPConfig{
 			CORS: CORSConfig{
 				Enabled:          true,
@@ -227,12 +227,12 @@ func TestValidateRejectsWildcardCORSOriginWithCredentials(t *testing.T) {
 				AllowCredentials: true,
 			},
 		},
-	})
+	}))
 	if err == nil {
-		t.Fatal("Validate() error = nil, want CORS wildcard credentials error")
+		t.Fatal("validate() error = nil, want CORS wildcard credentials error")
 	}
 	if !strings.Contains(err.Error(), "wildcard") {
-		t.Fatalf("Validate() error = %q, want wildcard identified", err)
+		t.Fatalf("validate() error = %q, want wildcard identified", err)
 	}
 }
 
@@ -271,8 +271,8 @@ level = 1
 	if cfg.System.Level != DebugLevel {
 		t.Fatalf("System.Level = %d, want %d", cfg.System.Level, DebugLevel)
 	}
-	if cfg.Admin.UploadDir != DefaultUploadDir {
-		t.Fatalf("Admin.UploadDir = %q, want %q", cfg.Admin.UploadDir, DefaultUploadDir)
+	if cfg.Admin.UploadDir != defaultUploadDir {
+		t.Fatalf("Admin.UploadDir = %q, want %q", cfg.Admin.UploadDir, defaultUploadDir)
 	}
 }
 
@@ -317,47 +317,47 @@ unexpected = true
 }
 
 func TestValidateRejectsInvalidSystemLevel(t *testing.T) {
-	err := Validate(Config{
+	err := validate(normalize(Config{
 		System: SystemConfig{
 			Level: 99,
 		},
-	})
+	}))
 	if err == nil {
-		t.Fatal("Validate() error = nil, want invalid level error")
+		t.Fatal("validate() error = nil, want invalid level error")
 	}
 }
 
 func TestValidateRejectsInvalidLogConfig(t *testing.T) {
-	err := Validate(Config{
+	err := validate(normalize(Config{
 		Log: LogConfig{
 			Format: "color",
 		},
-	})
+	}))
 	if err == nil {
-		t.Fatal("Validate() error = nil, want invalid log format error")
+		t.Fatal("validate() error = nil, want invalid log format error")
 	}
 
-	err = Validate(Config{
+	err = validate(normalize(Config{
 		Log: LogConfig{
 			Output: "file",
 		},
-	})
+	}))
 	if err == nil {
-		t.Fatal("Validate() error = nil, want invalid log output error")
+		t.Fatal("validate() error = nil, want invalid log output error")
 	}
 }
 
 func TestValidateRejectsEnabledMongoDBWithoutURI(t *testing.T) {
-	err := Validate(Config{
+	err := validate(normalize(Config{
 		MongoDB: MongoDBConfig{
 			Enabled: true,
 		},
-	})
+	}))
 	if err == nil {
-		t.Fatal("Validate() error = nil, want enabled MongoDB without URI error")
+		t.Fatal("validate() error = nil, want enabled MongoDB without URI error")
 	}
 	if !strings.Contains(err.Error(), "mongodb") {
-		t.Fatalf("Validate() error = %q, want MongoDB capability identified", err)
+		t.Fatalf("validate() error = %q, want MongoDB capability identified", err)
 	}
 }
 
@@ -398,19 +398,19 @@ func TestValidateRejectsEnabledCapabilitiesWithoutRequiredConnectionSettings(t *
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Validate(tt.cfg)
+			err := validate(normalize(tt.cfg))
 			if err == nil {
-				t.Fatal("Validate() error = nil, want missing required setting error")
+				t.Fatal("validate() error = nil, want missing required setting error")
 			}
 			if !strings.Contains(err.Error(), tt.capability) {
-				t.Fatalf("Validate() error = %q, want %s capability identified", err, tt.capability)
+				t.Fatalf("validate() error = %q, want %s capability identified", err, tt.capability)
 			}
 		})
 	}
 }
 
 func TestNormalizeAcceptsTextAsConsoleLogFormatAlias(t *testing.T) {
-	cfg := Normalize(Config{
+	cfg := normalize(Config{
 		Log: LogConfig{
 			Format: "text",
 		},

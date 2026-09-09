@@ -10,26 +10,19 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 )
 
-func TestFromAppConfigDerivesDefaultsFromSystemLevel(t *testing.T) {
+// Format and name defaults belong to configs normalization; FromAppConfig
+// only maps the system level to a zerolog level and passes fields through.
+func TestFromAppConfigDerivesLogLevel(t *testing.T) {
 	debugCfg := FromAppConfig(configs.Config{
 		System: configs.SystemConfig{Level: configs.DebugLevel},
 	})
 	if debugCfg.Level != zerolog.DebugLevel {
 		t.Fatalf("debug Level = %v, want %v", debugCfg.Level, zerolog.DebugLevel)
 	}
-	if debugCfg.Format != configs.LogFormatConsole {
-		t.Fatalf("debug Format = %q, want %q", debugCfg.Format, configs.LogFormatConsole)
-	}
 
 	onlineCfg := FromAppConfig(configs.Config{})
 	if onlineCfg.Level != zerolog.InfoLevel {
 		t.Fatalf("online Level = %v, want %v", onlineCfg.Level, zerolog.InfoLevel)
-	}
-	if onlineCfg.Format != configs.LogFormatJSON {
-		t.Fatalf("online Format = %q, want %q", onlineCfg.Format, configs.LogFormatJSON)
-	}
-	if onlineCfg.AppName != configs.DefaultAppName {
-		t.Fatalf("online AppName = %q, want %q", onlineCfg.AppName, configs.DefaultAppName)
 	}
 }
 

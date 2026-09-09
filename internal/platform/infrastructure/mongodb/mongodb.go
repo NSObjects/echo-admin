@@ -21,17 +21,14 @@ type Resource struct {
 	client  *mongo.Client
 }
 
-// Open creates the configured MongoDB resource. Disabled resources do not connect.
+// Open creates the configured MongoDB resource. cfg must come from an
+// already-normalized configs.Load result; disabled resources do not connect.
 func Open(ctx context.Context, cfg configs.MongoDBConfig) (*Resource, error) {
 	if ctx == nil {
 		return nil, resources.NewCapabilityError(resources.CapabilityMongoDB, "open", errors.New("nil context"))
 	}
-	cfg = configs.Normalize(configs.Config{MongoDB: cfg}).MongoDB
 	if !cfg.Enabled {
 		return &Resource{}, nil
-	}
-	if err := configs.Validate(configs.Config{MongoDB: cfg}); err != nil {
-		return nil, resources.NewCapabilityError(resources.CapabilityMongoDB, "configure", err)
 	}
 
 	client, err := mongo.Connect(clientOptions(cfg))

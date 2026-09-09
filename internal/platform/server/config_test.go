@@ -47,14 +47,6 @@ func TestFromAppConfigOnlineMode(t *testing.T) {
 	assert.True(t, result.HideBanner)
 }
 
-func TestFromAppConfigUsesDefaults(t *testing.T) {
-	result := FromAppConfig(configs.Config{})
-
-	assert.Equal(t, configs.DefaultPort, result.Port)
-	assertDefaultDurations(t, result)
-	assert.True(t, result.HideBanner)
-}
-
 func TestServerConfigFields(t *testing.T) {
 	config := &Config{
 		Port:            ":3000",

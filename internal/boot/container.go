@@ -40,15 +40,11 @@ func provideStartupContext(ctx context.Context) func(do.Injector) {
 	}
 }
 
+// provideConfig publishes the config loaded by Load. Load is the single
+// owner of normalization and validation; downstream consumers trust it.
 func provideConfig(cfg configs.Config) func(do.Injector) {
 	return func(i do.Injector) {
-		do.Provide(i, func(do.Injector) (configs.Config, error) {
-			normalized := configs.Normalize(cfg)
-			if err := configs.Validate(normalized); err != nil {
-				return configs.Config{}, fmt.Errorf("validate config: %w", err)
-			}
-			return normalized, nil
-		})
+		do.ProvideValue(i, cfg)
 	}
 }
 

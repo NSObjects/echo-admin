@@ -19,17 +19,14 @@ type Resource struct {
 	client  *goredis.Client
 }
 
-// Open creates the configured Redis resource. Disabled resources do not connect.
+// Open creates the configured Redis resource. cfg must come from an
+// already-normalized configs.Load result; disabled resources do not connect.
 func Open(ctx context.Context, cfg configs.RedisConfig) (*Resource, error) {
 	if ctx == nil {
 		return nil, resources.NewCapabilityError(resources.CapabilityRedis, "open", errors.New("nil context"))
 	}
-	cfg = configs.Normalize(configs.Config{Redis: cfg}).Redis
 	if !cfg.Enabled {
 		return &Resource{}, nil
-	}
-	if err := configs.Validate(configs.Config{Redis: cfg}); err != nil {
-		return nil, resources.NewCapabilityError(resources.CapabilityRedis, "configure", err)
 	}
 
 	client := goredis.NewClient(&goredis.Options{

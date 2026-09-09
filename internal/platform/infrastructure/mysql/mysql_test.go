@@ -64,7 +64,7 @@ func TestOpenDisabledMySQLDoesNotConnect(t *testing.T) {
 func TestBuildDSNUsesStructuredMySQLConfig(t *testing.T) {
 	dsn := buildDSN(configs.MySQLConfig{
 		Host:     "mysql",
-		Port:     configs.DefaultMySQLPort,
+		Port:     3306,
 		Database: "echo_admin",
 		Username: "echo_admin",
 		Password: "secret-password",

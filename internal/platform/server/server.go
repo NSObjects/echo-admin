@@ -158,13 +158,9 @@ func (s *Server) API() *echo.Group {
 	return s.api
 }
 
-// New creates an Echo-backed HTTP server.
+// New creates an Echo-backed HTTP server. cfg must come from configs.Load,
+// which owns normalization and validation; New trusts its input.
 func New(cfg configs.Config, opts ...Option) (*Server, error) {
-	cfg = configs.Normalize(cfg)
-	if err := configs.Validate(cfg); err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
-	}
-
 	e := echo.New()
 	s := &Server{
 		echo:      e,

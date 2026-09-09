@@ -334,18 +334,7 @@ func TestServerNew(t *testing.T) {
 	assert.NotNil(t, server.echo)
 	assert.NotNil(t, server.config)
 	assert.NotNil(t, server.api)
-	assert.Equal(t, configs.Normalize(cfg), server.appConfig)
-}
-
-func TestServerNewReturnsConfigError(t *testing.T) {
-	server, err := New(configs.Config{
-		System: configs.SystemConfig{
-			Level: 99,
-		},
-	})
-
-	assert.Nil(t, server)
-	assert.Error(t, err)
+	assert.Equal(t, cfg, server.appConfig)
 }
 
 func TestServerSystemRoutes(t *testing.T) {

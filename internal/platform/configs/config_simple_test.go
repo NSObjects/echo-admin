@@ -7,10 +7,10 @@ import (
 )
 
 func TestConfigDefaults(t *testing.T) {
-	cfg := Normalize(Config{})
+	cfg := normalize(Config{})
 
 	assert.Equal(t, DefaultAppName, cfg.App.Name)
-	assert.Equal(t, DefaultAppVersion, cfg.App.Version)
+	assert.Equal(t, defaultAppVersion, cfg.App.Version)
 	assert.Equal(t, DefaultPort, cfg.System.Port)
 	assert.Equal(t, OnlineLevel, cfg.System.Level)
 
@@ -20,34 +20,42 @@ func TestConfigDefaults(t *testing.T) {
 
 	assert.False(t, cfg.HTTP.SecureCookies)
 
-	assert.Equal(t, DefaultUploadDir, cfg.Admin.UploadDir)
-
+	assert.Equal(t, defaultUploadDir, cfg.Admin.UploadDir)
 	assert.False(t, cfg.MySQL.Enabled)
 	assert.Equal(t, "", cfg.MySQL.Host)
-	assert.Equal(t, DefaultMySQLPort, cfg.MySQL.Port)
+	assert.Equal(t, defaultMySQLPort, cfg.MySQL.Port)
 	assert.Equal(t, "", cfg.MySQL.Database)
 	assert.Equal(t, "", cfg.MySQL.Username)
 	assert.Equal(t, "", cfg.MySQL.Password)
-	assert.Equal(t, DefaultMySQLMaxOpenConns, cfg.MySQL.MaxOpenConns)
-	assert.Equal(t, DefaultMySQLMaxIdleConns, cfg.MySQL.MaxIdleConns)
-	assert.Equal(t, DefaultMySQLConnMaxLifetimeSeconds, cfg.MySQL.ConnMaxLifetimeSeconds)
-	assert.Equal(t, DefaultCapabilityTimeoutSeconds, cfg.MySQL.PingTimeoutSeconds)
+	assert.Equal(t, defaultMySQLMaxOpenConns, cfg.MySQL.MaxOpenConns)
+	assert.Equal(t, defaultMySQLMaxIdleConns, cfg.MySQL.MaxIdleConns)
+	assert.Equal(t, defaultMySQLConnMaxLifetimeSeconds, cfg.MySQL.ConnMaxLifetimeSeconds)
+	assert.Equal(t, defaultCapabilityTimeout, cfg.MySQL.PingTimeoutSeconds)
 
 	assert.False(t, cfg.Redis.Enabled)
 	assert.Equal(t, "", cfg.Redis.Address)
-	assert.Equal(t, DefaultRedisDB, cfg.Redis.DB)
-	assert.Equal(t, DefaultCapabilityTimeoutSeconds, cfg.Redis.PingTimeoutSeconds)
+	assert.Equal(t, 0, cfg.Redis.DB)
+	assert.Equal(t, defaultCapabilityTimeout, cfg.Redis.PingTimeoutSeconds)
 
 	assert.False(t, cfg.MongoDB.Enabled)
 	assert.Equal(t, "", cfg.MongoDB.URI)
-	assert.Equal(t, DefaultCapabilityTimeoutSeconds, cfg.MongoDB.ConnectTimeoutSeconds)
-	assert.Equal(t, DefaultCapabilityTimeoutSeconds, cfg.MongoDB.PingTimeoutSeconds)
+	assert.Equal(t, defaultCapabilityTimeout, cfg.MongoDB.ConnectTimeoutSeconds)
+	assert.Equal(t, defaultCapabilityTimeout, cfg.MongoDB.PingTimeoutSeconds)
 
 	assert.False(t, cfg.Tracing.Enabled)
 	assert.Equal(t, "", cfg.Tracing.Endpoint)
-	assert.Equal(t, DefaultTracingProtocol, cfg.Tracing.Protocol)
+	assert.Equal(t, defaultTracingProtocol, cfg.Tracing.Protocol)
 	assert.Equal(t, float64(0), cfg.Tracing.SampleRatio)
-	assert.Equal(t, DefaultTracingShutdownTimeoutSeconds, cfg.Tracing.ShutdownTimeoutSeconds)
+	assert.Equal(t, defaultTracingShutdownTimeoutSeconds, cfg.Tracing.ShutdownTimeoutSeconds)
+}
+
+// Debug mode defaults to console-format logs so local runs stay readable.
+func TestConfigDefaultsDebugModeUsesConsoleLogFormat(t *testing.T) {
+	cfg := normalize(Config{
+		System: SystemConfig{Level: DebugLevel},
+	})
+
+	assert.Equal(t, LogFormatConsole, cfg.Log.Format)
 }
 
 func TestAppConfig(t *testing.T) {
@@ -93,7 +101,7 @@ func TestCapabilityConfig(t *testing.T) {
 		MySQL: MySQLConfig{
 			Enabled:  true,
 			Host:     "localhost",
-			Port:     DefaultMySQLPort,
+			Port:     defaultMySQLPort,
 			Database: "app",
 			Username: "user",
 			Password: "pass",
@@ -117,7 +125,7 @@ func TestCapabilityConfig(t *testing.T) {
 }
 
 func TestValidateRejectsBlankAppIdentity(t *testing.T) {
-	err := Validate(Config{
+	err := validate(Config{
 		App: AppConfig{
 			Name:    " ",
 			Version: "dev",
@@ -126,7 +134,7 @@ func TestValidateRejectsBlankAppIdentity(t *testing.T) {
 
 	assert.Error(t, err)
 
-	err = Validate(Config{
+	err = validate(Config{
 		App: AppConfig{
 			Name:    "echo-admin",
 			Version: " ",

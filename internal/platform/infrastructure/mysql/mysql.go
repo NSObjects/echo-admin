@@ -28,17 +28,14 @@ type Resource struct {
 	db      *gorm.DB
 }
 
-// Open creates the configured MySQL resource. Disabled resources do not connect.
+// Open creates the configured MySQL resource. cfg must come from an
+// already-normalized configs.Load result; disabled resources do not connect.
 func Open(ctx context.Context, cfg configs.MySQLConfig) (*Resource, error) {
 	if ctx == nil {
 		return nil, resources.NewCapabilityError(resources.CapabilityMySQL, "open", errors.New("nil context"))
 	}
-	cfg = configs.Normalize(configs.Config{MySQL: cfg}).MySQL
 	if !cfg.Enabled {
 		return &Resource{}, nil
-	}
-	if err := configs.Validate(configs.Config{MySQL: cfg}); err != nil {
-		return nil, resources.NewCapabilityError(resources.CapabilityMySQL, "configure", err)
 	}
 
 	dsn := buildDSN(cfg)

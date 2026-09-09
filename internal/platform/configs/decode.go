@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 )
@@ -16,15 +18,88 @@ const (
 	configFormatYML  = "yml"
 )
 
+// envExcluded lists config keys that must stay file-only. MySQL topology
+// (host, port, database, username) belongs in the versioned config file;
+// only the password may come from the environment, so a deployment keeps
+// topology in the file while credentials never enter it.
+var envExcluded = map[string]bool{
+	"mysql::host":     true,
+	"mysql::port":     true,
+	"mysql::database": true,
+	"mysql::username": true,
+}
+
+// envListTarget points one []string config field at its environment variable.
+type envListTarget struct {
+	name      string
+	fieldPath []int
+}
+
+// envOverridePlan describes how environment overrides reach Config fields.
+// bindKeys go through viper BindEnv so Unmarshal sees them; []string fields
+// are overridden directly from the environment because viper's comma
+// splitting neither trims whitespace nor drops empty entries.
+type envOverridePlan struct {
+	bindKeys    []string
+	listTargets []envListTarget
+}
+
+// envOverrides derives the plan from Config struct tags once per process.
+// The mapstructure tags are the single source of truth: adding a config
+// field makes it environment-overridable without any extra registration.
+var envOverrides = sync.OnceValue(deriveEnvOverrides)
+
+func deriveEnvOverrides() envOverridePlan {
+	var plan envOverridePlan
+	walkEnvFields(reflect.TypeOf(Config{}), nil, nil, &plan)
+	return plan
+}
+
+func walkEnvFields(t reflect.Type, keyPrefix []string, fieldPath []int, plan *envOverridePlan) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("mapstructure")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		keys := append(append([]string{}, keyPrefix...), tag)
+		path := append(append([]int{}, fieldPath...), i)
+		key := strings.Join(keys, "::")
+		switch {
+		case field.Type.Kind() == reflect.Struct:
+			walkEnvFields(field.Type, keys, path, plan)
+		case field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.String:
+			if !envExcluded[key] {
+				plan.listTargets = append(plan.listTargets, envListTarget{name: envVarName(key), fieldPath: path})
+			}
+		case !envExcluded[key]:
+			plan.bindKeys = append(plan.bindKeys, key)
+		}
+	}
+}
+
+// envVarName maps a config key such as "http::cors::allow_origins" to its
+// environment variable ECHO_ADMIN_HTTP_CORS_ALLOW_ORIGINS.
+func envVarName(key string) string {
+	name := strings.NewReplacer("::", "_", ".", "_").Replace(key)
+	return envPrefix + "_" + strings.ToUpper(name)
+}
+
 func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error) {
 	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
 	v.SetConfigType(configType(format))
+	plan := envOverrides()
 	if useEnv {
-		v.SetEnvPrefix(EnvPrefix)
-		v.AutomaticEnv()
+		// No viper AutomaticEnv here: it would let the environment override
+		// any key present in the config file, including the file-only MySQL
+		// topology keys. Only struct-tag-derived keys (minus envExcluded)
+		// are bound and therefore overridable.
+		v.SetEnvPrefix(envPrefix)
 		v.SetEnvKeyReplacer(strings.NewReplacer("::", "_", ".", "_"))
-		if err := bindConfigEnv(v); err != nil {
-			return Config{}, err
+		for _, key := range plan.bindKeys {
+			if err := v.BindEnv(key); err != nil {
+				return Config{}, err
+			}
 		}
 	}
 	if err := v.ReadConfig(bytes.NewBuffer(data)); err != nil {
@@ -35,17 +110,17 @@ func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error
 		return Config{}, err
 	}
 	if useEnv {
-		applyEnvListOverrides(&cfg)
+		applyEnvListOverrides(&cfg, plan.listTargets)
 	}
-	cfg = Normalize(cfg)
-	if err := Validate(cfg); err != nil {
+	cfg = normalize(cfg)
+	if err := validate(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
 }
 
-// Normalize applies application config defaults.
-func Normalize(cfg Config) Config {
+// normalize applies application config defaults.
+func normalize(cfg Config) Config {
 	cfg = normalizeAppDefaults(cfg)
 	cfg = normalizeLogDefaults(cfg)
 	cfg = normalizeAdminDefaults(cfg)
@@ -58,7 +133,7 @@ func normalizeAppDefaults(cfg Config) Config {
 		cfg.App.Name = DefaultAppName
 	}
 	if cfg.App.Version == "" {
-		cfg.App.Version = DefaultAppVersion
+		cfg.App.Version = defaultAppVersion
 	}
 	if cfg.System.Port == "" {
 		cfg.System.Port = DefaultPort
@@ -89,7 +164,7 @@ func normalizeLogDefaults(cfg Config) Config {
 
 func normalizeAdminDefaults(cfg Config) Config {
 	if strings.TrimSpace(cfg.Admin.UploadDir) == "" {
-		cfg.Admin.UploadDir = DefaultUploadDir
+		cfg.Admin.UploadDir = defaultUploadDir
 	}
 	return cfg
 }
@@ -100,37 +175,37 @@ func normalizeResourceDefaults(cfg Config) Config {
 	cfg.MySQL.Username = strings.TrimSpace(cfg.MySQL.Username)
 	cfg.MySQL.Password = strings.TrimSpace(cfg.MySQL.Password)
 	if cfg.MySQL.Port == 0 {
-		cfg.MySQL.Port = DefaultMySQLPort
+		cfg.MySQL.Port = defaultMySQLPort
 	}
 	if cfg.MySQL.MaxOpenConns == 0 {
-		cfg.MySQL.MaxOpenConns = DefaultMySQLMaxOpenConns
+		cfg.MySQL.MaxOpenConns = defaultMySQLMaxOpenConns
 	}
 	if cfg.MySQL.MaxIdleConns == 0 {
-		cfg.MySQL.MaxIdleConns = DefaultMySQLMaxIdleConns
+		cfg.MySQL.MaxIdleConns = defaultMySQLMaxIdleConns
 	}
 	if cfg.MySQL.ConnMaxLifetimeSeconds == 0 {
-		cfg.MySQL.ConnMaxLifetimeSeconds = DefaultMySQLConnMaxLifetimeSeconds
+		cfg.MySQL.ConnMaxLifetimeSeconds = defaultMySQLConnMaxLifetimeSeconds
 	}
 	if cfg.MySQL.PingTimeoutSeconds == 0 {
-		cfg.MySQL.PingTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.MySQL.PingTimeoutSeconds = defaultCapabilityTimeout
 	}
 	if cfg.Redis.DialTimeoutSeconds == 0 {
-		cfg.Redis.DialTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.Redis.DialTimeoutSeconds = defaultCapabilityTimeout
 	}
 	if cfg.Redis.ReadTimeoutSeconds == 0 {
-		cfg.Redis.ReadTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.Redis.ReadTimeoutSeconds = defaultCapabilityTimeout
 	}
 	if cfg.Redis.WriteTimeoutSeconds == 0 {
-		cfg.Redis.WriteTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.Redis.WriteTimeoutSeconds = defaultCapabilityTimeout
 	}
 	if cfg.Redis.PingTimeoutSeconds == 0 {
-		cfg.Redis.PingTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.Redis.PingTimeoutSeconds = defaultCapabilityTimeout
 	}
 	if cfg.MongoDB.ConnectTimeoutSeconds == 0 {
-		cfg.MongoDB.ConnectTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.MongoDB.ConnectTimeoutSeconds = defaultCapabilityTimeout
 	}
 	if cfg.MongoDB.PingTimeoutSeconds == 0 {
-		cfg.MongoDB.PingTimeoutSeconds = DefaultCapabilityTimeoutSeconds
+		cfg.MongoDB.PingTimeoutSeconds = defaultCapabilityTimeout
 	}
 	return cfg
 }
@@ -138,19 +213,18 @@ func normalizeResourceDefaults(cfg Config) Config {
 func normalizeTracingDefaults(cfg Config) Config {
 	cfg.Tracing.Protocol = strings.ToLower(strings.TrimSpace(cfg.Tracing.Protocol))
 	if cfg.Tracing.Protocol == "" {
-		cfg.Tracing.Protocol = DefaultTracingProtocol
+		cfg.Tracing.Protocol = defaultTracingProtocol
 	}
 	if cfg.Tracing.ShutdownTimeoutSeconds == 0 {
-		cfg.Tracing.ShutdownTimeoutSeconds = DefaultTracingShutdownTimeoutSeconds
+		cfg.Tracing.ShutdownTimeoutSeconds = defaultTracingShutdownTimeoutSeconds
 	}
 	return cfg
 }
 
-// Validate checks cross-field configuration rules that must fail before the
-// HTTP runtime starts.
-func Validate(cfg Config) error {
-	cfg = Normalize(cfg)
-
+// validate checks cross-field configuration rules on an already-normalized
+// config. Callers must run normalize first; validating a raw partial Config
+// reports unrelated missing defaults instead of the intended rule.
+func validate(cfg Config) error {
 	if err := validateAppConfig(cfg.App); err != nil {
 		return err
 	}
@@ -166,27 +240,17 @@ func Validate(cfg Config) error {
 	return validateConfiguredResources(cfg)
 }
 
-func applyEnvListOverrides(cfg *Config) {
+func applyEnvListOverrides(cfg *Config, targets []envListTarget) {
 	if cfg == nil {
 		return
 	}
-	applyEnvList(envName("HTTP_CORS_ALLOW_ORIGINS"), &cfg.HTTP.CORS.AllowOrigins)
-	applyEnvList(envName("HTTP_CORS_ALLOW_METHODS"), &cfg.HTTP.CORS.AllowMethods)
-	applyEnvList(envName("HTTP_CORS_ALLOW_HEADERS"), &cfg.HTTP.CORS.AllowHeaders)
-	applyEnvList(envName("HTTP_CORS_EXPOSE_HEADERS"), &cfg.HTTP.CORS.ExposeHeaders)
-}
-
-func envName(name string) string {
-	return EnvPrefix + "_" + name
-}
-
-func applyEnvList(name string, target *[]string) {
-	raw, ok := os.LookupEnv(name)
-	if !ok {
-		return
+	for _, target := range targets {
+		raw, ok := os.LookupEnv(target.name)
+		if !ok {
+			continue
+		}
+		reflect.ValueOf(cfg).Elem().FieldByIndex(target.fieldPath).Set(reflect.ValueOf(splitEnvList(raw)))
 	}
-	values := splitEnvList(raw)
-	*target = values
 }
 
 func splitEnvList(raw string) []string {
@@ -374,90 +438,5 @@ func configType(format string) string {
 		return configFormatYAML
 	default:
 		return configFormatTOML
-	}
-}
-
-func bindConfigEnv(v *viper.Viper) error {
-	for _, key := range configEnvKeys() {
-		if err := v.BindEnv(key); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func configEnvKeys() []string {
-	keys := append([]string{}, coreEnvKeys()...)
-	keys = append(keys, httpEnvKeys()...)
-	keys = append(keys, adminEnvKeys()...)
-	keys = append(keys, resourceEnvKeys()...)
-	keys = append(keys, tracingEnvKeys()...)
-	return keys
-}
-
-func coreEnvKeys() []string {
-	return []string{
-		"app::name",
-		"app::version",
-		"system::port",
-		"system::level",
-		"log::format",
-		"log::output",
-		"log::caller",
-	}
-}
-
-func adminEnvKeys() []string {
-	return []string{
-		"admin::upload_dir",
-	}
-}
-
-func httpEnvKeys() []string {
-	return []string{
-		"http::recovery_disabled",
-		"http::request_context_disabled",
-		"http::request_log_disabled",
-		"http::gzip_disabled",
-		"http::secure_cookies",
-		"http::cors::enabled",
-		"http::cors::allow_origins",
-		"http::cors::allow_methods",
-		"http::cors::allow_headers",
-		"http::cors::allow_credentials",
-		"http::cors::expose_headers",
-		"http::cors::max_age_seconds",
-	}
-}
-
-func resourceEnvKeys() []string {
-	return []string{
-		"mysql::password",
-		"redis::enabled",
-		"redis::address",
-		"redis::username",
-		"redis::password",
-		"redis::db",
-		"redis::dial_timeout_seconds",
-		"redis::read_timeout_seconds",
-		"redis::write_timeout_seconds",
-		"redis::ping_timeout_seconds",
-		"mongodb::enabled",
-		"mongodb::uri",
-		"mongodb::database",
-		"mongodb::connect_timeout_seconds",
-		"mongodb::ping_timeout_seconds",
-	}
-}
-
-func tracingEnvKeys() []string {
-	return []string{
-		"tracing::enabled",
-		"tracing::endpoint",
-		"tracing::protocol",
-		"tracing::insecure",
-		"tracing::service_name",
-		"tracing::sample_ratio",
-		"tracing::shutdown_timeout_seconds",
 	}
 }

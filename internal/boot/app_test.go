@@ -317,39 +317,6 @@ func TestNewAppReturnsModuleRouteResolutionError(t *testing.T) {
 	}
 }
 
-func TestNewAppReturnsConfigError(t *testing.T) {
-	app, err := NewApp(configs.Config{
-		System: configs.SystemConfig{
-			Level: 99,
-		},
-	})
-
-	if err == nil {
-		t.Fatal("NewApp() error = nil, want config error")
-	}
-	if app != nil {
-		t.Fatalf("NewApp() app = %#v, want nil", app)
-	}
-}
-
-func TestNewAppReturnsEnabledCapabilityConfigError(t *testing.T) {
-	app, err := NewApp(configs.Config{
-		MongoDB: configs.MongoDBConfig{
-			Enabled: true,
-		},
-	})
-
-	if err == nil {
-		t.Fatal("NewApp() error = nil, want MongoDB config error")
-	}
-	if app != nil {
-		t.Fatalf("NewApp() app = %#v, want nil", app)
-	}
-	if !strings.Contains(err.Error(), resources.CapabilityMongoDB) {
-		t.Fatalf("NewApp() error = %q, want MongoDB capability", err)
-	}
-}
-
 func TestAppCloseUsesInjectorShutdownWhenAvailable(t *testing.T) {
 	app := &App{
 		injector: do.New(func(i do.Injector) {

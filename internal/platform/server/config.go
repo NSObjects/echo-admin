@@ -42,10 +42,9 @@ func DefaultConfig() *Config {
 	}
 }
 
-// FromAppConfig derives HTTP server settings from application config.
+// FromAppConfig derives HTTP server settings from application config. cfg
+// must already be normalized by configs.Load.
 func FromAppConfig(cfg configs.Config) *Config {
-	cfg = configs.Normalize(cfg)
-
 	return &Config{
 		Port:            cfg.System.Port,
 		ReadTimeout:     defaultReadTimeout,
