@@ -14,6 +14,7 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
 	"github.com/NSObjects/echo-admin/internal/platform/server"
+	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 type loggingReady struct{}
@@ -154,7 +155,7 @@ func provideServer(i do.Injector) {
 }
 
 func appendOptionalAPIKeyVerifier(i do.Injector, options []server.Option) ([]server.Option, error) {
-	verifier, err := do.InvokeAs[server.APIKeyVerifier](i)
+	verifier, err := do.InvokeAs[middlewares.APIKeyVerifier](i)
 	if err == nil {
 		return append(options, server.WithAPIKeyVerifier(verifier)), nil
 	}
@@ -165,7 +166,7 @@ func appendOptionalAPIKeyVerifier(i do.Injector, options []server.Option) ([]ser
 }
 
 func appendOptionalSystemErrorRecorder(i do.Injector, options []server.Option) ([]server.Option, error) {
-	recorder, err := do.InvokeAs[server.SystemErrorRecorder](i)
+	recorder, err := do.InvokeAs[middlewares.SystemErrorRecorder](i)
 	if err == nil {
 		return append(options, server.WithSystemErrorRecorder(recorder)), nil
 	}
@@ -176,7 +177,7 @@ func appendOptionalSystemErrorRecorder(i do.Injector, options []server.Option) (
 }
 
 func appendOptionalLoginSessionAuthenticator(i do.Injector, options []server.Option) ([]server.Option, error) {
-	authenticator, err := do.InvokeAs[server.LoginSessionAuthenticator](i)
+	authenticator, err := do.InvokeAs[middlewares.LoginSessionAuthenticator](i)
 	if err == nil {
 		return append(options, server.WithLoginSessionAuthenticator(authenticator)), nil
 	}
@@ -187,7 +188,7 @@ func appendOptionalLoginSessionAuthenticator(i do.Injector, options []server.Opt
 }
 
 func appendOptionalInstallationStateReader(i do.Injector, options []server.Option) ([]server.Option, error) {
-	reader, err := do.InvokeAs[server.InstallationStateReader](i)
+	reader, err := do.InvokeAs[middlewares.InstallationStateReader](i)
 	if err == nil {
 		return append(options, server.WithInstallationStateReader(reader)), nil
 	}

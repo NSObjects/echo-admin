@@ -6,7 +6,6 @@ import (
 
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
-	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
 
 func TestOpenResourcesKeepsDisabledClientsUnavailableForBusinessWiring(t *testing.T) {
@@ -44,7 +43,7 @@ func TestOpenResourcesKeepsDisabledClientsUnavailableForBusinessWiring(t *testin
 	assertCapabilityState(t, statuses, resources.CapabilityTracing, false, false)
 }
 
-func assertCapabilityState(t *testing.T, statuses []server.CapabilityStatus, name string, wantEnabled, wantAvailable bool) {
+func assertCapabilityState(t *testing.T, statuses []resources.CapabilityStatus, name string, wantEnabled, wantAvailable bool) {
 	t.Helper()
 	for _, status := range statuses {
 		if status.Name != name {

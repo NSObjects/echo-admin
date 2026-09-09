@@ -17,6 +17,8 @@ import (
 
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
+	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 func TestServerEcho(t *testing.T) {
@@ -30,8 +32,8 @@ func TestServerEcho(t *testing.T) {
 func TestServerConfigureEcho(t *testing.T) {
 	e := echo.New()
 	server := &Server{
-		echo:   e,
-		config: DefaultConfig(),
+		echo: e,
+		port: ":9322",
 	}
 
 	server.configureEcho()
@@ -41,18 +43,9 @@ func TestServerConfigureEcho(t *testing.T) {
 }
 
 func TestServerStartConfigAppliesRuntimeSettings(t *testing.T) {
-	server := &Server{
-		config: &Config{
-			Port:            ":9323",
-			ReadTimeout:     2 * time.Second,
-			WriteTimeout:    3 * time.Second,
-			IdleTimeout:     4 * time.Second,
-			ShutdownTimeout: 5 * time.Second,
-			HideBanner:      true,
-		},
-	}
+	server := &Server{port: ":9323", shutdownPeriod: defaultShutdownPeriod}
 
-	startConfig := server.startConfig(server.config.Port)
+	startConfig := server.startConfig(server.port)
 	httpServer := &http.Server{}
 	if err := startConfig.BeforeServeFunc(httpServer); err != nil {
 		t.Fatalf("BeforeServeFunc() error = %v", err)
@@ -61,15 +54,15 @@ func TestServerStartConfigAppliesRuntimeSettings(t *testing.T) {
 	assert.Equal(t, ":9323", startConfig.Address)
 	assert.True(t, startConfig.HideBanner)
 	assert.True(t, startConfig.HidePort)
-	assert.Equal(t, 5*time.Second, startConfig.GracefulTimeout)
-	assert.Equal(t, 2*time.Second, httpServer.ReadTimeout)
-	assert.Equal(t, 3*time.Second, httpServer.WriteTimeout)
-	assert.Equal(t, 4*time.Second, httpServer.IdleTimeout)
+	assert.Equal(t, defaultShutdownPeriod, startConfig.GracefulTimeout)
+	assert.Equal(t, defaultReadTimeout, httpServer.ReadTimeout)
+	assert.Equal(t, defaultWriteTimeout, httpServer.WriteTimeout)
+	assert.Equal(t, defaultIdleTimeout, httpServer.IdleTimeout)
 }
 
 func TestServerMiddlewareConfig(t *testing.T) {
 	server := &Server{
-		config:    DefaultConfig(),
+		port:      ":9322",
 		appConfig: configs.Config{},
 	}
 
@@ -88,7 +81,7 @@ func TestServerMiddlewareConfig(t *testing.T) {
 
 func TestServerMiddlewareConfigEnablesLoginSessionFromAuthenticator(t *testing.T) {
 	server := &Server{
-		config:      DefaultConfig(),
+		port:        ":9322",
 		appConfig:   configs.Config{},
 		sessionAuth: fakeLoginSessionAuthenticator{},
 	}
@@ -104,7 +97,7 @@ func TestServerMiddlewareConfigEnablesLoginSessionFromAuthenticator(t *testing.T
 
 func TestServerMiddlewareConfigUsesHTTPConfig(t *testing.T) {
 	server := &Server{
-		config: DefaultConfig(),
+		port: ":9322",
 		appConfig: configs.Config{
 			HTTP: configs.HTTPConfig{
 				RecoveryDisabled:       true,
@@ -142,9 +135,9 @@ func TestServerMiddlewareConfigUsesHTTPConfig(t *testing.T) {
 func TestServerRegisterSystemRoutes(t *testing.T) {
 	e := echo.New()
 	server := &Server{
-		echo:   e,
-		api:    e.Group(apiPrefix),
-		config: DefaultConfig(),
+		echo: e,
+		api:  e.Group(apiPrefix),
+		port: ":9322",
 	}
 
 	server.registerSystemRoutes()
@@ -176,13 +169,7 @@ func TestServerRegisterSystemRoutes(t *testing.T) {
 func TestServerRunReturnsStartupError(t *testing.T) {
 	server := &Server{
 		echo: echo.New(),
-		config: &Config{
-			Port:            "invalid-address",
-			ReadTimeout:     1 * time.Second,
-			WriteTimeout:    1 * time.Second,
-			IdleTimeout:     1 * time.Second,
-			ShutdownTimeout: 1 * time.Second,
-		},
+		port: "invalid-address",
 	}
 
 	err := server.Run(context.Background())
@@ -237,15 +224,9 @@ func newSlowShutdownServer(addr string, started chan<- struct{}, release <-chan 
 	})
 
 	return &Server{
-		echo: e,
-		config: &Config{
-			Port:            addr,
-			ReadTimeout:     time.Second,
-			WriteTimeout:    time.Second,
-			IdleTimeout:     time.Second,
-			ShutdownTimeout: 50 * time.Millisecond,
-			HideBanner:      true,
-		},
+		echo:           e,
+		port:           addr,
+		shutdownPeriod: 50 * time.Millisecond,
 	}
 }
 
@@ -332,7 +313,6 @@ func TestServerNew(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.echo)
-	assert.NotNil(t, server.config)
 	assert.NotNil(t, server.api)
 	assert.Equal(t, cfg, server.appConfig)
 }
@@ -340,9 +320,9 @@ func TestServerNew(t *testing.T) {
 func TestServerSystemRoutes(t *testing.T) {
 	e := echo.New()
 	server := &Server{
-		echo:   e,
-		api:    e.Group(apiPrefix),
-		config: DefaultConfig(),
+		echo: e,
+		api:  e.Group(apiPrefix),
+		port: ":9322",
 	}
 
 	server.registerSystemRoutes()
@@ -406,7 +386,7 @@ func TestServerUnsupportedMethodReturnsMethodNotAllowed(t *testing.T) {
 
 func TestServerReadinessReturnsUnavailableCapability(t *testing.T) {
 	server := mustNewServer(t, configs.Config{}, WithStatusReporter(fakeStatusReporter{
-		statuses: []CapabilityStatus{
+		statuses: []resources.CapabilityStatus{
 			{Name: "redis", Enabled: true, Available: false, State: "unavailable", Message: "dial refused"},
 		},
 		readyErr: errors.New("redis unavailable"),
@@ -436,7 +416,7 @@ func TestServerReadinessReturnsUnavailableCapability(t *testing.T) {
 
 func TestServerCapabilitiesReturnsStatusList(t *testing.T) {
 	server := mustNewServer(t, configs.Config{}, WithStatusReporter(fakeStatusReporter{
-		statuses: []CapabilityStatus{
+		statuses: []resources.CapabilityStatus{
 			{Name: "mysql", Enabled: true, Available: true, State: "available", Message: "ping ok"},
 			{Name: "mongodb", Enabled: false, Available: false, State: "disabled"},
 		},
@@ -449,7 +429,7 @@ func TestServerCapabilitiesReturnsStatusList(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var body struct {
-		Capabilities []CapabilityStatus `json:"capabilities"`
+		Capabilities []resources.CapabilityStatus `json:"capabilities"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode capabilities response: %v", err)
@@ -466,39 +446,22 @@ func TestServerCapabilitiesReturnsStatusList(t *testing.T) {
 }
 
 type fakeStatusReporter struct {
-	statuses []CapabilityStatus
+	statuses []resources.CapabilityStatus
 	readyErr error
 }
 
 type fakeLoginSessionAuthenticator struct{}
 
-func (fakeLoginSessionAuthenticator) AuthenticateLoginSession(context.Context, string) (LoginSessionIdentity, error) {
-	return LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}, nil
+func (fakeLoginSessionAuthenticator) AuthenticateLoginSession(context.Context, string) (middlewares.LoginSessionIdentity, error) {
+	return middlewares.LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}, nil
 }
 
-func (f fakeStatusReporter) Status(context.Context) []CapabilityStatus {
+func (f fakeStatusReporter) Status(context.Context) []resources.CapabilityStatus {
 	return f.statuses
 }
 
 func (f fakeStatusReporter) Ready(context.Context) error {
 	return f.readyErr
-}
-
-func TestServerConfig(t *testing.T) {
-	config := DefaultConfig()
-
-	assert.Equal(t, ":9322", config.Port)
-	assert.Equal(t, 30*time.Second, config.ReadTimeout)
-	assert.Equal(t, 30*time.Second, config.WriteTimeout)
-	assert.Equal(t, 120*time.Second, config.IdleTimeout)
-	assert.Equal(t, 10*time.Second, config.ShutdownTimeout)
-	assert.True(t, config.HideBanner)
-
-	config.Port = ":9090"
-	config.HideBanner = false
-
-	assert.Equal(t, ":9090", config.Port)
-	assert.False(t, config.HideBanner)
 }
 
 func freeLocalAddr(t *testing.T) string {

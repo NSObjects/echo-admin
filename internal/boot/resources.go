@@ -14,7 +14,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/redis"
 	infraresources "github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/tracing"
-	"github.com/NSObjects/echo-admin/internal/platform/server"
 )
 
 // Resources exposes framework-owned infrastructure resources to modules.
@@ -166,22 +165,11 @@ func (r *Resources) Shutdown(ctx context.Context) error {
 }
 
 // Status returns server-facing capability status records.
-func (r *Resources) Status(ctx context.Context) []server.CapabilityStatus {
+func (r *Resources) Status(ctx context.Context) []infraresources.CapabilityStatus {
 	if r == nil || r.status == nil {
 		return nil
 	}
-	statuses := r.status.Status(ctx)
-	out := make([]server.CapabilityStatus, 0, len(statuses))
-	for _, status := range statuses {
-		out = append(out, server.CapabilityStatus{
-			Name:      status.Name,
-			Enabled:   status.Enabled,
-			Available: status.Available,
-			State:     status.State,
-			Message:   status.Message,
-		})
-	}
-	return out
+	return r.status.Status(ctx)
 }
 
 // Ready reports whether every enabled resource is available.

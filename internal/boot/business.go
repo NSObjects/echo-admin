@@ -35,7 +35,7 @@ import (
 	setuphttp "github.com/NSObjects/echo-admin/internal/modules/setup/http"
 	setupusecase "github.com/NSObjects/echo-admin/internal/modules/setup/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
-	"github.com/NSObjects/echo-admin/internal/platform/server"
+	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 // BusinessModules returns the business modules installed by the default runtime.
@@ -189,7 +189,7 @@ func newSetupUsecase(i do.Injector) (*setupusecase.Usecase, error) {
 	return setupusecase.New(store, runner), nil
 }
 
-func newInstallationStateReader(i do.Injector) (server.InstallationStateReader, error) {
+func newInstallationStateReader(i do.Injector) (middlewares.InstallationStateReader, error) {
 	uc, err := do.Invoke[*setupusecase.Usecase](i)
 	if err != nil {
 		return nil, err
@@ -277,7 +277,7 @@ func newAuditUsecase(i do.Injector) (*auditusecase.Usecase, error) {
 	return auditusecase.New(store), nil
 }
 
-func newSystemErrorRecorder(i do.Injector) (server.SystemErrorRecorder, error) {
+func newSystemErrorRecorder(i do.Injector) (middlewares.SystemErrorRecorder, error) {
 	audit, err := do.Invoke[*auditusecase.Usecase](i)
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func newAPITokenUsecase(i do.Injector) (*apitokenusecase.Usecase, error) {
 	), nil
 }
 
-func newAPIKeyVerifier(i do.Injector) (server.APIKeyVerifier, error) {
+func newAPIKeyVerifier(i do.Injector) (middlewares.APIKeyVerifier, error) {
 	uc, err := do.Invoke[*apitokenusecase.Usecase](i)
 	if err != nil {
 		return nil, err
@@ -369,7 +369,7 @@ func newAuthStore(i do.Injector) (*authmysql.Store, error) {
 	return authmysql.NewStore(ctx, db)
 }
 
-func newLoginSessionAuthenticator(i do.Injector) (server.LoginSessionAuthenticator, error) {
+func newLoginSessionAuthenticator(i do.Injector) (middlewares.LoginSessionAuthenticator, error) {
 	uc, err := do.Invoke[*authusecase.Usecase](i)
 	if err != nil {
 		return nil, err
@@ -381,12 +381,12 @@ type loginSessionAuthenticator struct {
 	auth *authusecase.Usecase
 }
 
-func (a loginSessionAuthenticator) AuthenticateLoginSession(ctx context.Context, token string) (server.LoginSessionIdentity, error) {
+func (a loginSessionAuthenticator) AuthenticateLoginSession(ctx context.Context, token string) (middlewares.LoginSessionIdentity, error) {
 	identity, err := a.auth.AuthenticateLoginSession(ctx, token)
 	if err != nil {
-		return server.LoginSessionIdentity{}, err
+		return middlewares.LoginSessionIdentity{}, err
 	}
-	return server.LoginSessionIdentity{
+	return middlewares.LoginSessionIdentity{
 		SessionID: identity.SessionID,
 		UserID:    identity.AdminID,
 		RoleID:    identity.RoleID,
@@ -405,12 +405,12 @@ type apiKeyVerifier struct {
 	tokens *apitokenusecase.Usecase
 }
 
-func (v apiKeyVerifier) VerifyAPIKey(ctx context.Context, secret string) (server.APIKeyIdentity, error) {
+func (v apiKeyVerifier) VerifyAPIKey(ctx context.Context, secret string) (middlewares.APIKeyIdentity, error) {
 	identity, err := v.tokens.Authenticate(ctx, secret)
 	if err != nil {
-		return server.APIKeyIdentity{}, err
+		return middlewares.APIKeyIdentity{}, err
 	}
-	return server.APIKeyIdentity{
+	return middlewares.APIKeyIdentity{
 		UserID: identity.AdminID,
 		RoleID: identity.RoleID,
 	}, nil
@@ -420,7 +420,7 @@ type systemErrorRecorder struct {
 	audit *auditusecase.Usecase
 }
 
-func (r systemErrorRecorder) RecordSystemError(ctx context.Context, input server.SystemErrorInput) error {
+func (r systemErrorRecorder) RecordSystemError(ctx context.Context, input middlewares.SystemErrorInput) error {
 	_, err := r.audit.RecordSystemError(ctx, auditusecase.SystemErrorInput{
 		Code:      input.Code,
 		Message:   input.Message,

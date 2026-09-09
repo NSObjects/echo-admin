@@ -13,16 +13,29 @@ import (
 	zlog "github.com/rs/zerolog/log"
 
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
+	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
 	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 const apiPrefix = "/api"
 
+// Runtime tuning below is deliberately not configurable: no deployment has
+// ever needed to change it, and inventing config surface nobody uses was the
+// problem this package just shed.
+const (
+	defaultServerPort     = configs.DefaultPort
+	defaultReadTimeout    = 30 * time.Second
+	defaultWriteTimeout   = 30 * time.Second
+	defaultIdleTimeout    = 120 * time.Second
+	defaultShutdownPeriod = 10 * time.Second
+)
+
 // Server owns the Echo HTTP server lifecycle and system routes.
 type Server struct {
 	echo                  *echo.Echo
 	api                   *echo.Group
-	config                *Config
+	port                  string
+	shutdownPeriod        time.Duration
 	appConfig             configs.Config
 	statusReporter        StatusReporter
 	apiKeyVerifier        middlewares.APIKeyVerifier
@@ -38,18 +51,11 @@ type healthResponse struct {
 	Time   string `json:"time"`
 }
 
-// CapabilityStatus is the server-owned JSON shape for capability routes.
-type CapabilityStatus struct {
-	Name      string `json:"name"`
-	Enabled   bool   `json:"enabled"`
-	Available bool   `json:"available"`
-	State     string `json:"state"`
-	Message   string `json:"message,omitempty"`
-}
-
 // StatusReporter supplies readiness and capability status to system routes.
+// The status record shape is owned by the infrastructure resources package,
+// which also builds the only three legal states.
 type StatusReporter interface {
-	Status(context.Context) []CapabilityStatus
+	Status(context.Context) []resources.CapabilityStatus
 	Ready(context.Context) error
 }
 
@@ -65,34 +71,12 @@ type readinessResponse struct {
 }
 
 type capabilitiesResponse struct {
-	Capabilities []CapabilityStatus `json:"capabilities"`
-	Time         string             `json:"time"`
+	Capabilities []resources.CapabilityStatus `json:"capabilities"`
+	Time         string                       `json:"time"`
 }
 
 // Option customizes the HTTP server.
 type Option func(*Server)
-
-// APIKeyIdentity is the server-owned identity shape returned by API key auth.
-type APIKeyIdentity = middlewares.APIKeyIdentity
-
-// APIKeyVerifier verifies API key credentials before browser session middleware
-// runs.
-type APIKeyVerifier = middlewares.APIKeyVerifier
-
-// SystemErrorRecorder stores internal API failure diagnostics.
-type SystemErrorRecorder = middlewares.SystemErrorRecorder
-
-// SystemErrorInput is the server-owned diagnostic payload for internal errors.
-type SystemErrorInput = middlewares.SystemErrorInput
-
-// LoginSessionAuthenticator verifies browser login session cookies.
-type LoginSessionAuthenticator = middlewares.LoginSessionAuthenticator
-
-// LoginSessionIdentity is the authenticated browser login session identity.
-type LoginSessionIdentity = middlewares.LoginSessionIdentity
-
-// InstallationStateReader reports first-initialization state to server middleware.
-type InstallationStateReader = middlewares.InstallationStateReader
 
 // WithStatusReporter installs the readiness and capability reporter.
 func WithStatusReporter(reporter StatusReporter) Option {
@@ -102,28 +86,28 @@ func WithStatusReporter(reporter StatusReporter) Option {
 }
 
 // WithAPIKeyVerifier installs optional API token authentication.
-func WithAPIKeyVerifier(verifier APIKeyVerifier) Option {
+func WithAPIKeyVerifier(verifier middlewares.APIKeyVerifier) Option {
 	return func(s *Server) {
 		s.apiKeyVerifier = verifier
 	}
 }
 
 // WithSystemErrorRecorder installs optional internal-error recording.
-func WithSystemErrorRecorder(recorder SystemErrorRecorder) Option {
+func WithSystemErrorRecorder(recorder middlewares.SystemErrorRecorder) Option {
 	return func(s *Server) {
 		s.errorRecorder = recorder
 	}
 }
 
 // WithLoginSessionAuthenticator installs browser login-session authentication.
-func WithLoginSessionAuthenticator(authenticator LoginSessionAuthenticator) Option {
+func WithLoginSessionAuthenticator(authenticator middlewares.LoginSessionAuthenticator) Option {
 	return func(s *Server) {
 		s.sessionAuth = authenticator
 	}
 }
 
 // WithInstallationStateReader installs the uninitialized-system gate.
-func WithInstallationStateReader(reader InstallationStateReader) Option {
+func WithInstallationStateReader(reader middlewares.InstallationStateReader) Option {
 	return func(s *Server) {
 		s.installation = reader
 	}
@@ -163,10 +147,11 @@ func (s *Server) API() *echo.Group {
 func New(cfg configs.Config, opts ...Option) (*Server, error) {
 	e := echo.New()
 	s := &Server{
-		echo:      e,
-		api:       e.Group(apiPrefix),
-		config:    FromAppConfig(cfg),
-		appConfig: cfg,
+		echo:           e,
+		api:            e.Group(apiPrefix),
+		port:           cfg.System.Port,
+		shutdownPeriod: defaultShutdownPeriod,
+		appConfig:      cfg,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -287,12 +272,12 @@ func (s *Server) registerSystemRoutes() {
 	})
 }
 
-func (s *Server) statuses(ctx context.Context) []CapabilityStatus {
+func (s *Server) statuses(ctx context.Context) []resources.CapabilityStatus {
 	if s.statusReporter == nil {
 		return nil
 	}
 	statuses := s.statusReporter.Status(ctx)
-	copied := make([]CapabilityStatus, len(statuses))
+	copied := make([]resources.CapabilityStatus, len(statuses))
 	copy(copied, statuses)
 	return copied
 }
@@ -303,7 +288,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.New("server run: nil context")
 	}
 
-	addr := s.config.Port
+	addr := s.port
 	if addr == "" {
 		addr = defaultServerPort
 	}
@@ -334,13 +319,13 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) startConfig(addr string) echo.StartConfig {
 	return echo.StartConfig{
 		Address:         addr,
-		HideBanner:      s.config.HideBanner,
+		HideBanner:      true,
 		HidePort:        true,
-		GracefulTimeout: s.config.ShutdownTimeout,
+		GracefulTimeout: s.shutdownPeriod,
 		BeforeServeFunc: func(server *http.Server) error {
-			server.ReadTimeout = s.config.ReadTimeout
-			server.WriteTimeout = s.config.WriteTimeout
-			server.IdleTimeout = s.config.IdleTimeout
+			server.ReadTimeout = defaultReadTimeout
+			server.WriteTimeout = defaultWriteTimeout
+			server.IdleTimeout = defaultIdleTimeout
 			return nil
 		},
 	}
