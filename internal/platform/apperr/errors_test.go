@@ -8,9 +8,9 @@ import (
 )
 
 func TestLookup(t *testing.T) {
-	def, ok := Lookup(ErrDatabase)
+	def, ok := lookup(ErrDatabase)
 	if !ok {
-		t.Fatal("Lookup(ErrDatabase) ok = false, want true")
+		t.Fatal("lookup(ErrDatabase) ok = false, want true")
 	}
 	if def.Code != ErrDatabase {
 		t.Fatalf("Code = %d, want %d", def.Code, ErrDatabase)
@@ -18,31 +18,32 @@ func TestLookup(t *testing.T) {
 	if def.Kind != KindInternal {
 		t.Fatalf("Kind = %q, want %q", def.Kind, KindInternal)
 	}
-	if def.Category != CategoryDatabase {
-		t.Fatalf("Category = %q, want %q", def.Category, CategoryDatabase)
+	if def.Category != categoryDatabase {
+		t.Fatalf("Category = %q, want %q", def.Category, categoryDatabase)
 	}
 	if def.Message != "Database error" {
 		t.Fatalf("Message = %q, want Database error", def.Message)
 	}
 
-	if _, ok := Lookup(-1); ok {
-		t.Fatal("Lookup(-1) ok = true, want false")
+	if _, ok := lookup(-1); ok {
+		t.Fatal("lookup(-1) ok = true, want false")
 	}
 }
 
-func TestCommonRequestErrorCodes(t *testing.T) {
+// Live code values are part of the JSON `code` contract and must not drift.
+func TestLiveErrorCodeValues(t *testing.T) {
 	tests := []struct {
 		name string
 		got  int
 		want int
 	}{
-		{name: "token invalid", got: ErrTokenInvalid, want: 100005},
-		{name: "redis", got: ErrRedis, want: 100102},
-		{name: "kafka", got: ErrKafka, want: 100103},
-		{name: "external service", got: ErrExternalService, want: 100104},
-		{name: "signature invalid", got: ErrSignatureInvalid, want: 100202},
+		{name: "success", got: ErrSuccess, want: 100001},
+		{name: "unknown", got: ErrUnknown, want: 100002},
+		{name: "validation", got: ErrValidation, want: 100004},
+		{name: "database", got: ErrDatabase, want: 100101},
 		{name: "permission denied", got: ErrPermissionDenied, want: 100207},
-		{name: "encoding json", got: ErrEncodingJSON, want: 100304},
+		{name: "account disabled", got: ErrAccountDisabled, want: 100209},
+		{name: "too many attempts", got: ErrTooManyAttempts, want: 100210},
 		{name: "bad request", got: ErrBadRequest, want: 100400},
 		{name: "unauthorized", got: ErrUnauthorized, want: 100401},
 		{name: "forbidden", got: ErrForbidden, want: 100403},
@@ -62,51 +63,6 @@ func TestCommonRequestErrorCodes(t *testing.T) {
 	}
 }
 
-func TestHTTPStatus(t *testing.T) {
-	tests := []struct {
-		name string
-		code int
-		want int
-	}{
-		{name: "zero success", code: 0, want: 200},
-		{name: "success", code: ErrSuccess, want: 200},
-		{name: "validation", code: ErrValidation, want: 400},
-		{name: "bad request", code: ErrBadRequest, want: 400},
-		{name: "token invalid", code: ErrTokenInvalid, want: 401},
-		{name: "signature invalid", code: ErrSignatureInvalid, want: 401},
-		{name: "permission denied", code: ErrPermissionDenied, want: 403},
-		{name: "method not allowed", code: ErrMethodNotAllowed, want: 405},
-		{name: "conflict", code: ErrConflict, want: 409},
-		{name: "system uninitialized", code: ErrSystemUninitialized, want: 409},
-		{name: "redis", code: ErrRedis, want: 500},
-		{name: "encoding", code: ErrEncodingJSON, want: 500},
-		{name: "unknown code", code: -1, want: 500},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := HTTPStatus(tt.code); got != tt.want {
-				t.Fatalf("HTTPStatus(%d) = %d, want %d", tt.code, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestStatusPredicates(t *testing.T) {
-	if !IsClientError(ErrPermissionDenied) {
-		t.Fatal("IsClientError(ErrPermissionDenied) = false, want true")
-	}
-	if IsClientError(ErrRedis) {
-		t.Fatal("IsClientError(ErrRedis) = true, want false")
-	}
-	if !IsServerError(ErrRedis) {
-		t.Fatal("IsServerError(ErrRedis) = false, want true")
-	}
-	if !IsInternalError(ErrEncodingJSON) {
-		t.Fatal("IsInternalError(ErrEncodingJSON) = false, want true")
-	}
-}
-
 func TestNewInfoValidation(t *testing.T) {
 	err := NewValidation("email", "invalid format")
 	info := NewInfo(err)
@@ -114,8 +70,8 @@ func TestNewInfoValidation(t *testing.T) {
 	if info.Kind != KindValidation {
 		t.Fatalf("Kind = %q, want %q", info.Kind, KindValidation)
 	}
-	if info.Category != CategoryValidation {
-		t.Fatalf("Category = %q, want %q", info.Category, CategoryValidation)
+	if info.Category != categoryValidation {
+		t.Fatalf("Category = %q, want %q", info.Category, categoryValidation)
 	}
 	if info.Code != ErrValidation {
 		t.Fatalf("Code = %d, want %d", info.Code, ErrValidation)
@@ -135,8 +91,8 @@ func TestNewInfoConflict(t *testing.T) {
 	if info.Kind != KindConflict {
 		t.Fatalf("Kind = %q, want %q", info.Kind, KindConflict)
 	}
-	if info.Category != CategoryBusiness {
-		t.Fatalf("Category = %q, want %q", info.Category, CategoryBusiness)
+	if info.Category != categoryBusiness {
+		t.Fatalf("Category = %q, want %q", info.Category, categoryBusiness)
 	}
 	if info.Code != ErrConflict {
 		t.Fatalf("Code = %d, want %d", info.Code, ErrConflict)
@@ -168,8 +124,8 @@ func TestNewInfoInternalHidesDetail(t *testing.T) {
 	if info.Kind != KindInternal {
 		t.Fatalf("Kind = %q, want %q", info.Kind, KindInternal)
 	}
-	if info.Category != CategoryDatabase {
-		t.Fatalf("Category = %q, want %q", info.Category, CategoryDatabase)
+	if info.Category != categoryDatabase {
+		t.Fatalf("Category = %q, want %q", info.Category, categoryDatabase)
 	}
 	if info.Code != ErrDatabase {
 		t.Fatalf("Code = %d, want %d", info.Code, ErrDatabase)
@@ -188,8 +144,8 @@ func TestNewInfoPlainErrorUsesUnknownInternal(t *testing.T) {
 	if info.Kind != KindInternal {
 		t.Fatalf("Kind = %q, want %q", info.Kind, KindInternal)
 	}
-	if info.Category != CategorySystem {
-		t.Fatalf("Category = %q, want %q", info.Category, CategorySystem)
+	if info.Category != categorySystem {
+		t.Fatalf("Category = %q, want %q", info.Category, categorySystem)
 	}
 	if info.Code != ErrUnknown {
 		t.Fatalf("Code = %d, want %d", info.Code, ErrUnknown)
@@ -259,20 +215,20 @@ func TestWrapHelpers(t *testing.T) {
 	if err := WrapDatabase(nil, "query"); err != nil {
 		t.Fatalf("WrapDatabase(nil) = %v, want nil", err)
 	}
-	if err := Wrap(nil, ErrForbidden, "access denied"); err != nil {
-		t.Fatalf("Wrap(nil) = %v, want nil", err)
+	if err := WrapForbidden(nil, "access denied"); err != nil {
+		t.Fatalf("WrapForbidden(nil) = %v, want nil", err)
 	}
 	if err := WrapBadRequest(nil, "invalid id"); err != nil {
 		t.Fatalf("WrapBadRequest(nil) = %v, want nil", err)
 	}
 
-	err := Wrap(errors.New("boom"), ErrForbidden, "access denied")
+	err := WrapForbidden(errors.New("boom"), "access denied")
 	if err == nil {
-		t.Fatal("Wrap() error = nil, want app error")
+		t.Fatal("WrapForbidden() error = nil, want app error")
 	}
 	appErr, ok := Parse(err)
 	if !ok {
-		t.Fatal("Parse(Wrap()) ok = false, want true")
+		t.Fatal("Parse(WrapForbidden()) ok = false, want true")
 	}
 	if appErr.Code() != ErrForbidden {
 		t.Fatalf("Code = %d, want %d", appErr.Code(), ErrForbidden)

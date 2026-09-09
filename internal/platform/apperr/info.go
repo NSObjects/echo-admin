@@ -20,7 +20,7 @@ func NewInfo(err error) Info {
 
 	info := Info{
 		Kind:     KindInternal,
-		Category: CategorySystem,
+		Category: categorySystem,
 		Code:     ErrUnknown,
 		Message:  definitionFor(ErrUnknown).Message,
 		Detail:   fmt.Sprintf("%+v", err),
@@ -31,7 +31,7 @@ func NewInfo(err error) Info {
 		return info
 	}
 
-	def, registered := Lookup(appErr.Code())
+	def, registered := lookup(appErr.Code())
 	if !registered {
 		info.Detail = appErr.Detail()
 		return info

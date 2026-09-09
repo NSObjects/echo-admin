@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"time"
 
-	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/settings/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	inframysql "github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysql"
 )
 
 // Store persists settings and dictionaries in MySQL.
@@ -74,7 +74,7 @@ func (s *Store) UpsertConfig(ctx context.Context, config domain.SystemConfig) (d
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		model = configModelFromDomain(config, now)
 		if createErr := s.db.WithContext(ctx).Create(&model).Error; createErr != nil {
-			return domain.SystemConfig{}, mapWriteError(createErr, "config key already exists", "create config")
+			return domain.SystemConfig{}, inframysql.MapWriteError(createErr, "config key already exists", "create config")
 		}
 		return model.toDomain()
 	}
@@ -83,7 +83,7 @@ func (s *Store) UpsertConfig(ctx context.Context, config domain.SystemConfig) (d
 	model.Public = config.Public
 	model.UpdatedAt = now
 	if saveErr := s.db.WithContext(ctx).Save(&model).Error; saveErr != nil {
-		return domain.SystemConfig{}, mapWriteError(saveErr, "config key already exists", "update config")
+		return domain.SystemConfig{}, inframysql.MapWriteError(saveErr, "config key already exists", "update config")
 	}
 	return model.toDomain()
 }
@@ -138,7 +138,7 @@ func (s *Store) FindParamByKey(ctx context.Context, key string) (domain.SystemPa
 	}
 	var model paramModel
 	if err := s.db.WithContext(ctx).First(&model, "`key` = ?", key).Error; err != nil {
-		return domain.SystemParam{}, mapReadError(err, "system param", "find system param")
+		return domain.SystemParam{}, inframysql.MapReadError(err, "system param", "find system param")
 	}
 	return model.toDomain()
 }
@@ -151,7 +151,7 @@ func (s *Store) CreateParam(ctx context.Context, param domain.SystemParam) (doma
 	now := time.Now().UTC()
 	model := paramModelFromDomain(param, now)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.SystemParam{}, mapWriteError(err, "system param key already exists", "create system param")
+		return domain.SystemParam{}, inframysql.MapWriteError(err, "system param key already exists", "create system param")
 	}
 	return model.toDomain()
 }
@@ -173,7 +173,7 @@ func (s *Store) UpdateParam(ctx context.Context, param domain.SystemParam) (doma
 			"updated_at": now,
 		})
 	if result.Error != nil {
-		return domain.SystemParam{}, mapWriteError(result.Error, "system param key already exists", "update system param")
+		return domain.SystemParam{}, inframysql.MapWriteError(result.Error, "system param key already exists", "update system param")
 	}
 	if result.RowsAffected == 0 {
 		return domain.SystemParam{}, apperr.NewNotFound("system param")
@@ -233,7 +233,7 @@ func (s *Store) CreateDictionary(ctx context.Context, dictionary domain.Dictiona
 	now := time.Now().UTC()
 	model := dictionaryModelFromDomain(dictionary, now)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.Dictionary{}, mapWriteError(err, "dictionary code already exists", "create dictionary")
+		return domain.Dictionary{}, inframysql.MapWriteError(err, "dictionary code already exists", "create dictionary")
 	}
 	return s.findDictionaryByCode(ctx, model.Code)
 }
@@ -251,7 +251,7 @@ func (s *Store) UpdateDictionary(ctx context.Context, dictionary domain.Dictiona
 			"updated_at": now,
 		})
 	if result.Error != nil {
-		return domain.Dictionary{}, mapWriteError(result.Error, "dictionary code already exists", "update dictionary")
+		return domain.Dictionary{}, inframysql.MapWriteError(result.Error, "dictionary code already exists", "update dictionary")
 	}
 	if result.RowsAffected == 0 {
 		return domain.Dictionary{}, apperr.NewNotFound("dictionary")
@@ -282,7 +282,7 @@ func (s *Store) ReplaceDictionary(ctx context.Context, dictionary domain.Diction
 	now := time.Now().UTC()
 	model := dictionaryModelFromDomain(dictionary, now)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.Dictionary{}, mapWriteError(err, "dictionary code already exists", "replace dictionary")
+		return domain.Dictionary{}, inframysql.MapWriteError(err, "dictionary code already exists", "replace dictionary")
 	}
 	return s.findDictionaryByCode(ctx, model.Code)
 }
@@ -292,7 +292,7 @@ func (s *Store) ReplaceDictionary(ctx context.Context, dictionary domain.Diction
 func deleteDictionary(ctx context.Context, db *gorm.DB, code string) error {
 	var dictionary dictionaryModel
 	if err := db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
-		return mapReadError(err, "dictionary", "find dictionary")
+		return inframysql.MapReadError(err, "dictionary", "find dictionary")
 	}
 	if err := db.WithContext(ctx).Delete(&dictionaryItemModel{}, "dictionary_id = ?", dictionary.ID).Error; err != nil {
 		return apperr.WrapDatabase(err, "delete dictionary items")
@@ -319,7 +319,7 @@ func (s *Store) AddDictionaryItem(ctx context.Context, code string, item domain.
 	}
 	var dictionary dictionaryModel
 	if err := s.db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
-		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
+		return domain.Dictionary{}, inframysql.MapReadError(err, "dictionary", "find dictionary")
 	}
 	model := dictionaryItemModelFromDomain(dictionary.ID, item)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
@@ -335,13 +335,13 @@ func (s *Store) UpdateDictionaryItem(ctx context.Context, code string, item doma
 	}
 	var dictionary dictionaryModel
 	if err := s.db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
-		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
+		return domain.Dictionary{}, inframysql.MapReadError(err, "dictionary", "find dictionary")
 	}
 	model := dictionaryItemModelFromDomain(dictionary.ID, item)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing dictionaryItemModel
 		if err := tx.First(&existing, "id = ? AND dictionary_id = ?", item.ID, dictionary.ID).Error; err != nil {
-			return mapReadError(err, "dictionary item", "find dictionary item")
+			return inframysql.MapReadError(err, "dictionary item", "find dictionary item")
 		}
 		result := tx.Model(&existing).Updates(map[string]interface{}{
 			"parent_id": model.ParentID,
@@ -375,7 +375,7 @@ func (s *Store) FindDictionaryItem(ctx context.Context, code string, itemID int6
 		Where("settings_dictionaries.code = ? AND settings_dictionary_items.id = ?", code, itemID).
 		First(&item).Error
 	if err != nil {
-		return domain.DictionaryItem{}, mapReadError(err, "dictionary item", "find dictionary item")
+		return domain.DictionaryItem{}, inframysql.MapReadError(err, "dictionary item", "find dictionary item")
 	}
 	return item.toDomain()
 }
@@ -387,7 +387,7 @@ func (s *Store) DeleteDictionaryItem(ctx context.Context, code string, itemID in
 	}
 	var dictionary dictionaryModel
 	if err := s.db.WithContext(ctx).First(&dictionary, "code = ?", code).Error; err != nil {
-		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
+		return domain.Dictionary{}, inframysql.MapReadError(err, "dictionary", "find dictionary")
 	}
 	var children int64
 	if err := s.db.WithContext(ctx).Model(&dictionaryItemModel{}).
@@ -444,7 +444,7 @@ func (s *Store) CreateVersion(ctx context.Context, version domain.SystemVersion)
 	now := time.Now().UTC()
 	model := versionModelFromDomain(version, now)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.SystemVersion{}, mapWriteError(err, "system version already exists", "create system version")
+		return domain.SystemVersion{}, inframysql.MapWriteError(err, "system version already exists", "create system version")
 	}
 	return model.toDomain()
 }
@@ -467,7 +467,7 @@ func (s *Store) UpdateVersion(ctx context.Context, version domain.SystemVersion)
 			"updated_at":   now,
 		})
 	if result.Error != nil {
-		return domain.SystemVersion{}, mapWriteError(result.Error, "system version already exists", "update system version")
+		return domain.SystemVersion{}, inframysql.MapWriteError(result.Error, "system version already exists", "update system version")
 	}
 	if result.RowsAffected == 0 {
 		return domain.SystemVersion{}, apperr.NewNotFound("system version")
@@ -537,7 +537,7 @@ func (s *Store) findDictionaryByCode(ctx context.Context, code string) (domain.D
 		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("sort ASC, id ASC") }).
 		First(&model, "code = ?", code).Error
 	if err != nil {
-		return domain.Dictionary{}, mapReadError(err, "dictionary", "find dictionary")
+		return domain.Dictionary{}, inframysql.MapReadError(err, "dictionary", "find dictionary")
 	}
 	return model.toDomain()
 }
@@ -545,7 +545,7 @@ func (s *Store) findDictionaryByCode(ctx context.Context, code string) (domain.D
 func (s *Store) findVersionByID(ctx context.Context, id int64) (domain.SystemVersion, error) {
 	var model versionModel
 	if err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
-		return domain.SystemVersion{}, mapReadError(err, "system version", "find system version")
+		return domain.SystemVersion{}, inframysql.MapReadError(err, "system version", "find system version")
 	}
 	return model.toDomain()
 }
@@ -553,7 +553,7 @@ func (s *Store) findVersionByID(ctx context.Context, id int64) (domain.SystemVer
 func (s *Store) findParamByID(ctx context.Context, id int64) (domain.SystemParam, error) {
 	var model paramModel
 	if err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
-		return domain.SystemParam{}, mapReadError(err, "system param", "find system param")
+		return domain.SystemParam{}, inframysql.MapReadError(err, "system param", "find system param")
 	}
 	return model.toDomain()
 }
@@ -700,7 +700,7 @@ func (m dictionaryItemModel) toDomain() (domain.DictionaryItem, error) {
 func refreshDictionaryItemChildren(tx *gorm.DB, dictionaryID, parentID int64) error {
 	var parent dictionaryItemModel
 	if err := tx.First(&parent, "id = ? AND dictionary_id = ?", parentID, dictionaryID).Error; err != nil {
-		return mapReadError(err, "dictionary item", "find dictionary item")
+		return inframysql.MapReadError(err, "dictionary item", "find dictionary item")
 	}
 	var children []dictionaryItemModel
 	if err := tx.Where("dictionary_id = ? AND parent_id = ?", dictionaryID, parentID).Find(&children).Error; err != nil {
@@ -757,21 +757,6 @@ func versionModelFromDomain(version domain.SystemVersion, now time.Time) version
 
 func (m versionModel) toDomain() (domain.SystemVersion, error) {
 	return domain.RestoreSystemVersion(m.ID, m.Version, m.Name, m.Description, m.Data, m.PublishedAt, m.CreatedAt, m.UpdatedAt)
-}
-
-func mapReadError(err error, resource, operation string) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperr.NewNotFound(resource)
-	}
-	return apperr.WrapDatabase(err, operation)
-}
-
-func mapWriteError(err error, conflictMessage, operation string) error {
-	var mysqlErr *drivermysql.MySQLError
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-		return apperr.NewConflict(conflictMessage)
-	}
-	return apperr.WrapDatabase(err, operation)
 }
 
 func coalesceTime(value, fallback time.Time) time.Time {

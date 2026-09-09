@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/access/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	inframysql "github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysql"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysqljson"
 )
 
@@ -48,7 +48,7 @@ func (s *Store) FindRoleByID(ctx context.Context, id int64) (domain.Role, error)
 	var model roleModel
 	err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error
 	if err != nil {
-		return domain.Role{}, mapReadError(err, "role", "find role")
+		return domain.Role{}, inframysql.MapReadError(err, "role", "find role")
 	}
 	return model.toDomain()
 }
@@ -61,7 +61,7 @@ func (s *Store) FindRoleByCode(ctx context.Context, code string) (domain.Role, e
 	var model roleModel
 	err := s.db.WithContext(ctx).First(&model, "code = ?", code).Error
 	if err != nil {
-		return domain.Role{}, mapReadError(err, "role", "find role by code")
+		return domain.Role{}, inframysql.MapReadError(err, "role", "find role by code")
 	}
 	return model.toDomain()
 }
@@ -94,7 +94,7 @@ func (s *Store) CreateRole(ctx context.Context, role domain.Role) (domain.Role, 
 	}
 	model := roleModelFromDomain(role)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.Role{}, mapWriteError(err, "role code already exists", "create role")
+		return domain.Role{}, inframysql.MapWriteError(err, "role code already exists", "create role")
 	}
 	return model.toDomain()
 }
@@ -107,7 +107,7 @@ func (s *Store) UpdateRole(ctx context.Context, role domain.Role) (domain.Role, 
 	model := roleModelFromDomain(role)
 	result := s.db.WithContext(ctx).Save(&model)
 	if result.Error != nil {
-		return domain.Role{}, mapWriteError(result.Error, "role code already exists", "update role")
+		return domain.Role{}, inframysql.MapWriteError(result.Error, "role code already exists", "update role")
 	}
 	if result.RowsAffected == 0 {
 		return domain.Role{}, apperr.NewNotFound("role")
@@ -159,7 +159,7 @@ func (s *Store) FindAPIByID(ctx context.Context, id int64) (domain.API, error) {
 	var model apiModel
 	err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error
 	if err != nil {
-		return domain.API{}, mapReadError(err, "api", "find api")
+		return domain.API{}, inframysql.MapReadError(err, "api", "find api")
 	}
 	return model.toDomain()
 }
@@ -174,7 +174,7 @@ func (s *Store) FindAPIByRoute(ctx context.Context, method, path string) (domain
 	var model apiModel
 	err := s.db.WithContext(ctx).First(&model, "method = ? AND path = ?", method, path).Error
 	if err != nil {
-		return domain.API{}, mapReadError(err, "api", "find api by route")
+		return domain.API{}, inframysql.MapReadError(err, "api", "find api by route")
 	}
 	return model.toDomain()
 }
@@ -213,7 +213,7 @@ func (s *Store) FindMenuByID(ctx context.Context, id int64) (domain.Menu, error)
 		Preload("Buttons", func(tx *gorm.DB) *gorm.DB { return tx.Order("id ASC") }).
 		First(&model, "id = ?", id).Error
 	if err != nil {
-		return domain.Menu{}, mapReadError(err, "menu", "find menu")
+		return domain.Menu{}, inframysql.MapReadError(err, "menu", "find menu")
 	}
 	return model.toDomain()
 }
@@ -227,7 +227,7 @@ func (s *Store) CreateMenu(ctx context.Context, menu domain.Menu) (domain.Menu, 
 	var created domain.Menu
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.WithContext(ctx).Create(&model).Error; err != nil {
-			return mapWriteError(err, "menu path already exists", "create menu")
+			return inframysql.MapWriteError(err, "menu path already exists", "create menu")
 		}
 		if err := replaceMenuButtons(ctx, tx, model.ID, menu.Buttons); err != nil {
 			return err
@@ -255,7 +255,7 @@ func (s *Store) UpdateMenu(ctx context.Context, menu domain.Menu) (domain.Menu, 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.WithContext(ctx).Save(&model)
 		if result.Error != nil {
-			return mapWriteError(result.Error, "menu path already exists", "update menu")
+			return inframysql.MapWriteError(result.Error, "menu path already exists", "update menu")
 		}
 		if result.RowsAffected == 0 {
 			return apperr.NewNotFound("menu")
@@ -359,7 +359,7 @@ func (s *Store) ensurePermission(ctx context.Context, permission domain.Permissi
 		UpdatedAt: now,
 	}
 	if createErr := s.db.WithContext(ctx).Create(&model).Error; createErr != nil {
-		return mapWriteError(createErr, "permission token already exists", "create seed permission")
+		return inframysql.MapWriteError(createErr, "permission token already exists", "create seed permission")
 	}
 	return nil
 }
@@ -403,7 +403,7 @@ func (s *Store) ensureAPI(ctx context.Context, definition domain.ManagedAPIRoute
 		UpdatedAt:   now,
 	}
 	if createErr := s.db.WithContext(ctx).Create(&model).Error; createErr != nil {
-		return 0, mapWriteError(createErr, "api route already exists", "create seed api")
+		return 0, inframysql.MapWriteError(createErr, "api route already exists", "create seed api")
 	}
 	return model.ID, nil
 }
@@ -513,7 +513,7 @@ func (s *Store) ensureSeedButton(ctx context.Context, menuID int64, seed domain.
 	}
 	model := menuButtonModelFromDomain(button)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return 0, mapWriteError(err, "menu button already exists", "create seed menu button")
+		return 0, inframysql.MapWriteError(err, "menu button already exists", "create seed menu button")
 	}
 	return model.ID, nil
 }
@@ -745,7 +745,7 @@ func loadMenu(ctx context.Context, tx *gorm.DB, id int64) (domain.Menu, error) {
 		Preload("Buttons", func(db *gorm.DB) *gorm.DB { return db.Order("id ASC") }).
 		First(&model, "id = ?", id).Error
 	if err != nil {
-		return domain.Menu{}, mapReadError(err, "menu", "load menu")
+		return domain.Menu{}, inframysql.MapReadError(err, "menu", "load menu")
 	}
 	return model.toDomain()
 }
@@ -771,7 +771,7 @@ func replaceMenuButtons(ctx context.Context, tx *gorm.DB, menuID int64, buttons 
 			model.Name = button.Name
 			model.Description = button.Description
 			if err := tx.WithContext(ctx).Save(&model).Error; err != nil {
-				return mapWriteError(err, "menu button already exists", "update menu button")
+				return inframysql.MapWriteError(err, "menu button already exists", "update menu button")
 			}
 			keptIDs = append(keptIDs, model.ID)
 			continue
@@ -783,7 +783,7 @@ func replaceMenuButtons(ctx context.Context, tx *gorm.DB, menuID int64, buttons 
 		}
 		model = menuButtonModelFromDomain(created)
 		if err := tx.WithContext(ctx).Create(&model).Error; err != nil {
-			return mapWriteError(err, "menu button already exists", "create menu button")
+			return inframysql.MapWriteError(err, "menu button already exists", "create menu button")
 		}
 		keptIDs = append(keptIDs, model.ID)
 	}
@@ -795,19 +795,4 @@ func replaceMenuButtons(ctx context.Context, tx *gorm.DB, menuID int64, buttons 
 		return apperr.WrapDatabase(err, "delete removed menu buttons")
 	}
 	return nil
-}
-
-func mapReadError(err error, resource, operation string) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperr.NewNotFound(resource)
-	}
-	return apperr.WrapDatabase(err, operation)
-}
-
-func mapWriteError(err error, conflictMessage, operation string) error {
-	var mysqlErr *drivermysql.MySQLError
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-		return apperr.NewConflict(conflictMessage)
-	}
-	return apperr.WrapDatabase(err, operation)
 }

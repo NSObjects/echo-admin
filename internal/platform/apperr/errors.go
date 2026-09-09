@@ -63,11 +63,6 @@ func Newf(code int, format string, args ...interface{}) error {
 	return New(code, fmt.Sprintf(format, args...))
 }
 
-// Wrap adds an application code and safe message to err.
-func Wrap(err error, code int, message string) error {
-	return wrapOrNew(err, code, message)
-}
-
 func wrapIfError(err error, code int, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
@@ -85,7 +80,7 @@ func wrapOrNew(err error, code int, message string) error {
 }
 
 func newError(code int, message, detail string, cause error) error {
-	def, registered := Lookup(code)
+	def, registered := lookup(code)
 	if message == "" {
 		if registered {
 			message = def.Message
@@ -128,7 +123,7 @@ func ParseRegistered(err error) (Definition, bool) {
 	if !ok {
 		return Definition{}, false
 	}
-	return Lookup(appErr.Code())
+	return lookup(appErr.Code())
 }
 
 // Parse returns the first application Error in err's unwrap chain.

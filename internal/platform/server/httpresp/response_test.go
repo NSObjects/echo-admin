@@ -175,7 +175,7 @@ func TestStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Status(tt.kind); got != tt.want {
+			if got := status(tt.kind); got != tt.want {
 				t.Fatalf("Status(%q) = %d, want %d", tt.kind, got, tt.want)
 			}
 		})

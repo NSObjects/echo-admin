@@ -118,11 +118,13 @@ func APIError(c *echo.Context, err error) error {
 		Timestamp: time.Now().Unix(),
 	}
 
-	return c.JSON(Status(info.Kind), rjson)
+	return c.JSON(status(info.Kind), rjson)
 }
 
-// Status maps framework-free application error kinds to HTTP status codes.
-func Status(kind apperr.Kind) int {
+// status maps framework-free application error kinds to HTTP status codes.
+// It is the single mapping of its kind: apperr itself stays free of HTTP
+// concerns, and every error response flows through APIError.
+func status(kind apperr.Kind) int {
 	switch kind {
 	case apperr.KindOK:
 		return http.StatusOK

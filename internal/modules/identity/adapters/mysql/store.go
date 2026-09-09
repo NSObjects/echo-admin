@@ -6,11 +6,11 @@ import (
 	"errors"
 	"time"
 
-	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/identity/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	inframysql "github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysql"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysqljson"
 )
 
@@ -46,7 +46,7 @@ func (s *Store) FindByUsername(ctx context.Context, username string) (domain.Adm
 	var model adminModel
 	err := s.db.WithContext(ctx).First(&model, "username = ?", username).Error
 	if err != nil {
-		return domain.Admin{}, mapReadError(err, "admin", "find admin by username")
+		return domain.Admin{}, inframysql.MapReadError(err, "admin", "find admin by username")
 	}
 	return model.toDomain()
 }
@@ -59,7 +59,7 @@ func (s *Store) FindByID(ctx context.Context, id int64) (domain.Admin, error) {
 	var model adminModel
 	err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error
 	if err != nil {
-		return domain.Admin{}, mapReadError(err, "admin", "find admin")
+		return domain.Admin{}, inframysql.MapReadError(err, "admin", "find admin")
 	}
 	return model.toDomain()
 }
@@ -92,7 +92,7 @@ func (s *Store) Create(ctx context.Context, admin domain.Admin) (domain.Admin, e
 	}
 	model := adminModelFromDomain(admin)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.Admin{}, mapWriteError(err, "admin username already exists", "create admin")
+		return domain.Admin{}, inframysql.MapWriteError(err, "admin username already exists", "create admin")
 	}
 	return model.toDomain()
 }
@@ -105,7 +105,7 @@ func (s *Store) Update(ctx context.Context, admin domain.Admin) (domain.Admin, e
 	model := adminModelFromDomain(admin)
 	result := s.db.WithContext(ctx).Save(&model)
 	if result.Error != nil {
-		return domain.Admin{}, mapWriteError(result.Error, "admin username already exists", "update admin")
+		return domain.Admin{}, inframysql.MapWriteError(result.Error, "admin username already exists", "update admin")
 	}
 	if result.RowsAffected == 0 {
 		return domain.Admin{}, apperr.NewNotFound("admin")
@@ -185,19 +185,4 @@ func containsRoleID(roleIDs []int64, want int64) bool {
 		}
 	}
 	return false
-}
-
-func mapReadError(err error, resource, operation string) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperr.NewNotFound(resource)
-	}
-	return apperr.WrapDatabase(err, operation)
-}
-
-func mapWriteError(err error, conflictMessage, operation string) error {
-	var mysqlErr *drivermysql.MySQLError
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-		return apperr.NewConflict(conflictMessage)
-	}
-	return apperr.WrapDatabase(err, operation)
 }

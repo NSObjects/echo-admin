@@ -21,38 +21,31 @@ const (
 // Category identifies the operational area associated with an error.
 type Category string
 
-// Application error categories.
+// Categories are package-private spellings: Category values surface only
+// through Definition and Info, and no caller needs the constants themselves.
 const (
-	CategorySystem     Category = "system"
-	CategoryDatabase   Category = "database"
-	CategoryRedis      Category = "redis"
-	CategoryKafka      Category = "kafka"
-	CategoryExternal   Category = "external"
-	CategoryAuth       Category = "auth"
-	CategoryPermission Category = "permission"
-	CategoryValidation Category = "validation"
-	CategoryBusiness   Category = "business"
+	categorySystem     Category = "system"
+	categoryDatabase   Category = "database"
+	categoryAuth       Category = "auth"
+	categoryPermission Category = "permission"
+	categoryValidation Category = "validation"
+	categoryBusiness   Category = "business"
 )
 
-// Common application error codes.
+// Application error codes are assigned explicitly so the value of every live
+// code is part of the JSON `code` contract. The numbering is intentionally
+// non-contiguous: retired, never-shipped codes left gaps behind.
 const (
-	ErrSuccess int = iota + 100001
-	ErrUnknown
-	ErrBind
-	ErrValidation
-	ErrTokenInvalid
-)
+	ErrSuccess    = 100001
+	ErrUnknown    = 100002
+	ErrValidation = 100004
 
-// Data source and external system error codes.
-const (
-	ErrDatabase int = iota + 100101
-	ErrRedis
-	ErrKafka
-	ErrExternalService
-)
+	ErrDatabase = 100101
 
-// Common request error codes.
-const (
+	ErrPermissionDenied = 100207
+	ErrAccountDisabled  = 100209
+	ErrTooManyAttempts  = 100210
+
 	ErrBadRequest          = 100400
 	ErrUnauthorized        = 100401
 	ErrForbidden           = 100403
@@ -61,32 +54,6 @@ const (
 	ErrConflict            = 100409
 	ErrSystemUninitialized = 100410
 	ErrInternalServer      = 100500
-)
-
-// Authentication and authorization error codes.
-const (
-	ErrEncrypt int = iota + 100201
-	ErrSignatureInvalid
-	ErrExpired
-	ErrInvalidAuthHeader
-	ErrMissingHeader
-	ErrPasswordIncorrect
-	ErrPermissionDenied
-	ErrAccountLocked
-	ErrAccountDisabled
-	ErrTooManyAttempts
-)
-
-// Encoding and decoding error codes.
-const (
-	ErrEncodingFailed int = iota + 100301
-	ErrDecodingFailed
-	ErrInvalidJSON
-	ErrEncodingJSON
-	ErrDecodingJSON
-	ErrInvalidYaml
-	ErrEncodingYaml
-	ErrDecodingYaml
 )
 
 // Definition is the registered meaning of an application error code.
@@ -98,151 +65,31 @@ type Definition struct {
 }
 
 var definitions = map[int]Definition{
-	ErrSuccess:         {Code: ErrSuccess, Kind: KindOK, Category: CategorySystem, Message: "OK"},
-	ErrUnknown:         {Code: ErrUnknown, Kind: KindInternal, Category: CategorySystem, Message: "Internal server error"},
-	ErrBind:            {Code: ErrBind, Kind: KindBadRequest, Category: CategoryValidation, Message: "Error occurred while binding the request body to the struct"},
-	ErrValidation:      {Code: ErrValidation, Kind: KindValidation, Category: CategoryValidation, Message: "Validation failed"},
-	ErrTokenInvalid:    {Code: ErrTokenInvalid, Kind: KindUnauthorized, Category: CategoryAuth, Message: "Token invalid"},
-	ErrDatabase:        {Code: ErrDatabase, Kind: KindInternal, Category: CategoryDatabase, Message: "Database error"},
-	ErrRedis:           {Code: ErrRedis, Kind: KindInternal, Category: CategoryRedis, Message: "Redis error"},
-	ErrKafka:           {Code: ErrKafka, Kind: KindInternal, Category: CategoryKafka, Message: "Kafka error"},
-	ErrExternalService: {Code: ErrExternalService, Kind: KindInternal, Category: CategoryExternal, Message: "External service error"},
-	ErrBadRequest:      {Code: ErrBadRequest, Kind: KindBadRequest, Category: CategoryValidation, Message: "Bad request"},
-	ErrUnauthorized:    {Code: ErrUnauthorized, Kind: KindUnauthorized, Category: CategoryAuth, Message: "Unauthorized"},
-	ErrForbidden:       {Code: ErrForbidden, Kind: KindForbidden, Category: CategoryPermission, Message: "Forbidden"},
-	ErrNotFound:        {Code: ErrNotFound, Kind: KindNotFound, Category: CategoryBusiness, Message: "Not found"},
-	ErrMethodNotAllowed: {
-		Code:     ErrMethodNotAllowed,
-		Kind:     KindMethodNotAllowed,
-		Category: CategoryValidation,
-		Message:  "Method not allowed",
-	},
-	ErrConflict: {Code: ErrConflict, Kind: KindConflict, Category: CategoryBusiness, Message: "Conflict"},
-	ErrSystemUninitialized: {
-		Code:     ErrSystemUninitialized,
-		Kind:     KindConflict,
-		Category: CategorySystem,
-		Message:  "system is not initialized",
-	},
-	ErrInternalServer: {Code: ErrInternalServer, Kind: KindInternal, Category: CategorySystem, Message: "Internal server error"},
-	ErrEncrypt: {
-		Code:     ErrEncrypt,
-		Kind:     KindUnauthorized,
-		Category: CategoryAuth,
-		Message:  "Error occurred while encrypting the user password",
-	},
-	ErrSignatureInvalid: {
-		Code:     ErrSignatureInvalid,
-		Kind:     KindUnauthorized,
-		Category: CategoryAuth,
-		Message:  "Signature is invalid",
-	},
-	ErrExpired: {
-		Code:     ErrExpired,
-		Kind:     KindUnauthorized,
-		Category: CategoryAuth,
-		Message:  "Token expired",
-	},
-	ErrInvalidAuthHeader: {
-		Code:     ErrInvalidAuthHeader,
-		Kind:     KindUnauthorized,
-		Category: CategoryAuth,
-		Message:  "Invalid authorization header",
-	},
-	ErrMissingHeader: {
-		Code:     ErrMissingHeader,
-		Kind:     KindUnauthorized,
-		Category: CategoryAuth,
-		Message:  "The `Authorization` header was empty",
-	},
-	ErrPasswordIncorrect: {
-		Code:     ErrPasswordIncorrect,
-		Kind:     KindUnauthorized,
-		Category: CategoryAuth,
-		Message:  "Password was incorrect",
-	},
-	ErrPermissionDenied: {
-		Code:     ErrPermissionDenied,
-		Kind:     KindForbidden,
-		Category: CategoryPermission,
-		Message:  "Permission denied",
-	},
-	ErrAccountLocked: {
-		Code:     ErrAccountLocked,
-		Kind:     KindForbidden,
-		Category: CategoryPermission,
-		Message:  "Account is locked",
-	},
-	ErrAccountDisabled: {
-		Code:     ErrAccountDisabled,
-		Kind:     KindForbidden,
-		Category: CategoryPermission,
-		Message:  "Account is disabled",
-	},
-	ErrTooManyAttempts: {
-		Code:     ErrTooManyAttempts,
-		Kind:     KindForbidden,
-		Category: CategoryPermission,
-		Message:  "Too many login attempts",
-	},
-	ErrEncodingFailed: {
-		Code:     ErrEncodingFailed,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "Encoding failed due to an error with the data",
-	},
-	ErrDecodingFailed: {
-		Code:     ErrDecodingFailed,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "Decoding failed due to an error with the data",
-	},
-	ErrInvalidJSON: {
-		Code:     ErrInvalidJSON,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "Data is not valid JSON",
-	},
-	ErrEncodingJSON: {
-		Code:     ErrEncodingJSON,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "JSON data could not be encoded",
-	},
-	ErrDecodingJSON: {
-		Code:     ErrDecodingJSON,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "JSON data could not be decoded",
-	},
-	ErrInvalidYaml: {
-		Code:     ErrInvalidYaml,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "Data is not valid Yaml",
-	},
-	ErrEncodingYaml: {
-		Code:     ErrEncodingYaml,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "Yaml data could not be encoded",
-	},
-	ErrDecodingYaml: {
-		Code:     ErrDecodingYaml,
-		Kind:     KindInternal,
-		Category: CategorySystem,
-		Message:  "Yaml data could not be decoded",
-	},
+	ErrSuccess:             {Code: ErrSuccess, Kind: KindOK, Category: categorySystem, Message: "OK"},
+	ErrUnknown:             {Code: ErrUnknown, Kind: KindInternal, Category: categorySystem, Message: "Internal server error"},
+	ErrValidation:          {Code: ErrValidation, Kind: KindValidation, Category: categoryValidation, Message: "Validation failed"},
+	ErrDatabase:            {Code: ErrDatabase, Kind: KindInternal, Category: categoryDatabase, Message: "Database error"},
+	ErrBadRequest:          {Code: ErrBadRequest, Kind: KindBadRequest, Category: categoryValidation, Message: "Bad request"},
+	ErrUnauthorized:        {Code: ErrUnauthorized, Kind: KindUnauthorized, Category: categoryAuth, Message: "Unauthorized"},
+	ErrForbidden:           {Code: ErrForbidden, Kind: KindForbidden, Category: categoryPermission, Message: "Forbidden"},
+	ErrNotFound:            {Code: ErrNotFound, Kind: KindNotFound, Category: categoryBusiness, Message: "Not found"},
+	ErrMethodNotAllowed:    {Code: ErrMethodNotAllowed, Kind: KindMethodNotAllowed, Category: categoryValidation, Message: "Method not allowed"},
+	ErrConflict:            {Code: ErrConflict, Kind: KindConflict, Category: categoryBusiness, Message: "Conflict"},
+	ErrSystemUninitialized: {Code: ErrSystemUninitialized, Kind: KindConflict, Category: categorySystem, Message: "system is not initialized"},
+	ErrInternalServer:      {Code: ErrInternalServer, Kind: KindInternal, Category: categorySystem, Message: "Internal server error"},
+	ErrPermissionDenied:    {Code: ErrPermissionDenied, Kind: KindForbidden, Category: categoryPermission, Message: "Permission denied"},
+	ErrAccountDisabled:     {Code: ErrAccountDisabled, Kind: KindForbidden, Category: categoryPermission, Message: "Account is disabled"},
+	ErrTooManyAttempts:     {Code: ErrTooManyAttempts, Kind: KindForbidden, Category: categoryPermission, Message: "Too many login attempts"},
 }
 
-// Lookup returns the registered definition for code.
-func Lookup(code int) (Definition, bool) {
+// lookup returns the registered definition for code.
+func lookup(code int) (Definition, bool) {
 	def, ok := definitions[code]
 	return def, ok
 }
 
 func definitionFor(code int) Definition {
-	if def, ok := Lookup(code); ok {
+	if def, ok := lookup(code); ok {
 		return def
 	}
 	return definitions[ErrUnknown]

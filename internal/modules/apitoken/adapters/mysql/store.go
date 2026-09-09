@@ -6,12 +6,12 @@ import (
 	"errors"
 	"time"
 
-	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/domain"
 	"github.com/NSObjects/echo-admin/internal/modules/apitoken/usecase"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	inframysql "github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysql"
 )
 
 // Store persists API tokens in MySQL.
@@ -70,7 +70,7 @@ func (s *Store) FindTokenByID(ctx context.Context, id int64) (domain.APIToken, e
 	}
 	var model tokenModel
 	if err := s.db.WithContext(ctx).First(&model, "id = ?", id).Error; err != nil {
-		return domain.APIToken{}, mapReadError(err, "api token", "find api token")
+		return domain.APIToken{}, inframysql.MapReadError(err, "api token", "find api token")
 	}
 	return model.toDomain()
 }
@@ -82,7 +82,7 @@ func (s *Store) FindTokenByHash(ctx context.Context, hash string) (domain.APITok
 	}
 	var model tokenModel
 	if err := s.db.WithContext(ctx).First(&model, "secret_hash = ?", hash).Error; err != nil {
-		return domain.APIToken{}, mapReadError(err, "api token", "find api token by hash")
+		return domain.APIToken{}, inframysql.MapReadError(err, "api token", "find api token by hash")
 	}
 	return model.toDomain()
 }
@@ -95,7 +95,7 @@ func (s *Store) CreateToken(ctx context.Context, token domain.APIToken) (domain.
 	now := time.Now().UTC()
 	model := tokenModelFromDomain(token, now)
 	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return domain.APIToken{}, mapWriteError(err, "api token already exists", "create api token")
+		return domain.APIToken{}, inframysql.MapWriteError(err, "api token already exists", "create api token")
 	}
 	return model.toDomain()
 }
@@ -116,7 +116,7 @@ func (s *Store) UpdateToken(ctx context.Context, token domain.APIToken) (domain.
 			"updated_at":  now,
 		})
 	if result.Error != nil {
-		return domain.APIToken{}, mapWriteError(result.Error, "api token already exists", "update api token")
+		return domain.APIToken{}, inframysql.MapWriteError(result.Error, "api token already exists", "update api token")
 	}
 	if result.RowsAffected == 0 {
 		return domain.APIToken{}, apperr.NewNotFound("api token")
@@ -210,21 +210,6 @@ func tokenModelFromDomain(token domain.APIToken, now time.Time) tokenModel {
 
 func (m tokenModel) toDomain() (domain.APIToken, error) {
 	return domain.RestoreAPIToken(m.ID, m.AdminID, m.RoleID, m.Name, m.Description, m.Prefix, m.SecretHash, m.Active, m.ExpiresAt, m.LastUsedAt, m.CreatedAt, m.UpdatedAt)
-}
-
-func mapReadError(err error, resource, operation string) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperr.NewNotFound(resource)
-	}
-	return apperr.WrapDatabase(err, operation)
-}
-
-func mapWriteError(err error, conflictMessage, operation string) error {
-	var mysqlErr *drivermysql.MySQLError
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-		return apperr.NewConflict(conflictMessage)
-	}
-	return apperr.WrapDatabase(err, operation)
 }
 
 func coalesceTime(value, fallback time.Time) time.Time {
