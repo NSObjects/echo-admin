@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
 
+	authhttp "github.com/NSObjects/echo-admin/internal/modules/auth/http"
 	"github.com/NSObjects/echo-admin/internal/platform/configs"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/resources"
@@ -129,6 +130,15 @@ func provideServer(i do.Injector) {
 			server.WithStatusReporter(resourceBundle),
 			server.WithPreInitRoutes(preInitRouteExemptions()...),
 			server.WithUnauthenticatedRoutes(unauthenticatedRouteExemptions()...),
+			// The login-session cookie name and CSRF configuration are Login
+			// Session domain policy owned by the auth module; boot only wires
+			// them into the server so read and write sides share one
+			// declaration.
+			server.WithLoginSessionCookieName(authhttp.LoginSessionCookieName),
+			server.WithCSRFConfig(authhttp.CSRFMiddlewareConfig(
+				unauthenticatedRouteExemptions(),
+				cfg.HTTP.SecureCookies,
+			)),
 		}
 		options, err = appendOptionalAPIKeyVerifier(i, options)
 		if err != nil {

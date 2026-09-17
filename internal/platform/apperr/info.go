@@ -49,8 +49,3 @@ func NewInfo(err error) Info {
 func (i Info) IsInternal() bool {
 	return i.Kind == KindInternal
 }
-
-// IsBusiness reports whether info represents a non-internal error.
-func (i Info) IsBusiness() bool {
-	return i.Kind != "" && i.Kind != KindInternal
-}

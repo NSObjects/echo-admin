@@ -18,9 +18,6 @@ func TestStartDisabledTracingDoesNotRequireExporter(t *testing.T) {
 	if runtime == nil {
 		t.Fatal("Start() runtime = nil, want disabled runtime")
 	}
-	if runtime.Enabled() {
-		t.Fatal("Enabled() = true, want false")
-	}
 
 	status := runtime.Check(context.Background())
 	if status.State != resources.StateDisabled {

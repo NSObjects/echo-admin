@@ -2,7 +2,6 @@
 package resources
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -99,13 +98,13 @@ func (e CapabilityError) Unwrap() error {
 	return e.Err
 }
 
-// UnavailableError returns an aggregate error for unavailable capabilities.
-type UnavailableError struct {
+// unavailableError aggregates every unavailable capability for readiness failures.
+type unavailableError struct {
 	Statuses []CapabilityStatus
 }
 
 // Error reports every unavailable capability by name.
-func (e UnavailableError) Error() string {
+func (e unavailableError) Error() string {
 	if len(e.Statuses) == 0 {
 		return "no unavailable capabilities"
 	}
@@ -119,8 +118,8 @@ func (e UnavailableError) Error() string {
 	return message
 }
 
-// ReadyError returns nil only when every enabled status is available.
-func ReadyError(statuses []CapabilityStatus) error {
+// readyError returns nil only when every enabled status is available.
+func readyError(statuses []CapabilityStatus) error {
 	var unavailable []CapabilityStatus
 	for _, status := range statuses {
 		if status.Enabled && !status.Available {
@@ -130,16 +129,5 @@ func ReadyError(statuses []CapabilityStatus) error {
 	if len(unavailable) == 0 {
 		return nil
 	}
-	return UnavailableError{Statuses: unavailable}
-}
-
-// JoinCapabilityErrors joins non-nil errors into one error.
-func JoinCapabilityErrors(errs ...error) error {
-	var nonNil []error
-	for _, err := range errs {
-		if err != nil {
-			nonNil = append(nonNil, err)
-		}
-	}
-	return errors.Join(nonNil...)
+	return unavailableError{Statuses: unavailable}
 }

@@ -67,7 +67,7 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 	}
 
 	if config.EnableRecovery {
-		e.Use(ErrorRecovery())
+		e.Use(errorRecovery())
 	}
 
 	if config.EnableRequestContext {
@@ -127,7 +127,7 @@ func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
 	if config.APIKey == nil {
 		return nil
 	}
-	apiKeyMiddleware, err := APIKey(*config.APIKey)
+	apiKeyMiddleware, err := apiKey(*config.APIKey)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func installInstallationGate(e *echo.Echo, config *MiddlewareConfig) error {
 	if config.InstallationGate == nil {
 		return nil
 	}
-	gateMiddleware, err := InstallationGate(*config.InstallationGate)
+	gateMiddleware, err := installationGate(*config.InstallationGate)
 	if err != nil {
 		return err
 	}
@@ -161,8 +161,10 @@ func installLoginSession(e *echo.Echo, config *MiddlewareConfig) error {
 
 func installCSRF(e *echo.Echo, config *MiddlewareConfig) {
 	// CSRF protects browser login sessions only: no login session, no CSRF
-	// obligation, so CSRF activation derives from the login-session config.
-	if config.LoginSession == nil {
+	// obligation. A missing Skipper means the composition root never injected
+	// the auth-owned CSRF configuration, and Echo's default skipper would
+	// silently break that obligation, so a zero config skips installation.
+	if config.LoginSession == nil || config.CSRF.Skipper == nil {
 		return
 	}
 	e.Use(middleware.CSRFWithConfig(config.CSRF))
@@ -268,9 +270,12 @@ func requestPath(c *echo.Context) string {
 	return c.Request().URL.Path
 }
 
-// routeExempt reports whether the request matches one exemption by exact
-// method and registered route pattern.
-func routeExempt(c *echo.Context, exemptions []RouteExemption) bool {
+// MatchRouteExemption reports whether the request matches one exemption by
+// exact method and registered route pattern. Route policy forbids path-only,
+// prefix, or wildcard exemptions, so matching is always exact. Middleware
+// packages and business-owned skippers share this executor so the policy has
+// one implementation.
+func MatchRouteExemption(c *echo.Context, exemptions []RouteExemption) bool {
 	if c == nil || c.Request() == nil {
 		return false
 	}

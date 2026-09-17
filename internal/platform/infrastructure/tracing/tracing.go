@@ -68,11 +68,6 @@ func Start(ctx context.Context, cfg configs.TracingConfig, serviceName string) (
 	}, nil
 }
 
-// Enabled reports whether tracing was enabled by configuration.
-func (r *Runtime) Enabled() bool {
-	return r != nil && r.enabled
-}
-
 // Check returns the current tracing capability status.
 func (r *Runtime) Check(context.Context) resources.CapabilityStatus {
 	if r == nil || !r.enabled {

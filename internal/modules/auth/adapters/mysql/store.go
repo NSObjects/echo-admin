@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	authdomain "github.com/NSObjects/echo-admin/internal/modules/auth/domain"
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	inframysql "github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysql"
 )
 
 const (
@@ -301,7 +301,7 @@ func (s *Store) recordLoginFailure(ctx context.Context, tx *gorm.DB, key string,
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		attempt = newLoginAttempt(key, now)
 		if createErr := tx.WithContext(ctx).Create(&attempt).Error; createErr != nil {
-			if isDuplicateKey(createErr) {
+			if inframysql.IsDuplicateKey(createErr) {
 				return s.incrementExistingLoginAttempt(ctx, tx, key, now)
 			}
 			return createErr
@@ -362,11 +362,6 @@ func normalizeLoginAttemptKey(key string) (string, error) {
 		return "", fmt.Errorf("invalid login attempt key")
 	}
 	return key, nil
-}
-
-func isDuplicateKey(err error) bool {
-	var mysqlErr *drivermysql.MySQLError
-	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }
 
 func (s *Store) revokeSessions(ctx context.Context, now time.Time, reason, where string, args ...any) error {

@@ -149,7 +149,7 @@ func newAuditEcho(t *testing.T) (*echo.Echo, *auditStore) {
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	audithttp.Register(e.Group("/api"), handler)
 	return e, store
 }

@@ -2,29 +2,14 @@ package middlewares
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/labstack/echo/v5"
-	"github.com/labstack/echo/v5/middleware"
 
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/infrastructure/logging"
 	"github.com/NSObjects/echo-admin/internal/platform/requestctx"
-)
-
-const (
-	// LoginSessionCookieName is the HttpOnly browser credential for login
-	// sessions.
-	LoginSessionCookieName = "login_session"
-	// CSRFCookieName is the browser-readable double-submit CSRF cookie.
-	CSRFCookieName = "csrf_token"
-
-	csrfTokenBytes = 32
 )
 
 // LoginSessionIdentity is the request identity produced by a verified browser
@@ -42,8 +27,9 @@ type LoginSessionAuthenticator interface {
 
 // LoginSessionConfig controls browser login-session authentication. A nil
 // config in MiddlewareConfig leaves the middleware uninstalled; a present
-// config must carry an Authenticator. An empty CookieName falls back to
-// LoginSessionCookieName.
+// config must carry an Authenticator and the login-session cookie name — the
+// name is Login Session domain policy declared by the auth module and
+// injected by the composition root.
 type LoginSessionConfig struct {
 	CookieName    string
 	Exemptions    []RouteExemption
@@ -57,12 +43,12 @@ func LoginSession(config LoginSessionConfig) (echo.MiddlewareFunc, error) {
 	}
 	cookieName := strings.TrimSpace(config.CookieName)
 	if cookieName == "" {
-		cookieName = LoginSessionCookieName
+		return nil, errors.New("login session cookie name is required when login sessions are installed")
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
-			if requestctx.GetUserID(c.Request().Context()) != 0 || routeExempt(c, config.Exemptions) {
+			if requestctx.GetUserID(c.Request().Context()) != 0 || MatchRouteExemption(c, config.Exemptions) {
 				return next(c)
 			}
 			cookie, err := c.Cookie(cookieName)
@@ -94,91 +80,4 @@ func LoginSession(config LoginSessionConfig) (echo.MiddlewareFunc, error) {
 			return next(c)
 		}
 	}, nil
-}
-
-// CSRFConfig returns the Echo CSRF middleware configuration used for browser
-// login-session requests. It shares the login-session exemptions because a
-// route without a login session has no CSRF obligation.
-func CSRFConfig(exemptions []RouteExemption, secureCookies bool) middleware.CSRFConfig {
-	return middleware.CSRFConfig{
-		Skipper: func(c *echo.Context) bool {
-			return requestctx.GetLoginSessionID(c.Request().Context()) == 0 || routeExempt(c, exemptions)
-		},
-		TokenLookup:    "header:" + echo.HeaderXCSRFToken,
-		CookieName:     CSRFCookieName,
-		CookiePath:     "/",
-		CookieMaxAge:   int((12 * time.Hour).Seconds()),
-		CookieSecure:   secureCookies,
-		CookieHTTPOnly: false,
-		CookieSameSite: http.SameSiteLaxMode,
-	}
-}
-
-// SetLoginSessionCookie stores the opaque browser session credential.
-func SetLoginSessionCookie(c *echo.Context, token string, expiresAt time.Time, secure bool) {
-	maxAge := int(time.Until(expiresAt).Seconds())
-	if maxAge < 0 {
-		maxAge = 0
-	}
-	c.SetCookie(&http.Cookie{
-		Name:     LoginSessionCookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   maxAge,
-		Expires:  expiresAt,
-		Secure:   secure,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-// ClearLoginSessionCookie removes the browser session credential.
-func ClearLoginSessionCookie(c *echo.Context, secure bool) {
-	clearCookie(c, LoginSessionCookieName, true, secure)
-}
-
-// NewCSRFToken creates a browser-readable CSRF token for login responses.
-func NewCSRFToken() (string, error) {
-	token := make([]byte, csrfTokenBytes)
-	if _, err := rand.Read(token); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(token), nil
-}
-
-// SetCSRFCookie stores the browser-readable CSRF token used by Echo's CSRF
-// middleware.
-func SetCSRFCookie(c *echo.Context, token string, expiresAt time.Time, secure bool) {
-	maxAge := int(time.Until(expiresAt).Seconds())
-	if maxAge < 0 {
-		maxAge = 0
-	}
-	c.SetCookie(&http.Cookie{
-		Name:     CSRFCookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   maxAge,
-		Expires:  expiresAt,
-		Secure:   secure,
-		HttpOnly: false,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-// ClearCSRFCookie removes the browser-readable CSRF token.
-func ClearCSRFCookie(c *echo.Context, secure bool) {
-	clearCookie(c, CSRFCookieName, false, secure)
-}
-
-func clearCookie(c *echo.Context, name string, httpOnly, secure bool) {
-	c.SetCookie(&http.Cookie{
-		Name:     name,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-		Secure:   secure,
-		HttpOnly: httpOnly,
-		SameSite: http.SameSiteLaxMode,
-	})
 }

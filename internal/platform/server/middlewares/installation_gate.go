@@ -23,16 +23,16 @@ type InstallationGateConfig struct {
 	Exemptions []RouteExemption
 }
 
-// InstallationGate blocks normal administration routes until setup completes.
+// installationGate blocks normal administration routes until setup completes.
 // Exemptions are injected by the composition root and matched by exact method
 // and registered pattern, so this layer carries no route policy of its own.
-func InstallationGate(config InstallationGateConfig) (echo.MiddlewareFunc, error) {
+func installationGate(config InstallationGateConfig) (echo.MiddlewareFunc, error) {
 	if config.Reader == nil {
 		return nil, errors.New("installation state reader is required when the installation gate is installed")
 	}
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
-			if c.Request().Method == http.MethodOptions || routeExempt(c, config.Exemptions) {
+			if c.Request().Method == http.MethodOptions || MatchRouteExemption(c, config.Exemptions) {
 				return next(c)
 			}
 			initialized, err := config.Reader.Initialized(c.Request().Context())

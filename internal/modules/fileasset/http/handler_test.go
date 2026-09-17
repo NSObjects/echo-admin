@@ -243,7 +243,7 @@ func newFileEcho(t *testing.T) (*echo.Echo, *fileStore, *operationRecorder, stri
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	filehttp.Register(e.Group("/api"), handler)
 	return e, store, recorder, uploadDir
 }

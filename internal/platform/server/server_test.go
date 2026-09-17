@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
@@ -81,14 +82,17 @@ func TestServerMiddlewareConfig(t *testing.T) {
 
 func TestServerMiddlewareConfigInstallsLoginSessionFromAuthenticator(t *testing.T) {
 	server := &Server{
-		port:        ":9322",
-		appConfig:   configs.Config{},
-		sessionAuth: fakeLoginSessionAuthenticator{},
+		port:              ":9322",
+		appConfig:         configs.Config{},
+		sessionAuth:       fakeLoginSessionAuthenticator{},
+		sessionCookieName: "login_session",
+		csrfConfig:        middleware.CSRFConfig{Skipper: func(*echo.Context) bool { return false }},
 	}
 
 	config := server.middlewareConfig()
 
 	assert.NotNil(t, config.LoginSession)
+	assert.Equal(t, "login_session", config.LoginSession.CookieName)
 	assert.NotNil(t, config.CSRF.Skipper)
 }
 

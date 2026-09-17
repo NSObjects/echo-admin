@@ -33,11 +33,6 @@ type SystemErrorRecorder interface {
 	RecordSystemError(context.Context, SystemErrorInput) error
 }
 
-// ErrorHandler renders API errors without persistent system error recording.
-func ErrorHandler(c *echo.Context, err error) {
-	handleError(c, err, nil)
-}
-
 // ErrorHandlerWithRecorder renders API errors and records internal failures.
 func ErrorHandlerWithRecorder(recorder SystemErrorRecorder) echo.HTTPErrorHandler {
 	return func(c *echo.Context, err error) {
@@ -150,8 +145,8 @@ func recordSystemError(c *echo.Context, info apperr.Info, recorder SystemErrorRe
 	}
 }
 
-// ErrorRecovery recovers panics at the HTTP boundary.
-func ErrorRecovery() echo.MiddlewareFunc {
+// errorRecovery recovers panics at the HTTP boundary.
+func errorRecovery() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			defer func() {

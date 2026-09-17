@@ -25,7 +25,7 @@ import {
   Popconfirm,
   Tag,
 } from 'antd';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   createMenu,
@@ -77,6 +77,9 @@ const Menus: React.FC = () => {
   // 新增子菜单时预置的上级菜单 id；undefined 表示从工具栏新增顶级菜单。
   const [createParentID, setCreateParentID] = useState<number>();
   const [detail, setDetail] = useState<Menu>();
+  // 树形表格的展开行受控：defaultExpandAllRows 对异步加载的数据不生效，
+  // 数据到达后手动展开全部有子级的容器。
+  const [expandedRowKeys, setExpandedRowKeys] = useState<readonly number[]>([]);
 
   useEffect(() => {
     void listPermissions().then(setPermissions);
@@ -84,6 +87,27 @@ const Menus: React.FC = () => {
 
   const menuName = (menuID: number) =>
     menus.find((menu) => menu.id === menuID)?.name ?? `#${menuID}`;
+
+  // 权限绑定展示用中文名；角色页勾选的也是同一批操作，两边语言保持一致，
+  // 配置者才能把"菜单 ↔ 操作权限"的映射串起来。
+  const permissionByToken = useMemo(
+    () => new Map(permissions.map((item) => [item.token, item])),
+    [permissions],
+  );
+  const permissionName = (token?: string): string => {
+    if (!token) {
+      return '-';
+    }
+    const definition = permissionByToken.get(token);
+    return definition && definition.name !== token ? definition.name : token;
+  };
+  const permissionDetail = (token?: string): string => {
+    if (!token) {
+      return '-';
+    }
+    const name = permissionName(token);
+    return name === token ? token : `${name} (${token})`;
+  };
 
   const columns: ProColumns<MenuNode>[] = [
     { title: '名称', dataIndex: 'name', width: 200 },
@@ -93,7 +117,7 @@ const Menus: React.FC = () => {
       dataIndex: 'permission',
       width: 140,
       ellipsis: true,
-      render: (_, record) => record.permission || '-',
+      render: (_, record) => permissionName(record.permission),
     },
     { title: '排序', dataIndex: 'sort', width: 64 },
     {
@@ -203,10 +227,21 @@ const Menus: React.FC = () => {
         search={false}
         pagination={false}
         columns={columns}
-        expandable={{ defaultExpandAllRows: true }}
+        expandable={{
+          expandedRowKeys,
+          onExpandedRowsChange: (keys) =>
+            setExpandedRowKeys(keys.map((key) => Number(key))),
+        }}
         request={async () => {
           const data = await listMenus();
           setMenus(data);
+          setExpandedRowKeys(
+            data
+              .filter((menu) =>
+                data.some((child) => child.parent_id === menu.id),
+              )
+              .map((menu) => menu.id),
+          );
           const tree = buildMenuTree(data);
           return { data: tree, success: true, total: data.length };
         }}
@@ -462,7 +497,7 @@ const Menus: React.FC = () => {
               {
                 title: '绑定权限',
                 dataIndex: 'permission',
-                render: (_, entity) => entity.permission || '-',
+                render: (_, entity) => permissionDetail(entity.permission),
               },
               { title: '排序', dataIndex: 'sort' },
               {

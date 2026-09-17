@@ -61,7 +61,7 @@ func newTokenEcho() (*echo.Echo, *tokenStore, *operationRecorder) {
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	apitokenhttp.Register(e.Group("/api"), handler)
 	return e, store, recorder
 }

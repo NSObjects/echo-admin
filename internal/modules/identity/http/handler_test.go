@@ -104,7 +104,7 @@ func newIdentityEcho() (*echo.Echo, *identityStore, *operationRecorder) {
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	identityhttp.Register(e.Group("/api"), handler)
 	return e, store, recorder
 }

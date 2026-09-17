@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -59,4 +60,26 @@ func TestMapWriteError(t *testing.T) {
 			t.Fatalf("code = %d, want %d", info.Code, apperr.ErrDatabase)
 		}
 	})
+}
+
+func TestIsDuplicateKey(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil error", err: nil, want: false},
+		{name: "non-MySQL error", err: errors.New("connection refused"), want: false},
+		{name: "other MySQL error number", err: &drivermysql.MySQLError{Number: 1213, Message: "Deadlock found"}, want: false},
+		{name: "duplicate key 1062", err: &drivermysql.MySQLError{Number: 1062, Message: "Duplicate entry 'root'"}, want: true},
+		{name: "wrapped duplicate key", err: fmt.Errorf("create installation state: %w", &drivermysql.MySQLError{Number: 1062}), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsDuplicateKey(tt.err)
+			if got != tt.want {
+				t.Fatalf("IsDuplicateKey(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
 }

@@ -6,11 +6,11 @@ import (
 	"errors"
 	"time"
 
-	drivermysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
+	inframysql "github.com/NSObjects/echo-admin/internal/platform/infrastructure/mysql"
 )
 
 const installationStateKey = "system"
@@ -110,17 +110,12 @@ func (s *Store) lockInstallationState(ctx context.Context) (installationStateMod
 		UpdatedAt: time.Now().UTC(),
 	}
 	if createErr := s.db.WithContext(ctx).Create(&model).Error; createErr != nil {
-		if duplicateKey(createErr) {
+		if inframysql.IsDuplicateKey(createErr) {
 			return s.lockInstallationState(ctx)
 		}
 		return installationStateModel{}, apperr.WrapDatabase(createErr, "create installation state")
 	}
 	return model, nil
-}
-
-func duplicateKey(err error) bool {
-	var mysqlErr *drivermysql.MySQLError
-	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }
 
 type installationStateModel struct {

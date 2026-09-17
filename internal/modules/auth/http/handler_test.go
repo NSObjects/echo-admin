@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
-	echomiddleware "github.com/labstack/echo/v5/middleware"
 	"golang.org/x/crypto/bcrypt"
 
 	accessdomain "github.com/NSObjects/echo-admin/internal/modules/access/domain"
@@ -146,19 +145,23 @@ func newTestEcho(t *testing.T) *echo.Echo {
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
-	e.Use(middlewares.RequestContext())
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	loginExemptions := []middlewares.RouteExemption{{Method: http.MethodPost, Path: "/api/auth/login"}}
-	sessionMiddleware, err := middlewares.LoginSession(middlewares.LoginSessionConfig{
-		CookieName:    middlewares.LoginSessionCookieName,
-		Exemptions:    loginExemptions,
-		Authenticator: sessionAuthenticator{auth: uc},
+	// Assemble through ApplyMiddlewares, the same interface production uses,
+	// so the login-session/CSRF pairing under test cannot drift from real
+	// installation.
+	err := middlewares.ApplyMiddlewares(e, &middlewares.MiddlewareConfig{
+		EnableRequestContext: true,
+		LoginSession: &middlewares.LoginSessionConfig{
+			CookieName:    authhttp.LoginSessionCookieName,
+			Exemptions:    loginExemptions,
+			Authenticator: sessionAuthenticator{auth: uc},
+		},
+		CSRF: authhttp.CSRFMiddlewareConfig(loginExemptions, false),
 	})
 	if err != nil {
-		t.Fatalf("LoginSession() error = %v", err)
+		t.Fatalf("ApplyMiddlewares() error = %v", err)
 	}
-	e.Use(sessionMiddleware)
-	e.Use(echomiddleware.CSRFWithConfig(middlewares.CSRFConfig(loginExemptions, false)))
 	authhttp.Register(e.Group("/api"), handler)
 	return e
 }
@@ -359,7 +362,7 @@ func (c *sessionClient) doJSON(t *testing.T, method, path, body string) *httptes
 		}
 		req.AddCookie(cookie)
 	}
-	if csrf, ok := c.cookies[middlewares.CSRFCookieName]; ok && unsafeMethod(method) {
+	if csrf, ok := c.cookies[authhttp.CSRFCookieName]; ok && unsafeMethod(method) {
 		req.Header.Set(echo.HeaderXCSRFToken, csrf.Value)
 	}
 	rec := httptest.NewRecorder()
@@ -387,19 +390,19 @@ func unsafeMethod(method string) bool {
 
 func assertLoginCookies(t *testing.T, client *sessionClient) {
 	t.Helper()
-	sessionCookie, ok := client.cookies[middlewares.LoginSessionCookieName]
+	sessionCookie, ok := client.cookies[authhttp.LoginSessionCookieName]
 	if !ok {
-		t.Fatalf("%s cookie missing", middlewares.LoginSessionCookieName)
+		t.Fatalf("%s cookie missing", authhttp.LoginSessionCookieName)
 	}
 	if !sessionCookie.HttpOnly {
-		t.Fatalf("%s HttpOnly = false, want true", middlewares.LoginSessionCookieName)
+		t.Fatalf("%s HttpOnly = false, want true", authhttp.LoginSessionCookieName)
 	}
-	csrfCookie, ok := client.cookies[middlewares.CSRFCookieName]
+	csrfCookie, ok := client.cookies[authhttp.CSRFCookieName]
 	if !ok {
-		t.Fatalf("%s cookie missing", middlewares.CSRFCookieName)
+		t.Fatalf("%s cookie missing", authhttp.CSRFCookieName)
 	}
 	if csrfCookie.HttpOnly {
-		t.Fatalf("%s HttpOnly = true, want false", middlewares.CSRFCookieName)
+		t.Fatalf("%s HttpOnly = true, want false", authhttp.CSRFCookieName)
 	}
 }
 

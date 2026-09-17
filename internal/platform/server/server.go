@@ -41,6 +41,8 @@ type Server struct {
 	apiKeyVerifier        middlewares.APIKeyVerifier
 	errorRecorder         middlewares.SystemErrorRecorder
 	sessionAuth           middlewares.LoginSessionAuthenticator
+	sessionCookieName     string
+	csrfConfig            middleware.CSRFConfig
 	installation          middlewares.InstallationStateReader
 	preInitRoutes         []middlewares.RouteExemption
 	unauthenticatedRoutes []middlewares.RouteExemption
@@ -103,6 +105,24 @@ func WithSystemErrorRecorder(recorder middlewares.SystemErrorRecorder) Option {
 func WithLoginSessionAuthenticator(authenticator middlewares.LoginSessionAuthenticator) Option {
 	return func(s *Server) {
 		s.sessionAuth = authenticator
+	}
+}
+
+// WithLoginSessionCookieName installs the login-session cookie name. The name
+// is Login Session domain policy declared by the auth module; the composition
+// root injects it so the read and write sides share one declaration.
+func WithLoginSessionCookieName(name string) Option {
+	return func(s *Server) {
+		s.sessionCookieName = name
+	}
+}
+
+// WithCSRFConfig installs the auth-owned Echo CSRF configuration. CSRF
+// activation still derives from login sessions: without an injected config
+// the CSRF middleware is not installed.
+func WithCSRFConfig(config middleware.CSRFConfig) Option {
+	return func(s *Server) {
+		s.csrfConfig = config
 	}
 }
 
@@ -200,6 +220,7 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 	var loginSession *middlewares.LoginSessionConfig
 	if s.sessionAuth != nil {
 		loginSession = &middlewares.LoginSessionConfig{
+			CookieName:    s.sessionCookieName,
 			Authenticator: s.sessionAuth,
 			Exemptions:    s.unauthenticatedRoutes,
 		}
@@ -217,7 +238,7 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 		APIKey:               apiKey,
 		InstallationGate:     installationGate,
 		LoginSession:         loginSession,
-		CSRF:                 middlewares.CSRFConfig(s.unauthenticatedRoutes, httpConfig.SecureCookies),
+		CSRF:                 s.csrfConfig,
 	}
 }
 

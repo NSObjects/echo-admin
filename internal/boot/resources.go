@@ -159,11 +159,6 @@ func (r *Resources) Close(ctx context.Context) error {
 	return r.status.Close(ctx)
 }
 
-// Shutdown releases every opened infrastructure resource.
-func (r *Resources) Shutdown(ctx context.Context) error {
-	return r.Close(ctx)
-}
-
 // Status returns server-facing capability status records.
 func (r *Resources) Status(ctx context.Context) []infraresources.CapabilityStatus {
 	if r == nil || r.status == nil {

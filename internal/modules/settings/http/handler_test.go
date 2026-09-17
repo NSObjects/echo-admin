@@ -261,7 +261,7 @@ func newSettingsEcho() (*echo.Echo, *settingsStore, *operationRecorder) {
 
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	settingshttp.Register(e.Group("/api"), handler)
 	return e, store, recorder
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/NSObjects/echo-admin/internal/platform/apperr"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpreq"
 	"github.com/NSObjects/echo-admin/internal/platform/server/httpresp"
-	"github.com/NSObjects/echo-admin/internal/platform/server/middlewares"
 )
 
 // Handler adapts auth HTTP requests to the auth usecase.
@@ -129,16 +128,16 @@ func handlerSetLoginCookies(c *echo.Context, output usecase.LoginOutput, secure 
 	if output.SessionToken == "" || output.SessionExpiresAt.IsZero() {
 		return apperr.New(apperr.ErrInternalServer, "login session was not created")
 	}
-	middlewares.SetLoginSessionCookie(c, output.SessionToken, output.SessionExpiresAt, secure)
-	csrfToken, err := middlewares.NewCSRFToken()
+	SetLoginSessionCookie(c, output.SessionToken, output.SessionExpiresAt, secure)
+	csrfToken, err := NewCSRFToken()
 	if err != nil {
 		return err
 	}
-	middlewares.SetCSRFCookie(c, csrfToken, output.SessionExpiresAt, secure)
+	SetCSRFCookie(c, csrfToken, output.SessionExpiresAt, secure)
 	return nil
 }
 
 func clearLoginCookies(c *echo.Context, secure bool) {
-	middlewares.ClearLoginSessionCookie(c, secure)
-	middlewares.ClearCSRFCookie(c, secure)
+	ClearLoginSessionCookie(c, secure)
+	ClearCSRFCookie(c, secure)
 }

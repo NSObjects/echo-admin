@@ -1,9 +1,8 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   DrawerForm,
   PageContainer,
   ProCard,
-  ProDescriptions,
   ProForm,
   ProFormSelect,
   ProFormSwitch,
@@ -11,16 +10,16 @@ import {
 } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
+  App,
   Avatar,
   Button,
   Checkbox,
-  createStyles,
+  Dropdown,
   Empty,
   Form,
   Input,
   message,
   Pagination,
-  Popconfirm,
   Space,
   Spin,
   Tabs,
@@ -28,6 +27,8 @@ import {
   Tree,
   Typography,
 } from 'antd';
+import { createStyles } from 'antd-style';
+import type { MenuProps } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -53,7 +54,7 @@ import {
   deriveButtonIDs,
   deriveMenuIDs,
 } from '@/utils/grant-derivation';
-import { toAntdTreeData } from '@/utils/menu-tree';
+import { toAntdTreeData, type AntdTreeNode } from '@/utils/menu-tree';
 
 type RoleFormValues = {
   parent_id: number;
@@ -186,19 +187,47 @@ const useStyles = createStyles(({ token, css }) => ({
     font-size: 13px;
     color: ${token.colorTextSecondary};
   `,
+  permMatrixWrap: css`
+    overflow-x: auto;
+  `,
+  permMatrix: css`
+    width: 100%;
+    border-collapse: collapse;
+    th,
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid ${token.colorSplit};
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    thead th {
+      color: ${token.colorTextSecondary};
+      font-weight: 500;
+    }
+    tbody tr:hover td {
+      background: ${token.colorFillQuaternary};
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+  `,
+  permMatrixCheck: css`
+    text-align: center;
+  `,
+  permMatrixEmpty: css`
+    text-align: center;
+    color: ${token.colorTextQuaternary};
+  `,
+  permMenuHint: css`
+    margin: 2px 0 0 24px;
+    font-size: 12px;
+    color: ${token.colorTextTertiary};
+  `,
 }));
-
-const methodColor: Record<string, string> = {
-  GET: 'blue',
-  POST: 'green',
-  PUT: 'gold',
-  PATCH: 'purple',
-  DELETE: 'red',
-};
 
 // 详情页签里分组 Tag 列表。
 const groupTags = (
-  groups: Map<string, { label: string; sub?: string }[]>,
+  groups: Map<string, { label: string }[]>,
 ): React.ReactNode[] =>
   [...groups.entries()].map(([group, items]) => (
     <Space
@@ -210,15 +239,13 @@ const groupTags = (
       <Typography.Text type="secondary">{group}</Typography.Text>
       <Space wrap size={[8, 8]}>
         {items.map((item) => (
-          <Tag key={item.label} color={item.sub}>
-            {item.label}
-          </Tag>
+          <Tag key={item.label}>{item.label}</Tag>
         ))}
       </Space>
     </Space>
   ));
 
-// 功能权限字段：按资源分组的卡片式勾选，是角色授权的单一控制面。
+// 操作权限字段：按资源分组的卡片式勾选，是角色授权的单一控制面。
 // 菜单可见性、按钮显示、API 放行均由此派生，卡片底部实时预览派生结果。
 const PermissionGroupsField = ({
   value = [],
@@ -233,77 +260,136 @@ const PermissionGroupsField = ({
   apis: APIResource[];
   menus: Menu[];
 }) => {
-  const groups = new Map<string, PermissionDefinition[]>();
+  const { styles } = useStyles();
+  // 资源 → (操作中文名 → 权限定义)，驱动"资源 × 操作"勾选矩阵。
+  const groups = new Map<string, Map<string, PermissionDefinition>>();
   for (const permission of permissions) {
-    const list = groups.get(permission.resource) ?? [];
-    list.push(permission);
-    groups.set(permission.resource, list);
+    const byAction = groups.get(permission.resource) ?? new Map();
+    byAction.set(permission.action, permission);
+    groups.set(permission.resource, byAction);
   }
-  const menuCount = deriveMenuIDs(value, menus).length;
+  // 操作列按常见顺序排列，目录新增的未知操作排在末尾，避免被静默隐藏。
+  const actionOrder = ['查看', '创建', '更新', '删除', '上传', '授权', '处理'];
+  const actionColumns = [...new Set(permissions.map((item) => item.action))].sort(
+    (a, b) => {
+      const rank = (action: string): number => {
+        const index = actionOrder.indexOf(action);
+        // 未知操作统一排在已知顺序之后，避免被静默隐藏。
+        return index === -1 ? actionOrder.length : index;
+      };
+      return rank(a) - rank(b);
+    },
+  );
+  // 实时预览派生结果：勾选时直接列出会开放的菜单名，让"操作 → 菜单"
+  // 的因果关系对配置者可见。
+  const grantedMenuIDs = new Set(deriveMenuIDs(value, menus));
+  const grantedMenuNames = menus
+    .filter((menu) => grantedMenuIDs.has(menu.id))
+    .map((menu) => menu.name);
+  const menuSummary =
+    grantedMenuNames.length > 6
+      ? `${grantedMenuNames.slice(0, 6).join('、')} 等 ${grantedMenuNames.length} 个`
+      : grantedMenuNames.join('、');
   const apiCount = deriveAPIIDs(value, apis).length;
+  // 资源 → 绑定菜单名：菜单绑定的 read token 决定勾"查看"后开放哪个菜单，
+  // 直接标注在矩阵行内，配置者不必到预览里反查。
+  const definitionByToken = new Map(
+    permissions.map((item) => [item.token, item]),
+  );
+  const menuByResource = new Map<string, string[]>();
+  for (const menu of menus) {
+    if (!menu.permission) {
+      continue;
+    }
+    const definition = definitionByToken.get(menu.permission);
+    if (!definition) {
+      continue;
+    }
+    const list = menuByResource.get(definition.resource) ?? [];
+    list.push(menu.name);
+    menuByResource.set(definition.resource, list);
+  }
   return (
     <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-      {[...groups.entries()].map(([resource, items]) => {
-        const tokens = items.map((item) => item.token);
-        const checkedCount = tokens.filter((token) =>
-          value.includes(token),
-        ).length;
-        return (
-          <div
-            key={resource}
-            style={{
-              border: '1px solid #f0f0f0',
-              borderRadius: 8,
-              padding: '8px 12px 10px',
-              background: '#fafafa',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <Typography.Text strong style={{ fontSize: 13 }}>
-                {resource}
-                <Typography.Text
-                  type="secondary"
-                  style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
-                >
-                  {items.length} 项
-                </Typography.Text>
-              </Typography.Text>
-              <Checkbox
-                checked={checkedCount === tokens.length}
-                indeterminate={checkedCount > 0 && checkedCount < tokens.length}
-                onChange={(event) => {
-                  const next = event.target.checked
-                    ? [...new Set([...value, ...tokens])]
-                    : value.filter((token) => !tokens.includes(token));
-                  onChange?.(next);
-                }}
-              >
-                全选
-              </Checkbox>
-            </div>
-            <Checkbox.Group
-              style={{ display: 'flex', flexWrap: 'wrap', columnGap: 16 }}
-              value={value.filter((token) => tokens.includes(token))}
-              options={items.map((item) => ({
-                label: item.name,
-                value: item.token,
-              }))}
-              onChange={(next) => {
-                const others = value.filter((token) => !tokens.includes(token));
-                onChange?.([...others, ...next]);
-              }}
-            />
-          </div>
-        );
-      })}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        当前选择将自动授权 {menuCount} 个菜单、{apiCount} 条受管 API。
+        勾选"查看"后开放该行标注的菜单；创建、更新、删除等操作只控制页面按钮与
+        API 放行。
+      </Typography.Text>
+      <div className={styles.permMatrixWrap}>
+        <table className={styles.permMatrix}>
+          <thead>
+            <tr>
+              <th>资源</th>
+              {actionColumns.map((action) => (
+                <th key={action} className={styles.permMatrixCheck}>
+                  {action}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...groups.entries()].map(([resource, byAction]) => {
+              const tokens = [...byAction.values()].map((item) => item.token);
+              const checkedCount = tokens.filter((token) =>
+                value.includes(token),
+              ).length;
+              const boundMenus = menuByResource.get(resource);
+              return (
+                <tr key={resource}>
+                  <td>
+                    <Checkbox
+                      checked={checkedCount === tokens.length}
+                      indeterminate={
+                        checkedCount > 0 && checkedCount < tokens.length
+                      }
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? [...new Set([...value, ...tokens])]
+                          : value.filter((token) => !tokens.includes(token));
+                        onChange?.(next);
+                      }}
+                    >
+                      {resource}
+                    </Checkbox>
+                    {boundMenus && boundMenus.length > 0 && (
+                      <div className={styles.permMenuHint}>
+                        菜单：{boundMenus.join('、')}
+                      </div>
+                    )}
+                  </td>
+                  {actionColumns.map((action) => {
+                    const item = byAction.get(action);
+                    if (!item) {
+                      return (
+                        <td key={action} className={styles.permMatrixEmpty}>
+                          —
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={action} className={styles.permMatrixCheck}>
+                        <Checkbox
+                          checked={value.includes(item.token)}
+                          onChange={(event) => {
+                            onChange?.(
+                              event.target.checked
+                                ? [...value, item.token]
+                                : value.filter((token) => token !== item.token),
+                            );
+                          }}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        将开放菜单：{menuSummary || '仅默认工作台'}；放行 {apiCount} 条受管
+        API。
       </Typography.Text>
     </Space>
   );
@@ -312,6 +398,7 @@ const PermissionGroupsField = ({
 const Roles: React.FC = () => {
   const access = useAccess();
   const { styles } = useStyles();
+  const { modal } = App.useApp();
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
   const [selectedRoleID, setSelectedRoleID] = useState<number>();
@@ -399,17 +486,14 @@ const Roles: React.FC = () => {
 
   const roleName = (roleID: number) =>
     roles.find((role) => role.id === roleID)?.name ?? `#${roleID}`;
-  const apiByID = useMemo(
-    () => new Map(apis.map((api) => [api.id, api])),
-    [apis],
-  );
   const permissionByToken = useMemo(
     () =>
       new Map(permissions.map((permission) => [permission.token, permission])),
     [permissions],
   );
 
-  // 功能权限页签分组：只展示该角色已持有的 token。
+  // 操作权限页签分组：只展示该角色已持有的 token；name 与 token 相同时
+  // 只显示一份，避免出现 "admin:read (admin:read)" 这类重复占位。
   const grantedPermissionGroups = useMemo(() => {
     const groups = new Map<string, { label: string }[]>();
     if (!selectedRole) {
@@ -420,32 +504,29 @@ const Roles: React.FC = () => {
       const key = permission?.resource ?? 'other';
       const options = groups.get(key) ?? [];
       options.push({
-        label: permission ? `${permission.name} (${token})` : token,
+        label:
+          permission && permission.name !== token
+            ? `${permission.name} (${token})`
+            : (permission?.name ?? token),
       });
       groups.set(key, options);
     }
     return groups;
   }, [selectedRole, permissionByToken]);
 
-  const grantedAPIGroups = useMemo(() => {
-    const groups = new Map<string, { label: string; sub: string }[]>();
-    if (!selectedRole) {
-      return groups;
-    }
-    for (const apiID of selectedRole.api_ids) {
-      const api = apiByID.get(apiID);
-      const key = api?.group ?? 'other';
-      const options = groups.get(key) ?? [];
-      options.push({
-        label: `${api?.description ?? api?.path ?? `#${apiID}`} (${api?.method ?? ''} ${api?.path ?? ''})`,
-        sub: methodColor[api?.method ?? ''] ?? 'default',
-      });
-      groups.set(key, options);
-    }
-    return groups;
-  }, [selectedRole, apiByID]);
-
-  const menuTreeData = useMemo(() => toAntdTreeData(menus), [menus]);
+  // 菜单树展示：name 即后端中文名；勾选框只用于呈现授权结果，
+  // 禁用交互避免"点不动"的假按钮感。
+  const menuTreeData = useMemo(() => {
+    const decorate = (
+      nodes: AntdTreeNode[],
+    ): (AntdTreeNode & { disableCheckbox: true })[] =>
+      nodes.map((node) => ({
+        ...node,
+        disableCheckbox: true,
+        children: decorate(node.children),
+      }));
+    return decorate(toAntdTreeData(menus));
+  }, [menus]);
   const parentRoleOptions = [
     { label: '顶级角色', value: 0 },
     ...roles
@@ -494,11 +575,18 @@ const Roles: React.FC = () => {
           default_path: '/dashboard',
         };
 
+  // 页头操作：编辑是高频主操作；复制、删除是低频操作，收进「更多」下拉。
+  const moreMenuItems: MenuProps['items'] = [
+    access.canRoleCreate ? { key: 'copy', label: '复制角色' } : null,
+    access.canRoleDelete
+      ? { key: 'delete', label: '删除角色', danger: true }
+      : null,
+  ].filter(Boolean);
+
   const headerActions = selectedRole ? (
     <Space>
       {access.canRoleUpdate ? (
         <Button
-          key="edit"
           type="primary"
           onClick={() => {
             setCopying(undefined);
@@ -509,33 +597,36 @@ const Roles: React.FC = () => {
           编辑
         </Button>
       ) : null}
-      {access.canRoleCreate ? (
-        <Button
-          key="copy"
-          onClick={() => {
-            setEditing(undefined);
-            setCopying(selectedRole);
-            setDrawerOpen(true);
+      {moreMenuItems && moreMenuItems.length > 0 ? (
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: moreMenuItems,
+            onClick: ({ key }) => {
+              if (key === 'copy') {
+                setEditing(undefined);
+                setCopying(selectedRole);
+                setDrawerOpen(true);
+                return;
+              }
+              if (key === 'delete') {
+                modal.confirm({
+                  title: '删除角色',
+                  content: `确认删除 ${selectedRole.name}？`,
+                  okText: '删除',
+                  okButtonProps: { danger: true },
+                  onOk: async () => {
+                    await deleteRole(selectedRole.id);
+                    message.success('角色已删除');
+                    await loadRoles();
+                  },
+                });
+              }
+            },
           }}
         >
-          复制
-        </Button>
-      ) : null}
-      {access.canRoleDelete ? (
-        <Popconfirm
-          key="delete"
-          title="删除角色"
-          description={`确认删除 ${selectedRole.name}？`}
-          okText="删除"
-          okButtonProps={{ danger: true }}
-          onConfirm={async () => {
-            await deleteRole(selectedRole.id);
-            message.success('角色已删除');
-            await loadRoles();
-          }}
-        >
-          <Button danger>删除</Button>
-        </Popconfirm>
+          <Button icon={<MoreOutlined />} />
+        </Dropdown>
       ) : null}
     </Space>
   ) : undefined;
@@ -543,12 +634,18 @@ const Roles: React.FC = () => {
   return (
     <PageContainer title="角色权限">
       <ProCard gutter={[24, 24]} wrap>
-        <ProCard
-          className="roles-list-card"
-          colSpan={{ xs: 24, lg: 8, xxl: 8 }}
-          title={`角色（${roles.length}）`}
-          extra={
-            access.canRoleCreate ? (
+        <ProCard colSpan={{ xs: 24, lg: 8, xxl: 8 }}>
+          <div className={styles.toolbar}>
+            <Input.Search
+              allowClear
+              placeholder="搜索角色名称或编码"
+              style={{ flex: 1 }}
+              onChange={(event) => {
+                setKeyword(event.target.value);
+                setListPage(1);
+              }}
+            />
+            {access.canRoleCreate ? (
               <Button
                 key="create"
                 type="primary"
@@ -561,267 +658,227 @@ const Roles: React.FC = () => {
               >
                 新增
               </Button>
-            ) : undefined
-          }
-        >
-          <Input.Search
-            allowClear
-            placeholder="搜索角色名称或编码"
-            style={{ marginBottom: 12 }}
-            onChange={(event) => setKeyword(event.target.value)}
-          />
+            ) : null}
+          </div>
           <Spin spinning={rolesLoading}>
-            <ProList<Role>
-              rowKey="id"
-              dataSource={filteredRoles}
-              split={false}
-              rowSelection={{
-                type: 'radio',
-                selectedRowKeys:
-                  selectedRoleID !== undefined ? [selectedRoleID] : [],
-                onChange: (keys) => setSelectedRoleID(Number(keys[0])),
-              }}
-              onItem={(record) => ({
-                onClick: () => setSelectedRoleID(record.id),
-              })}
-              metas={{
-                avatar: {
-                  render: (_, record) => (
-                    <Avatar style={{ backgroundColor: avatarColor(record.id) }}>
-                      {record.name.slice(0, 1)}
-                    </Avatar>
-                  ),
-                },
-                title: {
-                  render: (_, record) => (
-                    <Typography.Text strong>{record.name}</Typography.Text>
-                  ),
-                },
-                subTitle: {
-                  render: (_, record) => (
-                    <Tag color={record.active ? 'green' : 'default'}>
-                      {record.active ? '启用' : '停用'}
-                    </Tag>
-                  ),
-                },
-                description: {
-                  render: (_, record) => (
-                    <Typography.Text
-                      type="secondary"
-                      style={{ fontSize: 12 }}
-                      ellipsis
+            {pagedRoles.length > 0 ? (
+              <div className={styles.roleList}>
+                {pagedRoles.map((role) => (
+                  <div
+                    key={role.id}
+                    className={
+                      role.id === selectedRoleID
+                        ? `${styles.roleItem} ${styles.roleItemActive}`
+                        : styles.roleItem
+                    }
+                    onClick={() => setSelectedRoleID(role.id)}
+                  >
+                    <Avatar
+                      size={36}
+                      style={{
+                        backgroundColor: avatarColor(role.id),
+                        flexShrink: 0,
+                      }}
                     >
-                      {record.code}
-                    </Typography.Text>
-                  ),
-                },
-              }}
-              pagination={{
-                pageSize: 8,
-                size: 'small',
-                simple: true,
-                hideOnSinglePage: true,
-              }}
-            />
+                      {role.name.slice(0, 1)}
+                    </Avatar>
+                    <div className={styles.roleItemMain}>
+                      <div className={styles.roleItemTitle}>
+                        <span>{role.name}</span>
+                        <Tag
+                          color={role.active ? 'green' : 'default'}
+                          style={{ marginRight: 0, fontWeight: 400 }}
+                        >
+                          {role.active ? '启用' : '停用'}
+                        </Tag>
+                      </div>
+                      <div className={styles.roleItemCode}>{role.code}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="没有匹配的角色"
+              />
+            )}
+            {filteredRoles.length > listPageSize ? (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  marginTop: 12,
+                }}
+              >
+                <Pagination
+                  simple
+                  size="small"
+                  pageSize={listPageSize}
+                  current={listPage}
+                  total={filteredRoles.length}
+                  onChange={setListPage}
+                />
+              </div>
+            ) : null}
           </Spin>
         </ProCard>
-        <ProCard
-          colSpan={{ xs: 24, lg: 16, xxl: 16 }}
-          title={
-            selectedRole ? (
-              <Space>
+        <ProCard colSpan={{ xs: 24, lg: 16, xxl: 16 }}>
+          {selectedRole ? (
+            <>
+              <div className={styles.detailHeader}>
                 <Avatar
-                  size="small"
-                  style={{ backgroundColor: avatarColor(selectedRole.id) }}
+                  size={44}
+                  style={{
+                    backgroundColor: avatarColor(selectedRole.id),
+                    flexShrink: 0,
+                  }}
                 >
                   {selectedRole.name.slice(0, 1)}
                 </Avatar>
-                <span>{selectedRole.name}</span>
-              </Space>
-            ) : (
-              '角色详情'
-            )
-          }
-          extra={headerActions}
-          tabs={{
-            items: [
-              {
-                key: 'overview',
-                label: '概览',
-                children: selectedRole ? (
-                  <Space
-                    direction="vertical"
-                    size={16}
-                    style={{ display: 'flex' }}
-                  >
-                    <StatisticCard.Group>
-                      <StatisticCard
-                        statistic={{
-                          title: '功能权限',
-                          value: selectedRole.permissions.length,
-                        }}
-                      />
-                      <StatisticCard.Divider />
-                      <StatisticCard
-                        statistic={{
-                          title: '可见菜单',
-                          value: selectedRole.menu_ids.length,
-                          description: `${selectedRole.button_ids.length} 个菜单按钮`,
-                        }}
-                      />
-                      <StatisticCard.Divider />
-                      <StatisticCard
-                        statistic={{
-                          title: 'API 授权',
-                          value: selectedRole.api_ids.length,
-                        }}
-                      />
-                      <StatisticCard.Divider />
-                      <StatisticCard
-                        statistic={{
-                          title: '数据角色',
-                          value: selectedRole.data_role_ids.length,
-                        }}
-                      />
-                    </StatisticCard.Group>
-                    <ProDescriptions<Role>
-                      column={2}
-                      dataSource={selectedRole}
-                      columns={[
-                        {
-                          title: '状态',
-                          dataIndex: 'active',
-                          render: (_, role) => (
-                            <Tag color={role.active ? 'green' : 'default'}>
-                              {role.active ? '启用' : '停用'}
-                            </Tag>
-                          ),
-                        },
-                        {
-                          title: '上级角色',
-                          dataIndex: 'parent_id',
-                          render: (_, role) =>
-                            role.parent_id === 0
-                              ? '顶级角色'
-                              : roleName(role.parent_id),
-                        },
-                        { title: '默认入口', dataIndex: 'default_path' },
-                        { title: '编码', dataIndex: 'code' },
-                      ]}
-                    />
-                  </Space>
-                ) : (
-                  <Empty description="选择左侧角色查看授权详情" />
-                ),
-              },
-              {
-                key: 'menus',
-                label: '菜单权限',
-                children: selectedRole ? (
-                  <Space
-                    direction="vertical"
-                    size={8}
-                    style={{ display: 'flex' }}
-                  >
-                    <Tree
-                      checkable
-                      checkedKeys={selectedRole.menu_ids}
-                      treeData={menuTreeData}
-                      defaultExpandAll
-                    />
-                    <Typography.Text type="secondary">
-                      菜单授权由功能权限自动派生，点击「编辑」调整功能权限。
-                    </Typography.Text>
-                  </Space>
-                ) : (
-                  <Empty description="选择左侧角色查看菜单授权" />
-                ),
-              },
-              {
-                key: 'permissions',
-                label: '功能权限',
-                children: selectedRole ? (
-                  grantedPermissionGroups.size > 0 ? (
-                    <Space
-                      direction="vertical"
-                      size={12}
-                      style={{ display: 'flex' }}
+                <div className={styles.detailMeta}>
+                  <div className={styles.detailTitle}>
+                    <span>{selectedRole.name}</span>
+                    <Tag
+                      color={selectedRole.active ? 'green' : 'default'}
+                      style={{ marginRight: 0, fontWeight: 400 }}
                     >
-                      {groupTags(grantedPermissionGroups)}
-                    </Space>
-                  ) : (
-                    <Empty description="该角色没有功能权限" />
-                  )
-                ) : (
-                  <Empty description="选择左侧角色查看功能权限" />
-                ),
-              },
-              {
-                key: 'apis',
-                label: 'API 权限',
-                children: selectedRole ? (
-                  grantedAPIGroups.size > 0 ? (
-                    <Space
-                      direction="vertical"
-                      size={12}
-                      style={{ display: 'flex' }}
-                    >
-                      {groupTags(grantedAPIGroups)}
-                    </Space>
-                  ) : (
-                    <Empty description="该角色没有 API 授权" />
-                  )
-                ) : (
-                  <Empty description="选择左侧角色查看 API 授权" />
-                ),
-              },
-              {
-                key: 'members',
-                label: '成员',
-                children: selectedRole ? (
-                  <Space
-                    direction="vertical"
-                    size={12}
-                    style={{ display: 'flex' }}
+                      {selectedRole.active ? '启用' : '停用'}
+                    </Tag>
+                  </div>
+                  <Typography.Text
+                    type="secondary"
+                    style={{ fontSize: 13 }}
+                    ellipsis
                   >
-                    {canManageMembers ? (
-                      <Button
-                        onClick={() => {
-                          setMemberTarget({
-                            role: selectedRole,
-                            admin_ids: memberIDs,
-                          });
-                        }}
+                    {selectedRole.code}
+                    {' · 上级角色：'}
+                    {selectedRole.parent_id === 0
+                      ? '顶级角色'
+                      : roleName(selectedRole.parent_id)}
+                    {' · 默认入口 '}
+                    {selectedRole.default_path}
+                  </Typography.Text>
+                </div>
+                {headerActions}
+              </div>
+              <div className={styles.statRow}>
+                {[
+                  {
+                    label: '操作权限',
+                    value: selectedRole.permissions.length,
+                  },
+                  { label: '可见菜单', value: selectedRole.menu_ids.length },
+                  { label: 'API 放行', value: selectedRole.api_ids.length },
+                  {
+                    label: '数据角色',
+                    value: selectedRole.data_role_ids.length,
+                  },
+                ].map((item) => (
+                  <div key={item.label} className={styles.statItem}>
+                    <div className={styles.statValue}>{item.value}</div>
+                    <div className={styles.statLabel}>{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              <Tabs
+                items={[
+                  {
+                    key: 'permissions',
+                    label: '操作权限',
+                    children: (
+                      <Space
+                        direction="vertical"
+                        size={12}
+                        style={{ display: 'flex' }}
                       >
-                        编辑成员
-                      </Button>
-                    ) : null}
-                    {memberIDs.length > 0 ? (
-                      <Space wrap size={[8, 8]}>
-                        {memberIDs.map((adminID) => {
-                          const admin = admins.find(
-                            (candidate) => candidate.id === adminID,
-                          );
-                          return (
-                            <Tag key={adminID} color="blue">
-                              {admin
-                                ? `${admin.display_name} (${admin.username})`
-                                : `#${adminID}`}
-                            </Tag>
-                          );
-                        })}
+                        <Typography.Text type="secondary">
+                          按资源勾选角色可执行的操作；菜单、按钮与 API
+                          放行由此自动生成。
+                        </Typography.Text>
+                        {grantedPermissionGroups.size > 0 ? (
+                          groupTags(grantedPermissionGroups)
+                        ) : (
+                          <Empty description="该角色没有操作权限" />
+                        )}
                       </Space>
-                    ) : (
-                      <Empty description="该角色暂无成员" />
-                    )}
-                  </Space>
-                ) : (
-                  <Empty description="选择左侧角色查看成员" />
-                ),
-              },
-            ],
-          }}
-        />
+                    ),
+                  },
+                  {
+                    key: 'menus',
+                    label: '可见菜单',
+                    children: (
+                      <Space
+                        direction="vertical"
+                        size={8}
+                        style={{ display: 'flex' }}
+                      >
+                        <Typography.Text type="secondary">
+                          以下菜单由操作权限自动开放，点击「编辑」调整操作权限。
+                        </Typography.Text>
+                        <Tree
+                          key={`menu-tree-${menus.length}`}
+                          checkable
+                          selectable={false}
+                          checkedKeys={selectedRole.menu_ids}
+                          treeData={menuTreeData}
+                          defaultExpandAll
+                        />
+                      </Space>
+                    ),
+                  },
+                  {
+                    key: 'members',
+                    label: '成员',
+                    children: (
+                      <Space
+                        direction="vertical"
+                        size={12}
+                        style={{ display: 'flex' }}
+                      >
+                        {canManageMembers ? (
+                          <Button
+                            onClick={() => {
+                              setMemberTarget({
+                                role: selectedRole,
+                                admin_ids: memberIDs,
+                              });
+                            }}
+                          >
+                            编辑成员
+                          </Button>
+                        ) : null}
+                        {memberIDs.length > 0 ? (
+                          <Space wrap size={[8, 8]}>
+                            {memberIDs.map((adminID) => {
+                              const admin = admins.find(
+                                (candidate) => candidate.id === adminID,
+                              );
+                              return (
+                                <Tag key={adminID} color="blue">
+                                  {admin
+                                    ? `${admin.display_name} (${admin.username})`
+                                    : `#${adminID}`}
+                                </Tag>
+                              );
+                            })}
+                          </Space>
+                        ) : (
+                          <Empty description="该角色暂无成员" />
+                        )}
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          ) : (
+            <Empty
+              description="选择左侧角色查看授权详情"
+              style={{ padding: '96px 0' }}
+            />
+          )}
+        </ProCard>
       </ProCard>
       <DrawerForm<RoleFormValues>
         key={
@@ -844,7 +901,7 @@ const Roles: React.FC = () => {
         drawerProps={{ destroyOnHidden: true }}
         initialValues={formInitialValues}
         onFinish={async (values) => {
-          // 功能权限是单一控制面：菜单/按钮/API 授权全部由 token 派生，
+          // 操作权限是单一控制面：菜单/按钮/API 授权全部由 token 派生，
           // 勾一处即同时决定菜单可见、按钮显示和后端路由放行。
           const menu_ids = deriveMenuIDs(values.permissions, menus);
           const api_ids = deriveAPIIDs(values.permissions, apis);
@@ -931,16 +988,16 @@ const Roles: React.FC = () => {
         </ProForm.Group>
         {copying ? (
           <Typography.Text type="secondary">
-            功能权限、菜单、API、按钮和数据角色授权将从源角色「{copying.name}
+            操作权限及由此生成的菜单、API、按钮和数据角色授权将从源角色「{copying.name}
             」复制。
           </Typography.Text>
         ) : (
           <>
             <Form.Item
               name="permissions"
-              label="功能权限"
+              label="操作权限"
               required
-              tooltip="勾选后自动派生菜单可见性、按钮显示和 API 放行，无需分别配置"
+              tooltip="勾选后自动生成菜单可见性、按钮显示和 API 放行，无需分别配置"
             >
               <PermissionGroupsField
                 permissions={permissions}

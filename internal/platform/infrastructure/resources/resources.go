@@ -47,7 +47,7 @@ func (r *Resources) Status(ctx context.Context) []CapabilityStatus {
 
 // Ready returns an error when any enabled component is unavailable.
 func (r *Resources) Ready(ctx context.Context) error {
-	return ReadyError(r.Status(ctx))
+	return readyError(r.Status(ctx))
 }
 
 // Close closes each component and returns capability-scoped shutdown failures.

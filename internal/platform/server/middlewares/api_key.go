@@ -35,9 +35,9 @@ type APIKeyConfig struct {
 	Verifier APIKeyVerifier
 }
 
-// APIKey creates middleware that authenticates requests carrying an API token.
+// apiKey creates middleware that authenticates requests carrying an API token.
 // An empty Header falls back to APIKeyHeader.
-func APIKey(config APIKeyConfig) (echo.MiddlewareFunc, error) {
+func apiKey(config APIKeyConfig) (echo.MiddlewareFunc, error) {
 	if config.Verifier == nil {
 		return nil, errors.New("api key verifier is required when api key authentication is installed")
 	}

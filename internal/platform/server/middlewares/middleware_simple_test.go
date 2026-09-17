@@ -23,10 +23,15 @@ import (
 
 const testRequestID = "req-123"
 
+// testSessionCookieName keeps the middleware tests name-agnostic: the real
+// cookie name is Login Session domain policy injected by the composition
+// root, so the middleware only sees whatever name its config carries.
+const testSessionCookieName = "test_session"
+
 func TestInstallationGateBlocksPrivateRoutesWhenUninitialized(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
-	gate, err := InstallationGate(InstallationGateConfig{
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
+	gate, err := installationGate(InstallationGateConfig{
 		Reader: &installationStateReader{initialized: false},
 	})
 	if err != nil {
@@ -63,9 +68,9 @@ func TestInstallationGateSkipsExemptRoutes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
-			e.HTTPErrorHandler = ErrorHandler
+			e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 			reader := &installationStateReader{initialized: false}
-			gate, err := InstallationGate(InstallationGateConfig{
+			gate, err := installationGate(InstallationGateConfig{
 				Reader:     reader,
 				Exemptions: []RouteExemption{tt.exemption},
 			})
@@ -91,9 +96,9 @@ func TestInstallationGateSkipsExemptRoutes(t *testing.T) {
 
 func TestInstallationGateAllowsPrivateRoutesAfterInitialization(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	reader := &installationStateReader{initialized: true}
-	gate, err := InstallationGate(InstallationGateConfig{
+	gate, err := installationGate(InstallationGateConfig{
 		Reader: reader,
 	})
 	if err != nil {
@@ -116,9 +121,9 @@ func TestInstallationGateAllowsPrivateRoutesAfterInitialization(t *testing.T) {
 
 func TestInstallationGateExemptionMatchesMethodExactly(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	reader := &installationStateReader{initialized: false}
-	gate, err := InstallationGate(InstallationGateConfig{
+	gate, err := installationGate(InstallationGateConfig{
 		Reader:     reader,
 		Exemptions: []RouteExemption{{Method: http.MethodPost, Path: "/api/setup"}},
 	})
@@ -147,7 +152,7 @@ func TestInstallationGateExemptionMatchesMethodExactly(t *testing.T) {
 }
 
 func TestInstallationGateRequiresReader(t *testing.T) {
-	gate, err := InstallationGate(InstallationGateConfig{})
+	gate, err := installationGate(InstallationGateConfig{})
 
 	assert.Error(t, err)
 	assert.Nil(t, gate)
@@ -171,7 +176,7 @@ func TestApplyMiddlewaresRejectsNilConfig(t *testing.T) {
 
 func TestInstallationGateRunsBeforeAPIKeyAuthentication(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	verifier := &countingAPIKeyVerifier{}
 	config := &MiddlewareConfig{
 		InstallationGate: &InstallationGateConfig{
@@ -203,14 +208,14 @@ func TestInstallationGateRunsBeforeAPIKeyAuthentication(t *testing.T) {
 
 func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	config := &MiddlewareConfig{
 		APIKey: &APIKeyConfig{
 			Header:   APIKeyHeader,
 			Verifier: staticAPIKeyVerifier{},
 		},
 		LoginSession: &LoginSessionConfig{
-			CookieName:    LoginSessionCookieName,
+			CookieName:    testSessionCookieName,
 			Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 9, UserID: 99, RoleID: 9}},
 		},
 	}
@@ -234,38 +239,14 @@ func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
-// TestLoginSessionRunsBeforeCSRFProtection locks the last link of the
-// authentication order. A valid session cookie plus an unsafe method without
-// a CSRF header can only be rejected when the login-session middleware runs
-// first and writes the LoginSessionID that keeps the CSRF skipper active; if
-// CSRF ran first the skipper would see no session and the request would pass.
-func TestLoginSessionRunsBeforeCSRFProtection(t *testing.T) {
-	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
-	config := &MiddlewareConfig{
-		LoginSession: &LoginSessionConfig{
-			CookieName:    LoginSessionCookieName,
-			Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 9, UserID: 99, RoleID: 9}},
-		},
-		CSRF: CSRFConfig(nil, false),
-	}
-
-	assert.NoError(t, ApplyMiddlewares(e, config))
-	e.POST("/private", func(c *echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodPost, "/private", nil)
-	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
+// TestLoginSessionRunsBeforeCSRFProtection and the CSRF unsafe-request
+// protection test live in the auth module: CSRF configuration and its skipper
+// are Login Session domain policy owned by authhttp, so the discriminating
+// assembly test needs both packages' real artifacts.
 
 func TestAPIKeyAuthenticationRejectsInvalidToken(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	config := &MiddlewareConfig{
 		APIKey: &APIKeyConfig{
 			Header:   APIKeyHeader,
@@ -288,7 +269,7 @@ func TestAPIKeyAuthenticationRejectsInvalidToken(t *testing.T) {
 
 func TestRequestLoggerPreservesRenderedApplicationErrorStatus(t *testing.T) {
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	config := &MiddlewareConfig{EnableLogger: true}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
@@ -432,7 +413,7 @@ func TestRequestLoggerOmitsTraceMetadataWithoutActiveSpan(t *testing.T) {
 
 func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
 	sessionMiddleware, err := LoginSession(LoginSessionConfig{
-		CookieName: LoginSessionCookieName,
+		CookieName: testSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{
 			SessionID: 123,
 			UserID:    123,
@@ -460,7 +441,7 @@ func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName, Value: "opaque-token"})
 	rec := httptest.NewRecorder()
 
 	e.ServeHTTP(rec, req)
@@ -470,7 +451,7 @@ func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
 
 func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
 	sessionMiddleware, err := LoginSession(LoginSessionConfig{
-		CookieName:    LoginSessionCookieName,
+		CookieName:    testSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{err: apperr.NewUnauthorized()},
 	})
 	if err != nil {
@@ -478,7 +459,7 @@ func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	e.Use(RequestContext())
 	e.Use(sessionMiddleware)
 	e.GET("/me", func(c *echo.Context) error {
@@ -487,7 +468,7 @@ func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName, Value: "opaque-token"})
 	rec := httptest.NewRecorder()
 
 	e.ServeHTTP(rec, req)
@@ -498,7 +479,7 @@ func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
 
 func TestLoginSessionMissingCookieReturnsGenericUnauthorized(t *testing.T) {
 	sessionMiddleware, err := LoginSession(LoginSessionConfig{
-		CookieName:    LoginSessionCookieName,
+		CookieName:    testSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
 	})
 	if err != nil {
@@ -506,7 +487,7 @@ func TestLoginSessionMissingCookieReturnsGenericUnauthorized(t *testing.T) {
 	}
 
 	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 	e.Use(RequestContext())
 	e.Use(sessionMiddleware)
 	e.GET("/me", func(c *echo.Context) error {
@@ -522,36 +503,10 @@ func TestLoginSessionMissingCookieReturnsGenericUnauthorized(t *testing.T) {
 	assertErrorPayload(t, rec, apperr.ErrUnauthorized, "unauthorized")
 }
 
-func TestCSRFProtectsLoginSessionUnsafeRequests(t *testing.T) {
-	e := echo.New()
-	e.HTTPErrorHandler = ErrorHandler
-	e.Use(RequestContext())
-	sessionMiddleware, err := LoginSession(LoginSessionConfig{
-		CookieName:    LoginSessionCookieName,
-		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
-	})
-	if err != nil {
-		t.Fatalf("LoginSession() error = %v", err)
-	}
-	e.Use(sessionMiddleware)
-	e.Use(middleware.CSRFWithConfig(CSRFConfig(nil, false)))
-	e.POST("/change", func(c *echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodPost, "/change", nil)
-	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
 func TestErrorRecovery(t *testing.T) {
 	e := echo.New()
-	e.Use(ErrorRecovery())
-	e.HTTPErrorHandler = ErrorHandler
+	e.Use(errorRecovery())
+	e.HTTPErrorHandler = ErrorHandlerWithRecorder(nil)
 
 	// 创建一个会panic的路由
 	e.GET("/panic", func(_ *echo.Context) error {
@@ -699,7 +654,7 @@ func TestErrorHandlerSkipsCommittedResponse(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.Response().WriteHeader(http.StatusAccepted)
 
-	ErrorHandler(c, errors.New("late error after response"))
+	ErrorHandlerWithRecorder(nil)(c, errors.New("late error after response"))
 
 	assert.Equal(t, http.StatusAccepted, rec.Code)
 	assert.Empty(t, rec.Body.String())
@@ -838,7 +793,7 @@ func assertErrorHandlerNormalizes(
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	ErrorHandler(c, err)
+	handleError(c, err, nil)
 
 	assert.Equal(t, wantStatus, rec.Code)
 	assertErrorPayload(t, rec, wantCode, wantMsg)
@@ -846,7 +801,7 @@ func assertErrorHandlerNormalizes(
 
 func TestLoginSessionConfig(t *testing.T) {
 	config := LoginSessionConfig{
-		CookieName:    LoginSessionCookieName,
+		CookieName:    testSessionCookieName,
 		Exemptions:    []RouteExemption{{Method: http.MethodGet, Path: "/api/health"}},
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
 	}

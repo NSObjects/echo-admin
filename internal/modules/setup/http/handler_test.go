@@ -98,7 +98,7 @@ func TestSubmitRendersUsecaseConflict(t *testing.T) {
 func newEcho() (*echo.Echo, *setupUsecaseSpy) {
 	e := echo.New()
 	e.Validator = &middlewares.Validator{Validator: validator.New()}
-	e.HTTPErrorHandler = middlewares.ErrorHandler
+	e.HTTPErrorHandler = middlewares.ErrorHandlerWithRecorder(nil)
 	uc := &setupUsecaseSpy{}
 	setuphttp.Register(e.Group("/api"), setuphttp.New(uc))
 	return e, uc
