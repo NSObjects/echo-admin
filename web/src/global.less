@@ -95,3 +95,25 @@ ol {
     }
   }
 }
+
+// antd v6 移除了以下组件的默认间距，导致描述表字段名与值、页签与内容、
+// 统计卡标题与数值全部贴死；管理后台信息密度高，这里补回呼吸空间。
+// 双类选择器提升特异性，覆盖 antd v6 运行时注入的同名单类规则。
+.ant-descriptions .ant-descriptions-item-label {
+  padding-inline-end: 12px;
+}
+
+// antd v6 运行时注入的 tabs 规则带 cssinjs hash 类（三类特异性），
+// 这里用 body 前缀提到 (0,3,1) 才能赢回页签与内容的间距。
+body .ant-tabs.ant-tabs-top > .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.ant-statistic .ant-statistic-title {
+  margin-bottom: 6px;
+}
+
+// 角色列表用 radio 单选驱动详情，“已选择 1 项”提示是噪音，隐藏。
+.roles-list-card .ant-pro-table-alert {
+  display: none;
+}

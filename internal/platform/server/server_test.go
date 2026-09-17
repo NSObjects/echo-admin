@@ -74,12 +74,12 @@ func TestServerMiddlewareConfig(t *testing.T) {
 	assert.True(t, config.EnableLogger)
 	assert.True(t, config.EnableGzip)
 	assert.False(t, config.EnableCORS)
-	assert.False(t, config.EnableLoginSession)
-	assert.NotNil(t, config.LoginSession)
-	assert.False(t, config.EnableCSRF)
+	assert.Nil(t, config.APIKey)
+	assert.Nil(t, config.InstallationGate)
+	assert.Nil(t, config.LoginSession)
 }
 
-func TestServerMiddlewareConfigEnablesLoginSessionFromAuthenticator(t *testing.T) {
+func TestServerMiddlewareConfigInstallsLoginSessionFromAuthenticator(t *testing.T) {
 	server := &Server{
 		port:        ":9322",
 		appConfig:   configs.Config{},
@@ -88,10 +88,7 @@ func TestServerMiddlewareConfigEnablesLoginSessionFromAuthenticator(t *testing.T
 
 	config := server.middlewareConfig()
 
-	assert.True(t, config.EnableLoginSession)
 	assert.NotNil(t, config.LoginSession)
-	assert.True(t, config.LoginSession.Enabled)
-	assert.True(t, config.EnableCSRF)
 	assert.NotNil(t, config.CSRF.Skipper)
 }
 

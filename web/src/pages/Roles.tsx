@@ -8,21 +8,22 @@ import {
   ProFormSelect,
   ProFormSwitch,
   ProFormText,
-  ProList,
-  StatisticCard,
 } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
 import {
   Avatar,
   Button,
   Checkbox,
+  createStyles,
   Empty,
   Form,
   Input,
   message,
+  Pagination,
   Popconfirm,
   Space,
   Spin,
+  Tabs,
   Tag,
   Tree,
   Typography,
@@ -86,6 +87,106 @@ const avatarColors = [
 
 const avatarColor = (roleID: number) =>
   avatarColors[roleID % avatarColors.length];
+
+// 角色页布局样式：左栏是平铺列表 + 强选中态（浅蓝底 + 左侧主色竖条），
+// 右栏是"页头 + 平铺统计行 + 页签"，避免卡片套卡片和 StatisticCard 的小卡感。
+const useStyles = createStyles(({ token, css }) => ({
+  toolbar: css`
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  `,
+  roleList: css`
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 120px;
+  `,
+  roleItem: css`
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px 10px 9px;
+    border-left: 3px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+    &:hover {
+      background: ${token.colorFillQuaternary};
+    }
+  `,
+  roleItemActive: css`
+    background: ${token.colorPrimaryBg};
+    border-left-color: ${token.colorPrimary};
+  `,
+  roleItemMain: css`
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  `,
+  roleItemTitle: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    color: ${token.colorText};
+  `,
+  roleItemCode: css`
+    font-size: 12px;
+    color: ${token.colorTextSecondary};
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  `,
+  detailHeader: css`
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  `,
+  detailMeta: css`
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  `,
+  detailTitle: css`
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: ${token.colorText};
+  `,
+  statRow: css`
+    display: flex;
+    margin: 20px 0 4px;
+  `,
+  statItem: css`
+    flex: 1;
+    padding: 0 32px;
+    border-left: 1px solid ${token.colorSplit};
+    &:first-child {
+      border-left: none;
+      padding-left: 0;
+    }
+  `,
+  statValue: css`
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: ${token.colorText};
+  `,
+  statLabel: css`
+    margin-top: 4px;
+    font-size: 13px;
+    color: ${token.colorTextSecondary};
+  `,
+}));
 
 const methodColor: Record<string, string> = {
   GET: 'blue',
@@ -210,10 +311,12 @@ const PermissionGroupsField = ({
 
 const Roles: React.FC = () => {
   const access = useAccess();
+  const { styles } = useStyles();
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
   const [selectedRoleID, setSelectedRoleID] = useState<number>();
   const [keyword, setKeyword] = useState('');
+  const [listPage, setListPage] = useState(1);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [apis, setAPIs] = useState<APIResource[]>([]);
@@ -287,6 +390,12 @@ const Roles: React.FC = () => {
         role.code.toLowerCase().includes(query),
     );
   }, [roles, keyword]);
+  // 左栏列表分页：一页 8 条，超过才显示分页器。
+  const listPageSize = 8;
+  const pagedRoles = filteredRoles.slice(
+    (listPage - 1) * listPageSize,
+    listPage * listPageSize,
+  );
 
   const roleName = (roleID: number) =>
     roles.find((role) => role.id === roleID)?.name ?? `#${roleID}`;
@@ -433,9 +542,10 @@ const Roles: React.FC = () => {
 
   return (
     <PageContainer title="角色权限">
-      <ProCard gutter={[16, 16]} wrap>
+      <ProCard gutter={[24, 24]} wrap>
         <ProCard
-          colSpan={{ xs: 24, lg: 7, xxl: 6 }}
+          className="roles-list-card"
+          colSpan={{ xs: 24, lg: 8, xxl: 8 }}
           title={`角色（${roles.length}）`}
           extra={
             access.canRoleCreate ? (
@@ -465,7 +575,6 @@ const Roles: React.FC = () => {
               rowKey="id"
               dataSource={filteredRoles}
               split={false}
-              size="small"
               rowSelection={{
                 type: 'radio',
                 selectedRowKeys:
@@ -502,7 +611,7 @@ const Roles: React.FC = () => {
                       style={{ fontSize: 12 }}
                       ellipsis
                     >
-                      {`${record.code} · ${record.permissions.length} 功能 · ${record.menu_ids.length} 菜单 · ${record.api_ids.length} API`}
+                      {record.code}
                     </Typography.Text>
                   ),
                 },
@@ -517,7 +626,7 @@ const Roles: React.FC = () => {
           </Spin>
         </ProCard>
         <ProCard
-          colSpan={{ xs: 24, lg: 17, xxl: 18 }}
+          colSpan={{ xs: 24, lg: 16, xxl: 16 }}
           title={
             selectedRole ? (
               <Space>
@@ -528,7 +637,6 @@ const Roles: React.FC = () => {
                   {selectedRole.name.slice(0, 1)}
                 </Avatar>
                 <span>{selectedRole.name}</span>
-                <Typography.Text code>{selectedRole.code}</Typography.Text>
               </Space>
             ) : (
               '角色详情'
@@ -551,7 +659,6 @@ const Roles: React.FC = () => {
                         statistic={{
                           title: '功能权限',
                           value: selectedRole.permissions.length,
-                          description: 'resource:action token',
                         }}
                       />
                       <StatisticCard.Divider />
@@ -567,7 +674,6 @@ const Roles: React.FC = () => {
                         statistic={{
                           title: 'API 授权',
                           value: selectedRole.api_ids.length,
-                          description: '受管路由',
                         }}
                       />
                       <StatisticCard.Divider />
@@ -575,10 +681,6 @@ const Roles: React.FC = () => {
                         statistic={{
                           title: '数据角色',
                           value: selectedRole.data_role_ids.length,
-                          description:
-                            selectedRole.data_role_ids
-                              .map((roleID) => roleName(roleID))
-                              .join('、') || '无',
                         }}
                       />
                     </StatisticCard.Group>

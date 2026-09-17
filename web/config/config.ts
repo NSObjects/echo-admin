@@ -153,9 +153,12 @@ export default defineConfig({
   antd: {
     appConfig: {},
     configProvider: {
-      variant: 'filled',
       theme: {
         token: {
+          colorPrimary: '#1677ff',
+          borderRadius: 8,
+          // antd v6 默认控件高度 30px 偏紧，按钮/输入框文字缺少呼吸空间，全局放宽到 36。
+          controlHeight: 36,
           fontFamily: 'AlibabaSans, sans-serif',
         },
       },

@@ -180,12 +180,30 @@ func (s *Server) installMiddleware() error {
 	return nil
 }
 
+// middlewareConfig is the single place where "is this dependency injected"
+// decides middleware activation: a config pointer exists only when its
+// dependency was injected, and a nil pointer leaves the middleware
+// uninstalled.
 func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 	httpConfig := s.appConfig.HTTP
-	sessionConfig := middlewares.DefaultLoginSessionConfig()
-	sessionConfig.Enabled = s.sessionAuth != nil
-	sessionConfig.Authenticator = s.sessionAuth
-	sessionConfig.Exemptions = s.unauthenticatedRoutes
+	var apiKey *middlewares.APIKeyConfig
+	if s.apiKeyVerifier != nil {
+		apiKey = &middlewares.APIKeyConfig{Verifier: s.apiKeyVerifier}
+	}
+	var installationGate *middlewares.InstallationGateConfig
+	if s.installation != nil {
+		installationGate = &middlewares.InstallationGateConfig{
+			Reader:     s.installation,
+			Exemptions: s.preInitRoutes,
+		}
+	}
+	var loginSession *middlewares.LoginSessionConfig
+	if s.sessionAuth != nil {
+		loginSession = &middlewares.LoginSessionConfig{
+			Authenticator: s.sessionAuth,
+			Exemptions:    s.unauthenticatedRoutes,
+		}
+	}
 
 	return &middlewares.MiddlewareConfig{
 		EnableRecovery:       !httpConfig.RecoveryDisabled,
@@ -196,22 +214,10 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 		EnableGzip:           !httpConfig.GzipDisabled,
 		EnableCORS:           httpConfig.CORS.Enabled,
 		CORS:                 corsMiddlewareConfig(httpConfig.CORS),
-		EnableAPIKey:         s.apiKeyVerifier != nil,
-		APIKey: &middlewares.APIKeyConfig{
-			Header:   middlewares.APIKeyHeader,
-			Verifier: s.apiKeyVerifier,
-			Enabled:  s.apiKeyVerifier != nil,
-		},
-		EnableInstallationGate: s.installation != nil,
-		InstallationGate: &middlewares.InstallationGateConfig{
-			Reader:     s.installation,
-			Exemptions: s.preInitRoutes,
-			Enabled:    s.installation != nil,
-		},
-		EnableLoginSession: sessionConfig.Enabled,
-		LoginSession:       sessionConfig,
-		EnableCSRF:         sessionConfig.Enabled,
-		CSRF:               middlewares.CSRFConfig(sessionConfig.Exemptions, httpConfig.SecureCookies),
+		APIKey:               apiKey,
+		InstallationGate:     installationGate,
+		LoginSession:         loginSession,
+		CSRF:                 middlewares.CSRFConfig(s.unauthenticatedRoutes, httpConfig.SecureCookies),
 	}
 }
 

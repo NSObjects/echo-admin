@@ -40,32 +40,20 @@ type LoginSessionAuthenticator interface {
 	AuthenticateLoginSession(context.Context, string) (LoginSessionIdentity, error)
 }
 
-// LoginSessionConfig controls browser login-session authentication.
+// LoginSessionConfig controls browser login-session authentication. A nil
+// config in MiddlewareConfig leaves the middleware uninstalled; a present
+// config must carry an Authenticator. An empty CookieName falls back to
+// LoginSessionCookieName.
 type LoginSessionConfig struct {
 	CookieName    string
 	Exemptions    []RouteExemption
 	Authenticator LoginSessionAuthenticator
-	Enabled       bool
-}
-
-// DefaultLoginSessionConfig returns disabled login-session authentication
-// defaults. Route exemptions are composition-root policy and must be injected
-// by the caller; this layer defaults to none.
-func DefaultLoginSessionConfig() *LoginSessionConfig {
-	return &LoginSessionConfig{
-		CookieName: LoginSessionCookieName,
-	}
 }
 
 // LoginSession creates browser login-session authentication middleware.
-func LoginSession(config *LoginSessionConfig) (echo.MiddlewareFunc, error) {
-	if config == nil || !config.Enabled {
-		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return next
-		}, nil
-	}
+func LoginSession(config LoginSessionConfig) (echo.MiddlewareFunc, error) {
 	if config.Authenticator == nil {
-		return nil, errors.New("login session authenticator is required when login sessions are enabled")
+		return nil, errors.New("login session authenticator is required when login sessions are installed")
 	}
 	cookieName := strings.TrimSpace(config.CookieName)
 	if cookieName == "" {

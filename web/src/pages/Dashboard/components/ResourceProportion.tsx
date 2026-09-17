@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 
 import { formatNumber, type AnalysisSummary, type Point } from '../analysis';
 import useStyles from '../style';
+import { chartPalette } from './chartPalette';
 
 const { Text } = Typography;
 
@@ -61,6 +62,7 @@ const ResourceProportion: React.FC<{
         innerRadius={0.5}
         angleField="y"
         colorField="x"
+        scale={{ color: { range: chartPalette } }}
         data={proportionData(summary, type)}
         legend={false}
         label={{

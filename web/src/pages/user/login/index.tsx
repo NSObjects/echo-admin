@@ -15,8 +15,8 @@ const useStyles = createStyles(() => ({
     minHeight: '100dvh',
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) minmax(420px, 520px)',
-    background: '#f5f7f6',
-    color: '#18211f',
+    background: '#f5f7fa',
+    color: '#1c2431',
     overflow: 'hidden',
     '@media (max-width: 920px)': {
       display: 'block',
@@ -31,10 +31,7 @@ const useStyles = createStyles(() => ({
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'space-between',
-    backgroundImage:
-      'linear-gradient(90deg, rgba(13, 29, 28, 0.86), rgba(13, 29, 28, 0.18) 58%, rgba(245, 247, 246, 0.15)), url("/images/login-operations.png")',
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
+    backgroundImage: 'linear-gradient(160deg, #0d1f3c 0%, #14315e 100%)',
     '@media (max-width: 920px)': {
       display: 'none',
     },
@@ -43,7 +40,7 @@ const useStyles = createStyles(() => ({
     display: 'flex',
     alignItems: 'center',
     gap: 14,
-    color: '#f7fbf8',
+    color: '#f7f9fc',
   },
   mark: {
     width: 44,
@@ -71,28 +68,10 @@ const useStyles = createStyles(() => ({
   brandMeta: {
     fontSize: 13,
     lineHeight: 1.35,
-    color: 'rgba(247, 251, 248, 0.68)',
+    color: 'rgba(247, 249, 252, 0.68)',
     '@media (max-width: 920px)': {
-      color: '#66706c',
+      color: '#6b7683',
     },
-  },
-  visualCopy: {
-    maxWidth: 560,
-    color: '#f7fbf8',
-  },
-  visualTitle: {
-    margin: 0,
-    fontSize: 40,
-    lineHeight: 1.12,
-    fontWeight: 760,
-    letterSpacing: 0,
-  },
-  visualLine: {
-    width: 72,
-    height: 3,
-    marginTop: 22,
-    borderRadius: 999,
-    background: 'linear-gradient(90deg, #77e2d4 0%, #f3b56f 58%, #e87c68 100%)',
   },
   formSide: {
     position: 'relative',
@@ -102,15 +81,11 @@ const useStyles = createStyles(() => ({
     flexDirection: 'column',
     justifyContent: 'center',
     background:
-      'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(246,248,247,0.98) 100%)',
+      'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(246,248,251,0.98) 100%)',
     '@media (max-width: 920px)': {
       minHeight: '100dvh',
       padding: '40px 24px 72px',
       justifyContent: 'center',
-      backgroundImage:
-        'linear-gradient(180deg, rgba(246,248,247,0.9), rgba(246,248,247,0.98)), url("/images/login-operations.png")',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center left',
     },
     '@media (max-width: 520px)': {
       padding: '72px 18px 70px',
@@ -134,7 +109,7 @@ const useStyles = createStyles(() => ({
     lineHeight: 1.18,
     fontWeight: 760,
     letterSpacing: 0,
-    color: '#18211f',
+    color: '#1c2431',
     '@media (max-width: 920px)': {
       fontSize: 28,
     },
@@ -146,7 +121,7 @@ const useStyles = createStyles(() => ({
     margin: '10px 0 0',
     fontSize: 14,
     lineHeight: 1.7,
-    color: '#66706c',
+    color: '#6b7683',
   },
   loginForm: {
     '.ant-pro-form-login-container': {
@@ -163,30 +138,30 @@ const useStyles = createStyles(() => ({
     '.ant-input-affix-wrapper': {
       minHeight: 46,
       borderRadius: 8,
-      borderColor: '#d9e1de',
+      borderColor: '#d9e2ee',
       background: '#fff',
       boxShadow: 'none',
     },
     '.ant-input-affix-wrapper:hover': {
-      borderColor: '#7ecfc4',
+      borderColor: '#91caff',
     },
     '.ant-input-affix-wrapper-focused': {
-      borderColor: '#34b7aa',
-      boxShadow: '0 0 0 3px rgba(52, 183, 170, 0.14)',
+      borderColor: '#1677ff',
+      boxShadow: '0 0 0 3px rgba(22, 119, 255, 0.12)',
     },
     '.ant-input-prefix': {
       marginInlineEnd: 10,
-      color: '#7a8581',
+      color: '#7a8494',
     },
     '.ant-btn-primary': {
       minHeight: 46,
       borderRadius: 8,
-      background: '#1d5c58',
-      boxShadow: '0 14px 30px rgba(29, 92, 88, 0.22)',
+      background: '#1677ff',
+      boxShadow: '0 14px 30px rgba(22, 119, 255, 0.22)',
       fontWeight: 650,
     },
     '.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):hover': {
-      background: '#174d49',
+      background: '#3c89ff',
     },
   },
   mobileBrand: {
@@ -194,7 +169,7 @@ const useStyles = createStyles(() => ({
     alignItems: 'center',
     gap: 12,
     marginBottom: 32,
-    color: '#18211f',
+    color: '#1c2431',
     '@media (max-width: 920px)': {
       display: 'flex',
     },
@@ -205,8 +180,8 @@ const useStyles = createStyles(() => ({
     borderRadius: 8,
     display: 'grid',
     placeItems: 'center',
-    background: '#1d5c58',
-    color: '#f7fbf8',
+    background: '#1677ff',
+    color: '#f7f9fc',
     fontSize: 16,
     fontWeight: 700,
     letterSpacing: 0,
@@ -216,7 +191,7 @@ const useStyles = createStyles(() => ({
     right: 48,
     bottom: 22,
     left: 48,
-    color: '#7a8581',
+    color: '#7a8494',
     '@media (max-width: 920px)': {
       right: 24,
       left: 24,
@@ -256,10 +231,6 @@ const Login: React.FC = () => {
             <span className={styles.brandName}>Echo Admin</span>
             <span className={styles.brandMeta}>后台管理模板</span>
           </div>
-        </div>
-        <div className={styles.visualCopy}>
-          <h1 className={styles.visualTitle}>统一后台管理入口</h1>
-          <div className={styles.visualLine} />
         </div>
       </section>
       <main className={styles.formSide}>

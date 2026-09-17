@@ -27,27 +27,19 @@ type APIKeyVerifier interface {
 	VerifyAPIKey(context.Context, string) (APIKeyIdentity, error)
 }
 
-// APIKeyConfig controls API token authentication middleware.
+// APIKeyConfig controls API token authentication middleware. A nil config in
+// MiddlewareConfig leaves the middleware uninstalled; a present config must
+// carry a Verifier.
 type APIKeyConfig struct {
 	Header   string
 	Verifier APIKeyVerifier
-	Enabled  bool
-}
-
-// DefaultAPIKeyConfig returns disabled API token authentication defaults.
-func DefaultAPIKeyConfig() *APIKeyConfig {
-	return &APIKeyConfig{Header: APIKeyHeader}
 }
 
 // APIKey creates middleware that authenticates requests carrying an API token.
-func APIKey(config *APIKeyConfig) (echo.MiddlewareFunc, error) {
-	if config == nil || !config.Enabled {
-		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return next
-		}, nil
-	}
+// An empty Header falls back to APIKeyHeader.
+func APIKey(config APIKeyConfig) (echo.MiddlewareFunc, error) {
 	if config.Verifier == nil {
-		return nil, errors.New("api key verifier is required when api key authentication is enabled")
+		return nil, errors.New("api key verifier is required when api key authentication is installed")
 	}
 	header := strings.TrimSpace(config.Header)
 	if header == "" {

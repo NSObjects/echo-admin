@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import type { ResourceTrend as ResourceTrendData } from '../analysis';
 import useStyles from '../style';
 import { NumberInfo } from './ChartKit';
+import { chartContrast, chartRing } from './chartPalette';
 
 /** Tab 头：资源名 + 成功率数字 + 环形迷你图，选中态高亮主色。 */
 const CustomTab: React.FC<{
@@ -37,7 +38,7 @@ const CustomTab: React.FC<{
         height={60}
         width={60}
         percent={data.successRate}
-        color={['#E8EEF4', '#5FABF4']}
+        color={chartRing}
       />
     </Col>
   </Row>
@@ -82,7 +83,15 @@ const ResourceTrend: React.FC<{
                 xField="date"
                 yField="value"
                 colorField="type"
-                slider={{ x: true }}
+                scale={{ color: { range: chartContrast } }}
+                slider={{
+                  x: {
+                    style: {
+                      selectionFill: 'rgba(22, 119, 255, 0.16)',
+                      handleFill: '#1677ff',
+                    },
+                  },
+                }}
                 axis={{
                   x: { title: false },
                   y: {

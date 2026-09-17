@@ -6,6 +6,7 @@ import React from 'react';
 import { formatNumber, type AnalysisSummary } from '../analysis';
 import useStyles from '../style';
 import { ChartCard, Field, Trend } from './ChartKit';
+import { chartPrimary } from './chartPalette';
 
 const topColResponsiveProps = {
   xs: 24,
@@ -95,7 +96,7 @@ const IntroduceRow: React.FC<{
             height={46}
             axis={false}
             style={{
-              fill: 'linear-gradient(-90deg, white 0%, #975FE4 100%)',
+              fill: `linear-gradient(-90deg, white 0%, ${chartPrimary} 100%)`,
               fillOpacity: 0.6,
               width: '100%',
             }}
@@ -127,11 +128,16 @@ const IntroduceRow: React.FC<{
           <Column
             xField="x"
             yField="y"
+            colorField={() => 'count'}
+            legend={false}
             padding={-20}
             axis={false}
             height={46}
             data={summary.miniOperationColumn}
-            scale={{ x: { paddingInner: 0.4 } }}
+            scale={{
+              x: { paddingInner: 0.4 },
+              color: { range: [chartPrimary, chartPrimary] },
+            }}
           />
         </ChartCard>
       </Col>
@@ -157,7 +163,7 @@ const IntroduceRow: React.FC<{
         >
           <Progress
             percent={capabilityRate ?? 0}
-            strokeColor={{ from: '#108ee9', to: '#87d068' }}
+            strokeColor={{ from: '#1677ff', to: '#4096ff' }}
             status="active"
           />
         </ChartCard>

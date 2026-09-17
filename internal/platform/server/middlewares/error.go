@@ -103,8 +103,13 @@ func normalizeHTTPStatus(status int, err error) error {
 
 func logAPIError(c *echo.Context, info apperr.Info) {
 	logger := logging.FromContext(c.Request().Context())
-	event := logger.
-		Warn().
+	event := logger.Warn()
+	message := "API business error"
+	if info.IsInternal() {
+		event = logger.Error()
+		message = "API internal error"
+	}
+	event = event.
 		Int("code", info.Code).
 		Str("message", info.Message).
 		Str("category", string(info.Category)).
@@ -115,24 +120,7 @@ func logAPIError(c *echo.Context, info apperr.Info) {
 	if info.Detail != "" {
 		event = event.Str("detail", info.Detail)
 	}
-
-	if info.IsInternal() {
-		event = logger.
-			Error().
-			Int("code", info.Code).
-			Str("message", info.Message).
-			Str("category", string(info.Category)).
-			Str("request_id", httpresp.RequestID(c)).
-			Str("method", c.Request().Method).
-			Str("path", requestPath(c)).
-			Str("user_agent", c.Request().UserAgent())
-		if info.Detail != "" {
-			event = event.Str("detail", info.Detail)
-		}
-		event.Msg("API internal error")
-		return
-	}
-	event.Msg("API business error")
+	event.Msg(message)
 }
 
 func recordSystemError(c *echo.Context, info apperr.Info, recorder SystemErrorRecorder) {

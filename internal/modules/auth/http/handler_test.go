@@ -149,8 +149,7 @@ func newTestEcho(t *testing.T) *echo.Echo {
 	e.HTTPErrorHandler = middlewares.ErrorHandler
 	e.Use(middlewares.RequestContext())
 	loginExemptions := []middlewares.RouteExemption{{Method: http.MethodPost, Path: "/api/auth/login"}}
-	sessionMiddleware, err := middlewares.LoginSession(&middlewares.LoginSessionConfig{
-		Enabled:       true,
+	sessionMiddleware, err := middlewares.LoginSession(middlewares.LoginSessionConfig{
 		CookieName:    middlewares.LoginSessionCookieName,
 		Exemptions:    loginExemptions,
 		Authenticator: sessionAuthenticator{auth: uc},

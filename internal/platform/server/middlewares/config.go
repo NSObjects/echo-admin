@@ -26,6 +26,13 @@ type RouteExemption struct {
 }
 
 // MiddlewareConfig controls server-owned HTTP middleware.
+//
+// Activation has a single source of truth per middleware: the Enable* bools
+// below carry genuine runtime configuration, while API-key authentication,
+// the installation gate, and login sessions are installed exactly when their
+// config pointer is non-nil — the composition root constructs the pointer
+// only when the dependency is injected. CSRF follows login sessions because a
+// route without a login session has no CSRF obligation.
 type MiddlewareConfig struct {
 	EnableRecovery bool
 
@@ -43,45 +50,20 @@ type MiddlewareConfig struct {
 
 	CORS middleware.CORSConfig
 
-	EnableAPIKey bool
-
 	APIKey *APIKeyConfig
-
-	EnableInstallationGate bool
 
 	InstallationGate *InstallationGateConfig
 
-	EnableLoginSession bool
-
 	LoginSession *LoginSessionConfig
-
-	EnableCSRF bool
 
 	CSRF middleware.CSRFConfig
 }
 
-// DefaultMiddlewareConfig returns the HTTP middleware defaults.
-func DefaultMiddlewareConfig() *MiddlewareConfig {
-	return &MiddlewareConfig{
-		EnableRecovery:         true,
-		EnableRequestContext:   true,
-		EnableLogger:           true,
-		EnableGzip:             true,
-		EnableCORS:             false,
-		EnableAPIKey:           false,
-		APIKey:                 DefaultAPIKeyConfig(),
-		EnableInstallationGate: false,
-		InstallationGate:       &InstallationGateConfig{},
-		EnableLoginSession:     false,
-		LoginSession:           DefaultLoginSessionConfig(),
-		EnableCSRF:             false,
-	}
-}
-
-// ApplyMiddlewares installs server-owned middleware.
+// ApplyMiddlewares installs server-owned middleware. A nil config is a
+// programming error, not a request for defaults.
 func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 	if config == nil {
-		config = DefaultMiddlewareConfig()
+		return errors.New("middleware config is required")
 	}
 
 	if config.EnableRecovery {
@@ -108,6 +90,11 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 		return err
 	}
 
+	// The install order below is load-bearing: each authentication stage
+	// writes requestctx facts the next stage reads. The gate must reject
+	// before any verifier runs; API-key identity short-circuits login-session
+	// lookup via requestctx.GetUserID; the CSRF skipper only protects requests
+	// that carry a login-session ID.
 	if err := installInstallationGate(e, config); err != nil {
 		return err
 	}
@@ -137,10 +124,10 @@ func installCORS(e *echo.Echo, config *MiddlewareConfig) error {
 }
 
 func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
-	if !config.EnableAPIKey || config.APIKey == nil {
+	if config.APIKey == nil {
 		return nil
 	}
-	apiKeyMiddleware, err := APIKey(config.APIKey)
+	apiKeyMiddleware, err := APIKey(*config.APIKey)
 	if err != nil {
 		return err
 	}
@@ -149,10 +136,10 @@ func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
 }
 
 func installInstallationGate(e *echo.Echo, config *MiddlewareConfig) error {
-	if !config.EnableInstallationGate || config.InstallationGate == nil {
+	if config.InstallationGate == nil {
 		return nil
 	}
-	gateMiddleware, err := InstallationGate(config.InstallationGate)
+	gateMiddleware, err := InstallationGate(*config.InstallationGate)
 	if err != nil {
 		return err
 	}
@@ -161,10 +148,10 @@ func installInstallationGate(e *echo.Echo, config *MiddlewareConfig) error {
 }
 
 func installLoginSession(e *echo.Echo, config *MiddlewareConfig) error {
-	if !config.EnableLoginSession || config.LoginSession == nil {
+	if config.LoginSession == nil {
 		return nil
 	}
-	sessionMiddleware, err := LoginSession(config.LoginSession)
+	sessionMiddleware, err := LoginSession(*config.LoginSession)
 	if err != nil {
 		return err
 	}
@@ -173,9 +160,12 @@ func installLoginSession(e *echo.Echo, config *MiddlewareConfig) error {
 }
 
 func installCSRF(e *echo.Echo, config *MiddlewareConfig) {
-	if config.EnableCSRF {
-		e.Use(middleware.CSRFWithConfig(config.CSRF))
+	// CSRF protects browser login sessions only: no login session, no CSRF
+	// obligation, so CSRF activation derives from the login-session config.
+	if config.LoginSession == nil {
+		return
 	}
+	e.Use(middleware.CSRFWithConfig(config.CSRF))
 }
 
 func requestLogger() echo.MiddlewareFunc {

@@ -23,39 +23,11 @@ import (
 
 const testRequestID = "req-123"
 
-func TestDefaultMiddlewareConfig(t *testing.T) {
-	config := DefaultMiddlewareConfig()
-
-	assert.NotNil(t, config)
-	assert.True(t, config.EnableRecovery)
-	assert.True(t, config.EnableRequestContext)
-	assert.True(t, config.EnableLogger)
-	assert.True(t, config.EnableGzip)
-	assert.False(t, config.EnableCORS)
-	assert.False(t, config.EnableAPIKey)
-	assert.NotNil(t, config.APIKey)
-	assert.False(t, config.EnableInstallationGate)
-	assert.NotNil(t, config.InstallationGate)
-	assert.False(t, config.EnableLoginSession)
-	assert.NotNil(t, config.LoginSession)
-	assert.False(t, config.EnableCSRF)
-}
-
-func TestDefaultLoginSessionConfig(t *testing.T) {
-	config := DefaultLoginSessionConfig()
-
-	assert.NotNil(t, config)
-	assert.False(t, config.Enabled)
-	assert.Empty(t, config.Exemptions)
-	assert.Equal(t, LoginSessionCookieName, config.CookieName)
-}
-
 func TestInstallationGateBlocksPrivateRoutesWhenUninitialized(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
-	gate, err := InstallationGate(&InstallationGateConfig{
-		Reader:  &installationStateReader{initialized: false},
-		Enabled: true,
+	gate, err := InstallationGate(InstallationGateConfig{
+		Reader: &installationStateReader{initialized: false},
 	})
 	if err != nil {
 		t.Fatalf("InstallationGate() error = %v", err)
@@ -93,10 +65,9 @@ func TestInstallationGateSkipsExemptRoutes(t *testing.T) {
 			e := echo.New()
 			e.HTTPErrorHandler = ErrorHandler
 			reader := &installationStateReader{initialized: false}
-			gate, err := InstallationGate(&InstallationGateConfig{
+			gate, err := InstallationGate(InstallationGateConfig{
 				Reader:     reader,
 				Exemptions: []RouteExemption{tt.exemption},
-				Enabled:    true,
 			})
 			if err != nil {
 				t.Fatalf("InstallationGate() error = %v", err)
@@ -122,9 +93,8 @@ func TestInstallationGateAllowsPrivateRoutesAfterInitialization(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	reader := &installationStateReader{initialized: true}
-	gate, err := InstallationGate(&InstallationGateConfig{
-		Reader:  reader,
-		Enabled: true,
+	gate, err := InstallationGate(InstallationGateConfig{
+		Reader: reader,
 	})
 	if err != nil {
 		t.Fatalf("InstallationGate() error = %v", err)
@@ -148,10 +118,9 @@ func TestInstallationGateExemptionMatchesMethodExactly(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	reader := &installationStateReader{initialized: false}
-	gate, err := InstallationGate(&InstallationGateConfig{
+	gate, err := InstallationGate(InstallationGateConfig{
 		Reader:     reader,
 		Exemptions: []RouteExemption{{Method: http.MethodPost, Path: "/api/setup"}},
-		Enabled:    true,
 	})
 	if err != nil {
 		t.Fatalf("InstallationGate() error = %v", err)
@@ -177,8 +146,8 @@ func TestInstallationGateExemptionMatchesMethodExactly(t *testing.T) {
 	}
 }
 
-func TestInstallationGateRequiresReaderWhenEnabled(t *testing.T) {
-	gate, err := InstallationGate(&InstallationGateConfig{Enabled: true})
+func TestInstallationGateRequiresReader(t *testing.T) {
+	gate, err := InstallationGate(InstallationGateConfig{})
 
 	assert.Error(t, err)
 	assert.Nil(t, gate)
@@ -186,27 +155,32 @@ func TestInstallationGateRequiresReaderWhenEnabled(t *testing.T) {
 
 func TestApplyMiddlewares(t *testing.T) {
 	e := echo.New()
-	config := DefaultMiddlewareConfig()
+	config := &MiddlewareConfig{}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
 	assert.NotNil(t, e)
+}
+
+func TestApplyMiddlewaresRejectsNilConfig(t *testing.T) {
+	e := echo.New()
+
+	err := ApplyMiddlewares(e, nil)
+
+	assert.Error(t, err)
 }
 
 func TestInstallationGateRunsBeforeAPIKeyAuthentication(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	verifier := &countingAPIKeyVerifier{}
-	config := DefaultMiddlewareConfig()
-	config.EnableInstallationGate = true
-	config.InstallationGate = &InstallationGateConfig{
-		Reader:  &installationStateReader{initialized: false},
-		Enabled: true,
-	}
-	config.EnableAPIKey = true
-	config.APIKey = &APIKeyConfig{
-		Header:   APIKeyHeader,
-		Verifier: verifier,
-		Enabled:  true,
+	config := &MiddlewareConfig{
+		InstallationGate: &InstallationGateConfig{
+			Reader: &installationStateReader{initialized: false},
+		},
+		APIKey: &APIKeyConfig{
+			Header:   APIKeyHeader,
+			Verifier: verifier,
+		},
 	}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
@@ -230,18 +204,15 @@ func TestInstallationGateRunsBeforeAPIKeyAuthentication(t *testing.T) {
 func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
-	config := DefaultMiddlewareConfig()
-	config.EnableAPIKey = true
-	config.APIKey = &APIKeyConfig{
-		Header:   APIKeyHeader,
-		Verifier: staticAPIKeyVerifier{},
-		Enabled:  true,
-	}
-	config.EnableLoginSession = true
-	config.LoginSession = &LoginSessionConfig{
-		CookieName:    LoginSessionCookieName,
-		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 9, UserID: 99, RoleID: 9}},
-		Enabled:       true,
+	config := &MiddlewareConfig{
+		APIKey: &APIKeyConfig{
+			Header:   APIKeyHeader,
+			Verifier: staticAPIKeyVerifier{},
+		},
+		LoginSession: &LoginSessionConfig{
+			CookieName:    LoginSessionCookieName,
+			Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 9, UserID: 99, RoleID: 9}},
+		},
 	}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
@@ -263,15 +234,43 @@ func TestAPIKeyAuthenticationRunsBeforeLoginSession(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
+// TestLoginSessionRunsBeforeCSRFProtection locks the last link of the
+// authentication order. A valid session cookie plus an unsafe method without
+// a CSRF header can only be rejected when the login-session middleware runs
+// first and writes the LoginSessionID that keeps the CSRF skipper active; if
+// CSRF ran first the skipper would see no session and the request would pass.
+func TestLoginSessionRunsBeforeCSRFProtection(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = ErrorHandler
+	config := &MiddlewareConfig{
+		LoginSession: &LoginSessionConfig{
+			CookieName:    LoginSessionCookieName,
+			Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 9, UserID: 99, RoleID: 9}},
+		},
+		CSRF: CSRFConfig(nil, false),
+	}
+
+	assert.NoError(t, ApplyMiddlewares(e, config))
+	e.POST("/private", func(c *echo.Context) error {
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/private", nil)
+	req.AddCookie(&http.Cookie{Name: LoginSessionCookieName, Value: "opaque-token"})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestAPIKeyAuthenticationRejectsInvalidToken(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
-	config := DefaultMiddlewareConfig()
-	config.EnableAPIKey = true
-	config.APIKey = &APIKeyConfig{
-		Header:   APIKeyHeader,
-		Verifier: staticAPIKeyVerifier{},
-		Enabled:  true,
+	config := &MiddlewareConfig{
+		APIKey: &APIKeyConfig{
+			Header:   APIKeyHeader,
+			Verifier: staticAPIKeyVerifier{},
+		},
 	}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
@@ -290,7 +289,7 @@ func TestAPIKeyAuthenticationRejectsInvalidToken(t *testing.T) {
 func TestRequestLoggerPreservesRenderedApplicationErrorStatus(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
-	config := DefaultMiddlewareConfig()
+	config := &MiddlewareConfig{EnableLogger: true}
 
 	assert.NoError(t, ApplyMiddlewares(e, config))
 	e.GET("/bad", func(_ *echo.Context) error {
@@ -432,14 +431,13 @@ func TestRequestLoggerOmitsTraceMetadataWithoutActiveSpan(t *testing.T) {
 }
 
 func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
-	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+	sessionMiddleware, err := LoginSession(LoginSessionConfig{
 		CookieName: LoginSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{
 			SessionID: 123,
 			UserID:    123,
 			RoleID:    456,
 		}},
-		Enabled: true,
 	})
 	if err != nil {
 		t.Fatalf("LoginSession() error = %v", err)
@@ -471,10 +469,9 @@ func TestLoginSessionStoresIdentityInAuthenticatedContext(t *testing.T) {
 }
 
 func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
-	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+	sessionMiddleware, err := LoginSession(LoginSessionConfig{
 		CookieName:    LoginSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{err: apperr.NewUnauthorized()},
-		Enabled:       true,
 	})
 	if err != nil {
 		t.Fatalf("LoginSession() error = %v", err)
@@ -500,10 +497,9 @@ func TestLoginSessionRejectsAuthenticatorError(t *testing.T) {
 }
 
 func TestLoginSessionMissingCookieReturnsGenericUnauthorized(t *testing.T) {
-	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+	sessionMiddleware, err := LoginSession(LoginSessionConfig{
 		CookieName:    LoginSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
-		Enabled:       true,
 	})
 	if err != nil {
 		t.Fatalf("LoginSession() error = %v", err)
@@ -530,10 +526,9 @@ func TestCSRFProtectsLoginSessionUnsafeRequests(t *testing.T) {
 	e := echo.New()
 	e.HTTPErrorHandler = ErrorHandler
 	e.Use(RequestContext())
-	sessionMiddleware, err := LoginSession(&LoginSessionConfig{
+	sessionMiddleware, err := LoginSession(LoginSessionConfig{
 		CookieName:    LoginSessionCookieName,
 		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
-		Enabled:       true,
 	})
 	if err != nil {
 		t.Fatalf("LoginSession() error = %v", err)
@@ -850,47 +845,27 @@ func assertErrorHandlerNormalizes(
 }
 
 func TestLoginSessionConfig(t *testing.T) {
-	tests := []struct {
-		name   string
-		config *LoginSessionConfig
-	}{
-		{
-			name: "enabled login session",
-			config: &LoginSessionConfig{
-				CookieName:    LoginSessionCookieName,
-				Exemptions:    []RouteExemption{{Method: http.MethodGet, Path: "/api/health"}},
-				Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
-				Enabled:       true,
-			},
-		},
-		{
-			name: "disabled login session",
-			config: &LoginSessionConfig{
-				CookieName: LoginSessionCookieName,
-				Enabled:    false,
-			},
-		},
+	config := LoginSessionConfig{
+		CookieName:    LoginSessionCookieName,
+		Exemptions:    []RouteExemption{{Method: http.MethodGet, Path: "/api/health"}},
+		Authenticator: staticLoginSessionAuthenticator{identity: LoginSessionIdentity{SessionID: 1, UserID: 42, RoleID: 7}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sessionMiddleware, err := LoginSession(tt.config)
-			assert.NoError(t, err)
-			assert.NotNil(t, sessionMiddleware)
-		})
-	}
+	sessionMiddleware, err := LoginSession(config)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, sessionMiddleware)
 }
 
-func TestLoginSessionRequiresAuthenticatorWhenEnabled(t *testing.T) {
-	sessionMiddleware, err := LoginSession(&LoginSessionConfig{Enabled: true})
+func TestLoginSessionRequiresAuthenticator(t *testing.T) {
+	sessionMiddleware, err := LoginSession(LoginSessionConfig{})
 	assert.Error(t, err)
 	assert.Nil(t, sessionMiddleware)
 }
 
 func TestApplyMiddlewaresRequiresCORSOriginsWhenEnabled(t *testing.T) {
 	e := echo.New()
-	config := DefaultMiddlewareConfig()
-	config.EnableCORS = true
+	config := &MiddlewareConfig{EnableCORS: true}
 
 	err := ApplyMiddlewares(e, config)
 
@@ -899,10 +874,13 @@ func TestApplyMiddlewaresRequiresCORSOriginsWhenEnabled(t *testing.T) {
 
 func TestApplyMiddlewaresRejectsWildcardCORSOriginWithCredentials(t *testing.T) {
 	e := echo.New()
-	config := DefaultMiddlewareConfig()
-	config.EnableCORS = true
-	config.CORS.AllowOrigins = []string{"*"}
-	config.CORS.AllowCredentials = true
+	config := &MiddlewareConfig{
+		EnableCORS: true,
+		CORS: middleware.CORSConfig{
+			AllowOrigins:     []string{"*"},
+			AllowCredentials: true,
+		},
+	}
 
 	err := ApplyMiddlewares(e, config)
 
@@ -927,8 +905,8 @@ func TestMiddlewareConfig(t *testing.T) {
 		config *MiddlewareConfig
 	}{
 		{
-			name:   "default config",
-			config: DefaultMiddlewareConfig(),
+			name:   "empty config",
+			config: &MiddlewareConfig{},
 		},
 		{
 			name: "custom config",
@@ -941,8 +919,6 @@ func TestMiddlewareConfig(t *testing.T) {
 				CORS: middleware.CORSConfig{
 					AllowOrigins: []string{"https://example.com"},
 				},
-				EnableLoginSession: false,
-				LoginSession:       DefaultLoginSessionConfig(),
 			},
 		},
 	}

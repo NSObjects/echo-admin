@@ -5,6 +5,7 @@ import React from 'react';
 
 import { formatNumber, type Point, type RankItem } from '../analysis';
 import useStyles from '../style';
+import { chartPrimary } from './chartPalette';
 
 export type TimeType = 'today' | 'week' | 'month' | 'year';
 
@@ -27,6 +28,8 @@ const ChartWithRank: React.FC<{
             data={data}
             xField="x"
             yField="y"
+            colorField={() => tooltipName}
+            legend={false}
             paddingBottom={12}
             axis={{
               x: {
@@ -40,6 +43,8 @@ const ChartWithRank: React.FC<{
             }}
             scale={{
               x: { paddingInner: 0.4 },
+              // range 提供两个同色值：G2 的 ordinal 色板不会循环单元素 range。
+              color: { range: [chartPrimary, chartPrimary] },
             }}
             tooltip={{
               name: tooltipName,
