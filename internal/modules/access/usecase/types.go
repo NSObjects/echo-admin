@@ -55,13 +55,15 @@ type AuthorizationSubject struct {
 }
 
 // AuthorizationView is the active Administration Authorization state used by
-// current-user responses.
+// current-user responses. It is embedded into auth's /auth/me JSON contract,
+// so the snake_case tags below ARE the wire contract consumed by the browser
+// client; removing them serializes Go field names and breaks the frontend.
 type AuthorizationView struct {
-	ActiveRole  Role
-	Roles       []Role
-	Permissions []string
-	Menus       []Menu
-	DefaultPath string
+	ActiveRole  Role     `json:"active_role"`
+	Roles       []Role   `json:"roles"`
+	Permissions []string `json:"permissions"`
+	Menus       []Menu   `json:"menus"`
+	DefaultPath string   `json:"default_path"`
 }
 
 // New creates an access usecase.

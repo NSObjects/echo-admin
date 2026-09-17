@@ -432,6 +432,77 @@ type currentUserResponse struct {
 	} `json:"data"`
 }
 
+// TestCurrentUserJSONContractKeys 断言登录与 /auth/me 响应的原始 JSON key 契约。
+// Go 的 json.Unmarshal 匹配 key 时大小写不敏感，上面的结构体解码测试无法发现
+// key 大小写回归；而浏览器端 JS 属性访问是大小写敏感的，因此必须对响应里的
+// 原始 key 做严格断言（AuthorizationView 缺失 json 标签时会把 key 序列化成
+// ActiveRole/Menus 等大写形式并导致前端崩溃）。
+func TestCurrentUserJSONContractKeys(t *testing.T) {
+	e := newTestEcho(t)
+	client := newSessionClient(e)
+
+	login := client.doJSON(t, http.MethodPost, "/api/auth/login", `{"username":"admin","password":"123456"}`)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d: %s", login.Code, http.StatusOK, login.Body.String())
+	}
+	assertLoginUserContractKeys(t, login.Body.Bytes())
+
+	me := client.doJSON(t, http.MethodGet, "/api/auth/me", "")
+	if me.Code != http.StatusOK {
+		t.Fatalf("me status = %d, want %d: %s", me.Code, http.StatusOK, me.Body.String())
+	}
+	assertCurrentUserContractKeys(t, "me", me.Body.Bytes())
+}
+
+// assertLoginUserContractKeys 校验登录响应 data.user 内的当前用户 key。
+func assertLoginUserContractKeys(t *testing.T, raw []byte) {
+	t.Helper()
+	var envelope struct {
+		Data struct {
+			User map[string]json.RawMessage `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("login: decode response envelope: %v\n%s", err, raw)
+	}
+	assertContractKeys(t, "login", envelope.Data.User)
+}
+
+// assertCurrentUserContractKeys 校验 /auth/me 响应 data 内的当前用户 key。
+func assertCurrentUserContractKeys(t *testing.T, endpoint string, raw []byte) {
+	t.Helper()
+	var envelope struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("%s: decode response envelope: %v\n%s", endpoint, err, raw)
+	}
+	assertContractKeys(t, endpoint, envelope.Data)
+}
+
+// assertContractKeys 按 map 字面 key 匹配（大小写敏感）断言当前用户契约。
+func assertContractKeys(t *testing.T, endpoint string, user map[string]json.RawMessage) {
+	t.Helper()
+	for _, key := range []string{"username", "display_name", "active_role", "roles", "permissions", "menus", "default_path"} {
+		if _, ok := user[key]; !ok {
+			t.Errorf("%s: current user key %q missing, got keys: %v", endpoint, key, mapKeys(user))
+		}
+	}
+	for _, key := range []string{"ActiveRole", "Roles", "Permissions", "Menus", "DefaultPath"} {
+		if _, ok := user[key]; ok {
+			t.Errorf("%s: current user key %q must not appear, frontend reads snake_case only", endpoint, key)
+		}
+	}
+}
+
+func mapKeys(m map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func decodeCurrentUserResponse(t *testing.T, rec *httptest.ResponseRecorder) currentUserResponse {
 	t.Helper()
 	var body currentUserResponse
