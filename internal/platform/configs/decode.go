@@ -88,6 +88,7 @@ func envVarName(key string) string {
 func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error) {
 	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
 	v.SetConfigType(configType(format))
+	applyConfigDefaults(v)
 	plan := envOverrides()
 	if useEnv {
 		// No viper AutomaticEnv here: it would let the environment override
@@ -117,6 +118,35 @@ func decodeConfigWithEnv(data []byte, format string, useEnv bool) (Config, error
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// applyConfigDefaults installs defaultConfig's non-zero leaves as the viper
+// default layer so positive booleans can default to enabled while an explicit
+// false in the config file still wins and the environment overrides both.
+// Keys derive from the mapstructure tags — the same single source the
+// environment override plan uses, so no key is registered by hand.
+func applyConfigDefaults(v *viper.Viper) {
+	walkDefaultValues(reflect.ValueOf(defaultConfig), nil, v)
+}
+
+func walkDefaultValues(value reflect.Value, keyPrefix []string, v *viper.Viper) {
+	t := value.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("mapstructure")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		keys := append(append([]string{}, keyPrefix...), tag)
+		fieldValue := value.Field(i)
+		if field.Type.Kind() == reflect.Struct {
+			walkDefaultValues(fieldValue, keys, v)
+			continue
+		}
+		if !fieldValue.IsZero() {
+			v.SetDefault(strings.Join(keys, "::"), fieldValue.Interface())
+		}
+	}
 }
 
 // normalize applies application config defaults.

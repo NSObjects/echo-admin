@@ -17,10 +17,10 @@ caller = false
 upload_dir = "uploads"
 
 [http]
-recovery_disabled = false
-request_context_disabled = false
-request_log_disabled = false
-gzip_disabled = false
+enable_recovery = true
+enable_request_context = true
+enable_request_log = true
+enable_gzip = true
 secure_cookies = false
 
 [http.cors]

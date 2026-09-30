@@ -227,12 +227,12 @@ func (s *Server) middlewareConfig() *middlewares.MiddlewareConfig {
 	}
 
 	return &middlewares.MiddlewareConfig{
-		EnableRecovery:       !httpConfig.RecoveryDisabled,
-		EnableRequestContext: !httpConfig.RequestContextDisabled,
-		EnableLogger:         !httpConfig.RequestLogDisabled,
+		EnableRecovery:       httpConfig.EnableRecovery,
+		EnableRequestContext: httpConfig.EnableRequestContext,
+		EnableLogger:         httpConfig.EnableRequestLog,
 		EnableTracing:        s.appConfig.Tracing.Enabled,
 		TracingServiceName:   s.appConfig.App.Name,
-		EnableGzip:           !httpConfig.GzipDisabled,
+		EnableGzip:           httpConfig.EnableGzip,
 		EnableCORS:           httpConfig.CORS.Enabled,
 		CORS:                 corsMiddlewareConfig(httpConfig.CORS),
 		APIKey:               apiKey,

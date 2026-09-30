@@ -86,14 +86,30 @@ type LogConfig struct {
 	Caller bool   `mapstructure:"caller"`
 }
 
-// HTTPConfig controls server-owned HTTP middleware.
+// HTTPConfig controls server-owned HTTP middleware. The Enable* booleans
+// default to true via defaultConfig: omitting a key keeps the middleware
+// installed, an explicit false opts out, and the environment can override
+// both.
 type HTTPConfig struct {
-	RecoveryDisabled       bool       `mapstructure:"recovery_disabled"`
-	RequestContextDisabled bool       `mapstructure:"request_context_disabled"`
-	RequestLogDisabled     bool       `mapstructure:"request_log_disabled"`
-	GzipDisabled           bool       `mapstructure:"gzip_disabled"`
-	SecureCookies          bool       `mapstructure:"secure_cookies"`
-	CORS                   CORSConfig `mapstructure:"cors"`
+	EnableRecovery       bool       `mapstructure:"enable_recovery"`
+	EnableRequestContext bool       `mapstructure:"enable_request_context"`
+	EnableRequestLog     bool       `mapstructure:"enable_request_log"`
+	EnableGzip           bool       `mapstructure:"enable_gzip"`
+	SecureCookies        bool       `mapstructure:"secure_cookies"`
+	CORS                 CORSConfig `mapstructure:"cors"`
+}
+
+// defaultConfig declares typed defaults installed as the viper default
+// layer (priority: environment > config file > defaults). Only non-zero
+// leaves apply; keys derive from the same mapstructure tags the environment
+// override plan uses.
+var defaultConfig = Config{
+	HTTP: HTTPConfig{
+		EnableRecovery:       true,
+		EnableRequestContext: true,
+		EnableRequestLog:     true,
+		EnableGzip:           true,
+	},
 }
 
 // CORSConfig controls optional CORS middleware.

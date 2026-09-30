@@ -62,9 +62,19 @@ func TestServerStartConfigAppliesRuntimeSettings(t *testing.T) {
 }
 
 func TestServerMiddlewareConfig(t *testing.T) {
+	// Zero-value HTTPConfig leaves every middleware off: in production the
+	// enabled-by-default layer is applied by configs.Load, so a hand-built
+	// Config states its intent explicitly.
 	server := &Server{
-		port:      ":9322",
-		appConfig: configs.Config{},
+		port: ":9322",
+		appConfig: configs.Config{
+			HTTP: configs.HTTPConfig{
+				EnableRecovery:       true,
+				EnableRequestContext: true,
+				EnableRequestLog:     true,
+				EnableGzip:           true,
+			},
+		},
 	}
 
 	config := server.middlewareConfig()
@@ -78,6 +88,20 @@ func TestServerMiddlewareConfig(t *testing.T) {
 	assert.Nil(t, config.APIKey)
 	assert.Nil(t, config.InstallationGate)
 	assert.Nil(t, config.LoginSession)
+}
+
+func TestServerMiddlewareConfigZeroHTTPConfigDisablesOptionalMiddleware(t *testing.T) {
+	server := &Server{
+		port:      ":9322",
+		appConfig: configs.Config{},
+	}
+
+	config := server.middlewareConfig()
+
+	assert.False(t, config.EnableRecovery)
+	assert.False(t, config.EnableRequestContext)
+	assert.False(t, config.EnableLogger)
+	assert.False(t, config.EnableGzip)
 }
 
 func TestServerMiddlewareConfigInstallsLoginSessionFromAuthenticator(t *testing.T) {
@@ -101,10 +125,10 @@ func TestServerMiddlewareConfigUsesHTTPConfig(t *testing.T) {
 		port: ":9322",
 		appConfig: configs.Config{
 			HTTP: configs.HTTPConfig{
-				RecoveryDisabled:       true,
-				RequestContextDisabled: true,
-				RequestLogDisabled:     true,
-				GzipDisabled:           true,
+				EnableRecovery:       false,
+				EnableRequestContext: false,
+				EnableRequestLog:     false,
+				EnableGzip:           false,
 				CORS: configs.CORSConfig{
 					Enabled:          true,
 					AllowOrigins:     []string{"https://app.example.com"},

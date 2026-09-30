@@ -27,10 +27,10 @@ output = "stdout" # stdout, stderr
 caller = false
 
 [http]
-recovery_disabled = false
-request_context_disabled = false
-request_log_disabled = false
-gzip_disabled = false
+enable_recovery = true
+enable_request_context = true
+enable_request_log = true
+enable_gzip = true
 secure_cookies = false
 
 [http.cors]
@@ -89,10 +89,10 @@ export ECHO_ADMIN_SYSTEM_LEVEL=1
 export ECHO_ADMIN_LOG_FORMAT=console
 export ECHO_ADMIN_LOG_OUTPUT=stdout
 export ECHO_ADMIN_LOG_CALLER=false
-export ECHO_ADMIN_HTTP_RECOVERY_DISABLED=false
-export ECHO_ADMIN_HTTP_REQUEST_CONTEXT_DISABLED=false
-export ECHO_ADMIN_HTTP_REQUEST_LOG_DISABLED=false
-export ECHO_ADMIN_HTTP_GZIP_DISABLED=false
+export ECHO_ADMIN_HTTP_ENABLE_RECOVERY=true
+export ECHO_ADMIN_HTTP_ENABLE_REQUEST_CONTEXT=true
+export ECHO_ADMIN_HTTP_ENABLE_REQUEST_LOG=true
+export ECHO_ADMIN_HTTP_ENABLE_GZIP=true
 export ECHO_ADMIN_HTTP_SECURE_COOKIES=false
 export ECHO_ADMIN_HTTP_CORS_ENABLED=false
 export ECHO_ADMIN_HTTP_CORS_ALLOW_ORIGINS=
@@ -115,7 +115,7 @@ export ECHO_ADMIN_TRACING_INSECURE=true
 
 浏览器后台登录使用服务端 Login Session 和 HttpOnly cookie，不需要 JWT secret。生产 HTTPS 部署应设置 `ECHO_ADMIN_HTTP_SECURE_COOKIES=true`，让 Login Session cookie 和 CSRF cookie 都带 `Secure` 属性。空库首次启动后访问浏览器后台会进入 `/setup`，由初始化页创建拥有最高权限 Root Role 的首个管理员。
 
-`app.name` 和 `app.version` 会出现在 `/api/info` 响应中。`system.level` 只接受 `1` 或 `2`。`log.format` 只接受 `console` 或 `json`；`log.output` 只接受 `stdout` 或 `stderr`。`http.*_disabled` 可关闭默认安装的 HTTP middleware，`http.secure_cookies` 控制浏览器登录会话相关 cookie 是否只允许 HTTPS 传输。
+`app.name` 和 `app.version` 会出现在 `/api/info` 响应中。`system.level` 只接受 `1` 或 `2`。`log.format` 只接受 `console` 或 `json`；`log.output` 只接受 `stdout` 或 `stderr`。`http.enable_*` 控制 HTTP middleware 安装（省略时默认开启），`http.secure_cookies` 控制浏览器登录会话相关 cookie 是否只允许 HTTPS 传输。
 
 `http.cors.enabled=true` 时必须配置 `http.cors.allow_origins`。`http.cors.allow_credentials=true` 时 `allow_origins` 不能包含 `*`。环境变量中的列表项使用逗号分隔，例如 `ECHO_ADMIN_HTTP_CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com`。
 

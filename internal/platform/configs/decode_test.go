@@ -55,7 +55,7 @@ func TestDecodeConfigWithEnvAppliesEnvOnlyValues(t *testing.T) {
 	t.Setenv("ECHO_ADMIN_LOG_FORMAT", "console")
 	t.Setenv("ECHO_ADMIN_LOG_OUTPUT", "stderr")
 	t.Setenv("ECHO_ADMIN_LOG_CALLER", "true")
-	t.Setenv("ECHO_ADMIN_HTTP_GZIP_DISABLED", "true")
+	t.Setenv("ECHO_ADMIN_HTTP_ENABLE_GZIP", "false")
 	t.Setenv("ECHO_ADMIN_HTTP_SECURE_COOKIES", "true")
 
 	cfg, err := decodeConfigWithEnv([]byte(``), "toml", true)
@@ -75,8 +75,20 @@ func TestDecodeConfigWithEnvAppliesEnvOnlyValues(t *testing.T) {
 	if !cfg.Log.Caller {
 		t.Fatal("Log.Caller = false, want env-only true")
 	}
-	if !cfg.HTTP.GzipDisabled {
-		t.Fatal("HTTP.GzipDisabled = false, want env-only true")
+	// The environment overrides the enabled-by-default layer.
+	if cfg.HTTP.EnableGzip {
+		t.Fatal("HTTP.EnableGzip = true, want env-only false")
+	}
+	// Keys absent from both file and environment fall back to the typed
+	// defaultConfig layer: the middleware stays installed.
+	if !cfg.HTTP.EnableRecovery {
+		t.Fatal("HTTP.EnableRecovery = false, want default true")
+	}
+	if !cfg.HTTP.EnableRequestContext {
+		t.Fatal("HTTP.EnableRequestContext = false, want default true")
+	}
+	if !cfg.HTTP.EnableRequestLog {
+		t.Fatal("HTTP.EnableRequestLog = false, want default true")
 	}
 	if !cfg.HTTP.SecureCookies {
 		t.Fatal("HTTP.SecureCookies = false, want env-only true")
@@ -139,10 +151,10 @@ enabled = false
 func TestDecodeConfigLoadsHTTPMiddlewareConfig(t *testing.T) {
 	cfg, err := decodeConfigWithEnv([]byte(`
 [http]
-recovery_disabled = true
-request_context_disabled = true
-request_log_disabled = true
-gzip_disabled = true
+enable_recovery = false
+enable_request_context = false
+enable_request_log = false
+enable_gzip = false
 secure_cookies = true
 
 [http.cors]
@@ -158,17 +170,19 @@ max_age_seconds = 600
 		t.Fatalf("decodeConfigWithEnv() error = %v", err)
 	}
 
-	if !cfg.HTTP.RecoveryDisabled {
-		t.Fatal("HTTP.RecoveryDisabled = false, want true")
+	// An explicit false in the file must win over the enabled-by-default
+	// layer, otherwise opting out of a middleware would be impossible.
+	if cfg.HTTP.EnableRecovery {
+		t.Fatal("HTTP.EnableRecovery = true, want explicit file false")
 	}
-	if !cfg.HTTP.RequestContextDisabled {
-		t.Fatal("HTTP.RequestContextDisabled = false, want true")
+	if cfg.HTTP.EnableRequestContext {
+		t.Fatal("HTTP.EnableRequestContext = true, want explicit file false")
 	}
-	if !cfg.HTTP.RequestLogDisabled {
-		t.Fatal("HTTP.RequestLogDisabled = false, want true")
+	if cfg.HTTP.EnableRequestLog {
+		t.Fatal("HTTP.EnableRequestLog = true, want explicit file false")
 	}
-	if !cfg.HTTP.GzipDisabled {
-		t.Fatal("HTTP.GzipDisabled = false, want true")
+	if cfg.HTTP.EnableGzip {
+		t.Fatal("HTTP.EnableGzip = true, want explicit file false")
 	}
 	if !cfg.HTTP.SecureCookies {
 		t.Fatal("HTTP.SecureCookies = false, want true")

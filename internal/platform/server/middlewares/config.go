@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 
 	echootel "github.com/labstack/echo-opentelemetry"
 	"github.com/labstack/echo/v5"
@@ -86,9 +85,7 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 		e.Use(middleware.Gzip())
 	}
 
-	if err := installCORS(e, config); err != nil {
-		return err
-	}
+	installCORS(e, config)
 
 	// The install order below is load-bearing: each authentication stage
 	// writes requestctx facts the next stage reads. The gate must reject
@@ -111,16 +108,15 @@ func ApplyMiddlewares(e *echo.Echo, config *MiddlewareConfig) error {
 	return nil
 }
 
-func installCORS(e *echo.Echo, config *MiddlewareConfig) error {
+// installCORS installs Echo CORS with install-time defaults. Configuration
+// validation (origins required, wildcard with credentials forbidden) is owned
+// by configs.Load, the single entry point every production value passes
+// through; this layer trusts the normalized value.
+func installCORS(e *echo.Echo, config *MiddlewareConfig) {
 	if !config.EnableCORS {
-		return nil
+		return
 	}
-	corsConfig, err := normalizedCORSConfig(config.CORS)
-	if err != nil {
-		return err
-	}
-	e.Use(middleware.CORSWithConfig(corsConfig))
-	return nil
+	e.Use(middleware.CORSWithConfig(normalizedCORSConfig(config.CORS)))
 }
 
 func installAPIKey(e *echo.Echo, config *MiddlewareConfig) error {
@@ -289,13 +285,10 @@ func MatchRouteExemption(c *echo.Context, exemptions []RouteExemption) bool {
 	return false
 }
 
-func normalizedCORSConfig(config middleware.CORSConfig) (middleware.CORSConfig, error) {
-	if len(config.AllowOrigins) == 0 {
-		return middleware.CORSConfig{}, errors.New("cors allowed origins are required when cors is enabled")
-	}
-	if config.AllowCredentials && corsOriginsContainWildcard(config.AllowOrigins) {
-		return middleware.CORSConfig{}, errors.New("cors allowed origins must not include wildcard when credentials are enabled")
-	}
+// normalizedCORSConfig fills install-time CORS defaults. AllowHeaders keeps
+// the API-token header readable by browsers on preflight; AllowMethods covers
+// the route surface this server registers.
+func normalizedCORSConfig(config middleware.CORSConfig) middleware.CORSConfig {
 	if len(config.AllowHeaders) == 0 {
 		config.AllowHeaders = []string{
 			echo.HeaderOrigin,
@@ -317,14 +310,5 @@ func normalizedCORSConfig(config middleware.CORSConfig) (middleware.CORSConfig, 
 			http.MethodOptions,
 		}
 	}
-	return config, nil
-}
-
-func corsOriginsContainWildcard(origins []string) bool {
-	for _, origin := range origins {
-		if strings.TrimSpace(origin) == "*" {
-			return true
-		}
-	}
-	return false
+	return config
 }

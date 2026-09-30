@@ -818,29 +818,8 @@ func TestLoginSessionRequiresAuthenticator(t *testing.T) {
 	assert.Nil(t, sessionMiddleware)
 }
 
-func TestApplyMiddlewaresRequiresCORSOriginsWhenEnabled(t *testing.T) {
-	e := echo.New()
-	config := &MiddlewareConfig{EnableCORS: true}
-
-	err := ApplyMiddlewares(e, config)
-
-	assert.Error(t, err)
-}
-
-func TestApplyMiddlewaresRejectsWildcardCORSOriginWithCredentials(t *testing.T) {
-	e := echo.New()
-	config := &MiddlewareConfig{
-		EnableCORS: true,
-		CORS: middleware.CORSConfig{
-			AllowOrigins:     []string{"*"},
-			AllowCredentials: true,
-		},
-	}
-
-	err := ApplyMiddlewares(e, config)
-
-	assert.Error(t, err)
-}
+// CORS configuration validation (origins required, wildcard with credentials
+// forbidden) is owned by configs.Load; its tests live in the configs package.
 
 func TestRequestPathOmitsRawQuery(t *testing.T) {
 	e := echo.New()
