@@ -26,3 +26,12 @@ go.work.sum
 
 # env file
 .env
+
+# build artifacts
+/bin/
+
+# frontend dependencies and caches (web/.gitignore only covers the web subtree)
+/node_modules/
+
+# agent task reports
+/tasks/
