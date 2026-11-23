@@ -196,8 +196,8 @@ func TestChangePasswordRotatesPasswordAndRevokesOtherSessions(t *testing.T) {
 		t.Fatalf("Login() error = %v", err)
 	}
 	currentSessionID := store.lastSessionID
-	if _, err := uc.Login(context.Background(), authusecase.LoginInput{Username: "admin", Password: "123456"}); err != nil {
-		t.Fatalf("Login(second session) error = %v", err)
+	if _, secondErr := uc.Login(context.Background(), authusecase.LoginInput{Username: "admin", Password: "123456"}); secondErr != nil {
+		t.Fatalf("Login(second session) error = %v", secondErr)
 	}
 	otherSessionID := store.lastSessionID
 	ctx := withSession(requestctx.WithUserID(context.Background(), 1), currentSessionID)

@@ -65,7 +65,7 @@ func TestSubmitCreatesFoundationInOneTransaction(t *testing.T) {
 	if gotAdmin.RootRoleID != 7 {
 		t.Fatalf("created admin root role id = %d, want 7", gotAdmin.RootRoleID)
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(gotAdmin.PasswordHash), []byte("secret-password")); err != nil {
+	if err := bcrypt.CompareHashAndPassword(gotAdmin.PasswordHash, []byte("secret-password")); err != nil {
 		t.Fatalf("created admin password hash mismatch: %v", err)
 	}
 	if runner.tx.settings.SiteName != usecase.DefaultSiteName {

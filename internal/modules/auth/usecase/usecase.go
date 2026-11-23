@@ -61,6 +61,10 @@ func (u *Usecase) Login(ctx context.Context, input LoginInput) (LoginOutput, err
 	if resetErr := u.loginLimiter.ResetLoginAttempts(ctx, attemptKey); resetErr != nil {
 		return LoginOutput{}, resetErr
 	}
+	return u.completeLogin(ctx, now, username, admin, input)
+}
+
+func (u *Usecase) completeLogin(ctx context.Context, now time.Time, username string, admin identitydomain.Admin, input LoginInput) (LoginOutput, error) {
 	user, err := u.userSnapshot(ctx, admin, admin.ActiveRoleID)
 	if err != nil {
 		return LoginOutput{}, err
@@ -151,7 +155,8 @@ func (u *Usecase) SwitchRole(ctx context.Context, input RoleSwitchInput) (RoleSw
 	if err != nil {
 		return RoleSwitchOutput{}, apperr.NewBadRequest("active role is not assigned")
 	}
-	if err := u.sessions.UpdateLoginSessionRole(ctx, sessionID, switched.ActiveRoleID, u.now()); err != nil {
+	err = u.sessions.UpdateLoginSessionRole(ctx, sessionID, switched.ActiveRoleID, u.now())
+	if err != nil {
 		return RoleSwitchOutput{}, err
 	}
 	user, err := u.userSnapshot(ctx, admin, input.RoleID)
@@ -245,7 +250,8 @@ func (u *Usecase) AuthenticateLoginSession(ctx context.Context, rawToken string)
 		return LoginSessionIdentity{}, apperr.NewUnauthorized()
 	}
 	now := u.now()
-	if err := session.AvailabilityError(now); err != nil {
+	err = session.AvailabilityError(now)
+	if err != nil {
 		return LoginSessionIdentity{}, mapSessionAvailabilityError(err)
 	}
 	admin, err := u.admins.FindByID(ctx, session.AdminID)

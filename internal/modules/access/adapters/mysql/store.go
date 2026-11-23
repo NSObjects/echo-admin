@@ -309,7 +309,8 @@ func (s *Store) InstallRootAuthorization(ctx context.Context) (domain.Role, erro
 		if err != nil {
 			return err
 		}
-		if err := seedStore.seedSuperAdminRole(ctx, menuIDs, apiIDs, buttonIDs); err != nil {
+		err = seedStore.seedSuperAdminRole(ctx, menuIDs, apiIDs, buttonIDs)
+		if err != nil {
 			return err
 		}
 		role, err := seedStore.FindRoleByCode(ctx, domain.RoleCodeSuperAdmin)

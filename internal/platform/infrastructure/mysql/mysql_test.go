@@ -89,8 +89,11 @@ func TestBuildDSNUsesStructuredMySQLConfig(t *testing.T) {
 	if !parsed.ParseTime {
 		t.Fatal("ParseTime = false, want true")
 	}
-	if parsed.Params["charset"] != "utf8mb4" {
-		t.Fatalf("charset = %q, want utf8mb4", parsed.Params["charset"])
+	if !strings.Contains(dsn, "charset=utf8mb4") {
+		t.Fatal("DSN is missing charset=utf8mb4")
+	}
+	if !strings.Contains(parsed.FormatDSN(), "charset=utf8mb4") {
+		t.Fatal("parsed DSN is missing charset=utf8mb4")
 	}
 }
 

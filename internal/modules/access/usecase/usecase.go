@@ -610,34 +610,6 @@ func (u *Usecase) APIGroups(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// applyRoleGrants rewrites one resource grant on every in-scope editable role
-// and returns the updated scope so callers collect visible grants from the
-// persisted state rather than the pre-update snapshot.
-func (u *Usecase) applyRoleGrants(ctx context.Context, scope roleScope, roleIDs []int64, toggle func(domain.Role, bool) (domain.Role, bool, error)) (roleScope, error) {
-	wanted := idSet(roleIDs)
-	if err := scope.ensureRolesMutable(roleIDs); err != nil {
-		return roleScope{}, err
-	}
-	for index, role := range scope.allRoles {
-		if !scope.canEditRoleGrant(role.ID) {
-			continue
-		}
-		next, changed, err := toggle(role, hasID(wanted, role.ID))
-		if err != nil {
-			return roleScope{}, err
-		}
-		if !changed {
-			continue
-		}
-		updated, err := u.store.UpdateRole(ctx, next)
-		if err != nil {
-			return roleScope{}, err
-		}
-		scope.allRoles[index] = updated
-	}
-	return scope, nil
-}
-
 func (u *Usecase) ready() error {
 	if u == nil || u.store == nil || u.admins == nil {
 		return apperr.New(apperr.ErrInternalServer, "access dependencies are not configured")
@@ -956,41 +928,6 @@ func (s roleScope) ensureGrantSubset(permissions []string, menuIDs, apiIDs, butt
 	return nil
 }
 
-func (s roleScope) ensureMenuGrantReadable(menuID int64) error {
-	if s.super || containsID(s.activeRole.MenuIDs, menuID) {
-		return nil
-	}
-	return apperr.NewPermissionDenied("menu", strconv.FormatInt(menuID, 10))
-}
-
-func (s roleScope) ensureAPIGrantReadable(apiID int64) error {
-	if s.super || containsID(s.activeRole.APIIDs, apiID) {
-		return nil
-	}
-	return apperr.NewPermissionDenied("api", strconv.FormatInt(apiID, 10))
-}
-
-func (s roleScope) ensureRolesMutable(roleIDs []int64) error {
-	for _, roleID := range roleIDs {
-		role, ok := findRole(s.allRoles, roleID)
-		if !ok {
-			return apperr.NewBadRequest("invalid role id")
-		}
-		if err := s.ensureRoleMutable(role); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s roleScope) canEditRoleGrant(roleID int64) bool {
-	if s.super {
-		return true
-	}
-	_, ok := s.assignableRoleIDs[roleID]
-	return ok
-}
-
 func roleParentWouldCycle(roles []domain.Role, roleID, parentID int64) bool {
 	for parentID > 0 {
 		if parentID == roleID {
@@ -1050,83 +987,6 @@ func menuButtonAssignedToRole(roles []domain.Role, buttons []domain.MenuButton) 
 		}
 	}
 	return false
-}
-
-func roleIDsWithMenu(roles []domain.Role, menuID int64) []int64 {
-	out := make([]int64, 0, len(roles))
-	for _, role := range roles {
-		if containsID(role.MenuIDs, menuID) {
-			out = append(out, role.ID)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
-}
-
-func roleIDsWithAPI(roles []domain.Role, apiID int64) []int64 {
-	out := make([]int64, 0, len(roles))
-	for _, role := range roles {
-		if containsID(role.APIIDs, apiID) {
-			out = append(out, role.ID)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
-}
-
-func roleWithMenuGrant(role domain.Role, menuID int64, assigned bool) (domain.Role, bool, error) {
-	menuIDs, changed := grantIDs(role.MenuIDs, menuID, assigned)
-	if !changed {
-		return role, false, nil
-	}
-	next, err := domain.RestoreRole(role.ID, role.ParentID, role.Code, role.Name, role.Permissions, menuIDs, role.APIIDs, role.ButtonIDs, role.DataRoleIDs, role.DefaultPath, role.Active, role.CreatedAt, time.Time{})
-	return next, true, err
-}
-
-func roleWithAPIGrant(role domain.Role, apiID int64, assigned bool) (domain.Role, bool, error) {
-	apiIDs, changed := grantIDs(role.APIIDs, apiID, assigned)
-	if !changed {
-		return role, false, nil
-	}
-	next, err := domain.RestoreRole(role.ID, role.ParentID, role.Code, role.Name, role.Permissions, role.MenuIDs, apiIDs, role.ButtonIDs, role.DataRoleIDs, role.DefaultPath, role.Active, role.CreatedAt, time.Time{})
-	return next, true, err
-}
-
-func grantIDs(ids []int64, id int64, assigned bool) ([]int64, bool) {
-	if assigned {
-		if containsID(ids, id) {
-			return ids, false
-		}
-		out := append([]int64(nil), ids...)
-		out = append(out, id)
-		return out, true
-	}
-	if !containsID(ids, id) {
-		return ids, false
-	}
-	out := make([]int64, 0, len(ids)-1)
-	for _, existingID := range ids {
-		if existingID != id {
-			out = append(out, existingID)
-		}
-	}
-	return out, true
-}
-
-func normalizeRequestedRoleIDs(roleIDs []int64) ([]int64, error) {
-	seen := make(map[int64]struct{}, len(roleIDs))
-	out := make([]int64, 0, len(roleIDs))
-	for _, roleID := range roleIDs {
-		if roleID <= 0 {
-			return nil, apperr.NewBadRequest("invalid role id")
-		}
-		if _, ok := seen[roleID]; ok {
-			continue
-		}
-		seen[roleID] = struct{}{}
-		out = append(out, roleID)
-	}
-	return out, nil
 }
 
 func idSet(ids []int64) map[int64]struct{} {

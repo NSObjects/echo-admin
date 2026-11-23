@@ -374,6 +374,16 @@ func hasWildcardOrigin(origins []string) bool {
 }
 
 func validateMySQLConfig(cfg MySQLConfig) error {
+	if err := validateMySQLLimits(cfg); err != nil {
+		return err
+	}
+	if !cfg.Enabled {
+		return nil
+	}
+	return validateEnabledMySQLConfig(cfg)
+}
+
+func validateMySQLLimits(cfg MySQLConfig) error {
 	if cfg.Port < 0 || cfg.Port > 65535 {
 		return errors.New("mysql port must be between 1 and 65535")
 	}
@@ -389,19 +399,23 @@ func validateMySQLConfig(cfg MySQLConfig) error {
 	if cfg.PingTimeoutSeconds < 0 {
 		return errors.New("mysql ping_timeout_seconds must not be negative")
 	}
-	if cfg.Enabled && cfg.Port == 0 {
+	return nil
+}
+
+func validateEnabledMySQLConfig(cfg MySQLConfig) error {
+	if cfg.Port == 0 {
 		return errors.New("mysql port is required when mysql is enabled")
 	}
-	if cfg.Enabled && strings.TrimSpace(cfg.Host) == "" {
+	if strings.TrimSpace(cfg.Host) == "" {
 		return errors.New("mysql host is required when mysql is enabled")
 	}
-	if cfg.Enabled && strings.TrimSpace(cfg.Database) == "" {
+	if strings.TrimSpace(cfg.Database) == "" {
 		return errors.New("mysql database is required when mysql is enabled")
 	}
-	if cfg.Enabled && strings.TrimSpace(cfg.Username) == "" {
+	if strings.TrimSpace(cfg.Username) == "" {
 		return errors.New("mysql username is required when mysql is enabled")
 	}
-	if cfg.Enabled && cfg.MaxIdleConns > cfg.MaxOpenConns {
+	if cfg.MaxIdleConns > cfg.MaxOpenConns {
 		return errors.New("mysql max_idle_conns must not exceed max_open_conns")
 	}
 	return nil

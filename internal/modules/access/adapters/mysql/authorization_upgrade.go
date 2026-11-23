@@ -57,11 +57,11 @@ func (s *Store) upgradeManagedAPIRouteCatalogData(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, _, err := s.seedMenus(ctx); err != nil {
+	if _, _, err = s.seedMenus(ctx); err != nil {
 		return err
 	}
 	permissionTokens := domain.PermissionCatalogTokens()
-	if err := s.deleteRetiredAuthorizationRows(ctx, permissionTokens, apiIDs); err != nil {
+	if err = s.deleteRetiredAuthorizationRows(ctx, permissionTokens, apiIDs); err != nil {
 		return err
 	}
 	menuIDs, err := s.catalogIDs(ctx, &menuModel{})

@@ -23,8 +23,8 @@ type Handler struct {
 }
 
 // New creates a setup HTTP handler.
-func New(usecase SetupUsecase) *Handler {
-	return &Handler{usecase: usecase}
+func New(setupUsecase SetupUsecase) *Handler {
+	return &Handler{usecase: setupUsecase}
 }
 
 // Register mounts setup routes on group.

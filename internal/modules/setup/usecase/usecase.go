@@ -40,10 +40,12 @@ func (u *Usecase) Submit(ctx context.Context, input SubmitInput) (State, error) 
 	}
 
 	err = u.runner.RunInitialization(ctx, func(txCtx context.Context, tx Transaction) error {
-		if err := tx.RequireOpenInstallation(txCtx); err != nil {
+		err = tx.RequireOpenInstallation(txCtx)
+		if err != nil {
 			return err
 		}
-		rootRole, err := tx.InstallRootAuthorization(txCtx)
+		var rootRole RootRole
+		rootRole, err = tx.InstallRootAuthorization(txCtx)
 		if err != nil {
 			return err
 		}
@@ -57,10 +59,12 @@ func (u *Usecase) Submit(ctx context.Context, input SubmitInput) (State, error) 
 			PasswordHash: passwordHash,
 			RootRoleID:   rootRole.ID,
 		}
-		if err := tx.CreateFirstAdministrator(txCtx, admin); err != nil {
+		err = tx.CreateFirstAdministrator(txCtx, admin)
+		if err != nil {
 			return err
 		}
-		if err := tx.InstallInitialSettings(txCtx, InitialSettings{SiteName: normalized.SiteName}); err != nil {
+		err = tx.InstallInitialSettings(txCtx, InitialSettings{SiteName: normalized.SiteName})
+		if err != nil {
 			return err
 		}
 		return tx.CompleteInstallation(txCtx)
@@ -88,36 +92,64 @@ func normalizeSubmitInput(input SubmitInput) (SubmitInput, error) {
 	if input.SiteName == "" {
 		input.SiteName = DefaultSiteName
 	}
-
-	if input.Username == "" {
-		return SubmitInput{}, apperr.NewBadRequest("username is required")
+	if err := validateSubmitUsername(input.Username); err != nil {
+		return SubmitInput{}, err
 	}
-	if len(input.Username) > 64 {
-		return SubmitInput{}, apperr.NewBadRequest("username is too long")
+	if err := validateSubmitDisplayName(input.DisplayName); err != nil {
+		return SubmitInput{}, err
 	}
-	if input.DisplayName == "" {
-		return SubmitInput{}, apperr.NewBadRequest("display_name is required")
+	if err := validateSubmitEmail(input.Email); err != nil {
+		return SubmitInput{}, err
 	}
-	if len(input.DisplayName) > 80 {
-		return SubmitInput{}, apperr.NewBadRequest("display_name is too long")
-	}
-	if len(input.Email) > 160 {
-		return SubmitInput{}, apperr.NewBadRequest("email is too long")
-	}
-	if input.Email != "" {
-		address, err := mail.ParseAddress(input.Email)
-		if err != nil || address.Address != input.Email {
-			return SubmitInput{}, apperr.NewBadRequest("email is invalid")
-		}
-	}
-	if len(input.Password) < minPasswordLength {
-		return SubmitInput{}, apperr.NewBadRequest("password is too short")
-	}
-	if len(input.Password) > maxPasswordLength {
-		return SubmitInput{}, apperr.NewBadRequest("password is too long")
+	if err := validateSubmitPassword(input.Password); err != nil {
+		return SubmitInput{}, err
 	}
 	if len(input.SiteName) > 120 {
 		return SubmitInput{}, apperr.NewBadRequest("site_name is too long")
 	}
 	return input, nil
+}
+
+func validateSubmitUsername(username string) error {
+	if username == "" {
+		return apperr.NewBadRequest("username is required")
+	}
+	if len(username) > 64 {
+		return apperr.NewBadRequest("username is too long")
+	}
+	return nil
+}
+
+func validateSubmitDisplayName(displayName string) error {
+	if displayName == "" {
+		return apperr.NewBadRequest("display_name is required")
+	}
+	if len(displayName) > 80 {
+		return apperr.NewBadRequest("display_name is too long")
+	}
+	return nil
+}
+
+func validateSubmitEmail(email string) error {
+	if len(email) > 160 {
+		return apperr.NewBadRequest("email is too long")
+	}
+	if email == "" {
+		return nil
+	}
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email {
+		return apperr.NewBadRequest("email is invalid")
+	}
+	return nil
+}
+
+func validateSubmitPassword(password string) error {
+	if len(password) < minPasswordLength {
+		return apperr.NewBadRequest("password is too short")
+	}
+	if len(password) > maxPasswordLength {
+		return apperr.NewBadRequest("password is too long")
+	}
+	return nil
 }

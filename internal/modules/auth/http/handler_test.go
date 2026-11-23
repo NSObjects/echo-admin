@@ -368,7 +368,11 @@ func (c *sessionClient) doJSON(t *testing.T, method, path, body string) *httptes
 	rec := httptest.NewRecorder()
 	c.echo.ServeHTTP(rec, req)
 	response := rec.Result()
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			t.Errorf("response body close error = %v", err)
+		}
+	}()
 	for _, cookie := range response.Cookies() {
 		if cookie.MaxAge < 0 {
 			delete(c.cookies, cookie.Name)

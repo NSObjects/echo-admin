@@ -501,24 +501,6 @@ func sameInt64s(got, want []int64) bool {
 	return true
 }
 
-func findRoleForTest(roles []accessdomain.Role, roleID int64) (accessdomain.Role, bool) {
-	for _, role := range roles {
-		if role.ID == roleID {
-			return role, true
-		}
-	}
-	return accessdomain.Role{}, false
-}
-
-func containsIDForTest(ids []int64, want int64) bool {
-	for _, id := range ids {
-		if id == want {
-			return true
-		}
-	}
-	return false
-}
-
 type menuTreeStore struct {
 	storeSpy
 	nextMenuID int64

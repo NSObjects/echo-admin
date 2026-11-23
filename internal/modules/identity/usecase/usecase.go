@@ -92,7 +92,8 @@ func (u *Usecase) Update(ctx context.Context, input UpdateAdminInput) (Admin, er
 		// Revoke before saving security-sensitive identity changes so a
 		// failed revocation cannot leave old browser sessions alive after a
 		// password reset.
-		if err := u.sessions.RevokeLoginSessions(ctx, existing.ID); err != nil {
+		err = u.sessions.RevokeLoginSessions(ctx, existing.ID)
+		if err != nil {
 			return Admin{}, err
 		}
 	}
