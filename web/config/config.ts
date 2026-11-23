@@ -9,6 +9,8 @@ import routes from './routes';
 
 const { UMI_ENV = 'dev' } = process.env;
 const disableUtoopack = process.env.ECHO_ADMIN_WEB_DISABLE_UTOOPACK === '1';
+// dev script 默认置位：utoo 的 .turbopack 持久缓存曾多次损坏（模块解析失败、
+// chunk 404 白屏），且其项目级文件锁导致无法并行起多个 dev 实例。
 const disableUtoopackPersistentCache =
   process.env.ECHO_ADMIN_WEB_DISABLE_UTOOPACK_CACHE === '1';
 
@@ -192,8 +194,8 @@ export default defineConfig({
     ? {}
     : {
         utoopack: {
-          // Utoo uses a project-wide persistent cache lock. This opt-in switch
-          // lets CI or a parallel local build run without stopping dev server.
+          // 关闭持久缓存以规避 .turbopack 缓存损坏与文件锁冲突；
+          // 代价是 dev 启动需全量编译（约 8 秒），HMR 不受影响。
           ...(disableUtoopackPersistentCache
             ? { persistentCaching: false }
             : {}),

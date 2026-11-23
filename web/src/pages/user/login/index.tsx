@@ -1,7 +1,7 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, useModel } from '@umijs/max';
-import { App } from 'antd';
+import { App, ConfigProvider, theme as antdTheme } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
 import { flushSync } from 'react-dom';
@@ -220,88 +220,92 @@ const Login: React.FC = () => {
   const { setInitialState } = useModel('@@initialState');
 
   return (
-    <div className={styles.container}>
-      <Helmet>
-        <title>{`登录 - ${Settings.title}`}</title>
-      </Helmet>
-      <section className={styles.visual} aria-hidden="true">
-        <div className={styles.visualBrand}>
-          <div className={styles.mark}>EA</div>
-          <div className={styles.brandText}>
-            <span className={styles.brandName}>Echo Admin</span>
-            <span className={styles.brandMeta}>后台管理模板</span>
-          </div>
-        </div>
-      </section>
-      <main className={styles.formSide}>
-        <div className={styles.panel}>
-          <div className={styles.mobileBrand}>
-            <div className={styles.mobileMark}>EA</div>
+    // 登录页是固定浅色设计（白底、深色文字均为硬编码），必须强制浅色算法：
+    // 全站暗色主题下 antd 输入框文字 token 会变成近白色，落在白底输入框上不可见。
+    <ConfigProvider theme={{ algorithm: antdTheme.defaultAlgorithm }}>
+      <div className={styles.container}>
+        <Helmet>
+          <title>{`登录 - ${Settings.title}`}</title>
+        </Helmet>
+        <section className={styles.visual} aria-hidden="true">
+          <div className={styles.visualBrand}>
+            <div className={styles.mark}>EA</div>
             <div className={styles.brandText}>
               <span className={styles.brandName}>Echo Admin</span>
               <span className={styles.brandMeta}>后台管理模板</span>
             </div>
           </div>
-          <div className={styles.formHeader}>
-            <h2 className={styles.formTitle}>管理员登录</h2>
-            <p className={styles.formSubtitle}>请输入账号和密码。</p>
+        </section>
+        <main className={styles.formSide}>
+          <div className={styles.panel}>
+            <div className={styles.mobileBrand}>
+              <div className={styles.mobileMark}>EA</div>
+              <div className={styles.brandText}>
+                <span className={styles.brandName}>Echo Admin</span>
+                <span className={styles.brandMeta}>后台管理模板</span>
+              </div>
+            </div>
+            <div className={styles.formHeader}>
+              <h2 className={styles.formTitle}>管理员登录</h2>
+              <p className={styles.formSubtitle}>请输入账号和密码。</p>
+            </div>
+            <LoginForm
+              className={styles.loginForm}
+              submitter={{
+                searchConfig: {
+                  submitText: '登录',
+                },
+              }}
+              onFinish={async (values) => {
+                const result = await login({
+                  username: String(values.username ?? ''),
+                  password: String(values.password ?? ''),
+                });
+                const currentUser = result.user;
+                flushSync(() => {
+                  setInitialState((state) => ({ ...state, currentUser }));
+                });
+                message.success('登录成功');
+                const redirect = new URL(window.location.href).searchParams.get(
+                  'redirect',
+                );
+                const fallbackPath = currentUser?.default_path || '/dashboard';
+                history.replace(
+                  safeRedirect(
+                    redirect === loginPath ? null : redirect,
+                    fallbackPath,
+                  ),
+                );
+              }}
+            >
+              <ProFormText
+                name="username"
+                fieldProps={{
+                  size: 'large',
+                  prefix: <UserOutlined />,
+                  autoComplete: 'username',
+                }}
+                placeholder="请输入用户名"
+                rules={[{ required: true, message: '请输入用户名' }]}
+              />
+              <ProFormText.Password
+                name="password"
+                fieldProps={{
+                  size: 'large',
+                  prefix: <LockOutlined />,
+                  autoComplete: 'current-password',
+                }}
+                placeholder="请输入密码"
+                rules={[{ required: true, message: '请输入密码' }]}
+              />
+            </LoginForm>
           </div>
-          <LoginForm
-            className={styles.loginForm}
-            submitter={{
-              searchConfig: {
-                submitText: '登录',
-              },
-            }}
-            onFinish={async (values) => {
-              const result = await login({
-                username: String(values.username ?? ''),
-                password: String(values.password ?? ''),
-              });
-              const currentUser = result.user;
-              flushSync(() => {
-                setInitialState((state) => ({ ...state, currentUser }));
-              });
-              message.success('登录成功');
-              const redirect = new URL(window.location.href).searchParams.get(
-                'redirect',
-              );
-              const fallbackPath = currentUser?.default_path || '/dashboard';
-              history.replace(
-                safeRedirect(
-                  redirect === loginPath ? null : redirect,
-                  fallbackPath,
-                ),
-              );
-            }}
-          >
-            <ProFormText
-              name="username"
-              fieldProps={{
-                size: 'large',
-                prefix: <UserOutlined />,
-                autoComplete: 'username',
-              }}
-              placeholder="请输入用户名"
-              rules={[{ required: true, message: '请输入用户名' }]}
-            />
-            <ProFormText.Password
-              name="password"
-              fieldProps={{
-                size: 'large',
-                prefix: <LockOutlined />,
-                autoComplete: 'current-password',
-              }}
-              placeholder="请输入密码"
-              rules={[{ required: true, message: '请输入密码' }]}
-            />
-          </LoginForm>
-        </div>
-        <div className={styles.footer}>
-          <Footer />
-        </div>
-      </main>
-    </div>
+          <div className={styles.footer}>
+            <Footer />
+          </div>
+        </main>
+      </div>
+    </ConfigProvider>
   );
 };
 

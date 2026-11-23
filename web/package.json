@@ -7,7 +7,7 @@
   "scripts": {
     "analyze": "cross-env ANALYZE=1 max build",
     "build": "max build",
-    "dev": "cross-env UMI_ENV=dev MOCK=none max dev",
+    "dev": "cross-env ECHO_ADMIN_WEB_DISABLE_UTOOPACK_CACHE=1 UMI_ENV=dev MOCK=none max dev",
     "lint": "npm run biome:lint && npm run tsc",
     "lint-staged": "lint-staged",
     "biome:lint": "biome lint",

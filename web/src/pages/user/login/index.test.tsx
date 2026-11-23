@@ -7,12 +7,14 @@ const {
   mockReplace,
   mockSetInitialState,
   mockFetchUserInfo,
+  mockConfigProvider,
 } = vi.hoisted(() => ({
   mockLogin: vi.fn(),
   mockMessageSuccess: vi.fn(),
   mockReplace: vi.fn(),
   mockSetInitialState: vi.fn(),
   mockFetchUserInfo: vi.fn(),
+  mockConfigProvider: ({ children }: { children?: React.ReactNode }) => children,
 }));
 
 vi.mock('@ant-design/icons', () => ({
@@ -45,6 +47,10 @@ vi.mock('antd', () => ({
         success: mockMessageSuccess,
       },
     }),
+  },
+  ConfigProvider: mockConfigProvider,
+  theme: {
+    defaultAlgorithm: 'defaultAlgorithm' as const,
   },
 }));
 
@@ -103,6 +109,19 @@ describe('Login page', () => {
         updater({});
       }
     });
+  });
+
+  it('forces the light algorithm so inputs stay readable in dark theme', async () => {
+    const { default: Login } = await import('./index');
+    const page = await Promise.resolve(Login({}));
+    if (!React.isValidElement(page)) {
+      throw new Error('Login did not render a ConfigProvider root element');
+    }
+    // 登录页是固定浅色设计，根节点必须覆盖为浅色算法，
+    // 否则全站暗色主题下输入文字变白、落在白底输入框上不可见。
+    expect(page.type).toBe(mockConfigProvider);
+    const props = page.props as { theme?: { algorithm?: unknown } };
+    expect(props.theme?.algorithm).toBe('defaultAlgorithm');
   });
 
   it('commits the logged-in user before navigating away from login', async () => {

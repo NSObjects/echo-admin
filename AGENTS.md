@@ -267,7 +267,7 @@ Triage 使用默认标签：`needs-triage`、`needs-info`、`ready-for-agent`、
 
 ### Domain docs
 
-本仓库使用 single-context domain-doc 布局：根目录使用 `CONTEXT.md`，架构决策位于 `docs/adr/`。详见 `docs/agents/domain.md`。
+本仓库使用 single-context domain-doc 布局：根目录使用 `GLOSSARY.md`，架构决策位于 `docs/adr/`。详见 `docs/agents/domain.md`。
 
 ## UI 设计规则
 
