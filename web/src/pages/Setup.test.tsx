@@ -1,11 +1,14 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockMessageSuccess, mockReplace, mockSubmitSetup } = vi.hoisted(() => ({
-  mockMessageSuccess: vi.fn(),
-  mockReplace: vi.fn(),
-  mockSubmitSetup: vi.fn(),
-}));
+const { mockConfigProvider, mockMessageSuccess, mockReplace, mockSubmitSetup } =
+  vi.hoisted(() => ({
+    mockConfigProvider: ({ children }: { children?: React.ReactNode }) =>
+      children,
+    mockMessageSuccess: vi.fn(),
+    mockReplace: vi.fn(),
+    mockSubmitSetup: vi.fn(),
+  }));
 
 vi.mock('@ant-design/icons', () => ({
   HomeOutlined: () => null,
@@ -34,6 +37,10 @@ vi.mock('antd', () => ({
         success: mockMessageSuccess,
       },
     }),
+  },
+  ConfigProvider: mockConfigProvider,
+  theme: {
+    defaultAlgorithm: 'defaultAlgorithm' as const,
   },
 }));
 
@@ -102,6 +109,18 @@ function findElementWithProp(
 describe('Setup page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('forces the light algorithm so setup form text stays readable in dark theme', async () => {
+    const { default: Setup } = await import('./Setup');
+    const page = await Promise.resolve(Setup({}));
+    if (!React.isValidElement(page)) {
+      throw new Error('Setup did not render a ConfigProvider root element');
+    }
+
+    expect(page.type).toBe(mockConfigProvider);
+    const props = page.props as { theme?: { algorithm?: unknown } };
+    expect(props.theme?.algorithm).toBe('defaultAlgorithm');
   });
 
   it('submits setup input and returns to login after initialization completes', async () => {

@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons';
 import { ProForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history } from '@umijs/max';
-import { App } from 'antd';
+import { App, ConfigProvider, theme as antdTheme } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
 
@@ -222,7 +222,7 @@ const Setup: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
 
-  return (
+  const content = (
     <div className={styles.container}>
       <Helmet>
         <title>{`系统初始化 - ${Settings.title}`}</title>
@@ -348,6 +348,13 @@ const Setup: React.FC = () => {
         </div>
       </main>
     </div>
+  );
+
+  return (
+    // 初始化页是固定浅色设计，覆盖全站暗色主题，保证表单文字在浅色输入框上可见。
+    <ConfigProvider theme={{ algorithm: antdTheme.defaultAlgorithm }}>
+      {content}
+    </ConfigProvider>
   );
 };
 
