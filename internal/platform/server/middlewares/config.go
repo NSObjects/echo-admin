@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	echootel "github.com/labstack/echo-opentelemetry"
+	echootel "github.com/labstack/echo-otel/v5"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 	"github.com/rs/zerolog"
